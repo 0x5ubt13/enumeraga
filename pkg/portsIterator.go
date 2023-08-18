@@ -39,22 +39,40 @@ func portsIterator(targetIP string, baseDir string, openPorts string) {
 			fmt.Printf("%s\n", green("[+] SSH service detected. Running SSH nmap enum scripts."))
             sshDir := baseDir + "ssh/"
 			customMkdir(sshDir)
+
         case "25", "465", "587":
             fmt.Printf("%s %s\n", green("[+] SMTP service detected. Running SMTP enum tools in port"), yellow(port))
             smtpDir := baseDir + "smtp/"
 			customMkdir(smtpDir)
+
         case "53":
-            fmt.Println("DNS - Domain Name System")
+            fmt.Printf("%s\n", green("[+] DNS service detected. Running DNS nmap enum scripts."))
+            dnsDir := baseDir + "dns/"
+			customMkdir(dnsDir)
+
         case "79":
-            fmt.Println("Finger")
-        case "80":
-            fmt.Println("HTTP - HyperText Transfer Protocol")
-        case "443":
-            fmt.Println("HTTPS - HyperText Transfer Protocol Secure")
-        case "8080":
-            fmt.Println("HTTP - Alternate Port")
+            fmt.Printf("%s\n", green("[+] Finger service detected. Running Finger nmap enum scripts."))
+            fingerDir := baseDir + "finger/"
+			customMkdir(fingerDir)
+
+        case "80", "443", "8080":
+            fmt.Printf("%s\n", green("[+] HTTP service detected. Running Web enum tools."))
+            httpDir := baseDir + "http/"
+			customMkdir(httpDir)
+
         case "88":
-            fmt.Println("Kerberos")
+            fmt.Printf("%s\n", green("[+] Kerberos service detected. Running Nmap enum scripts."))
+            kerberosDir := baseDir + "kerberos/"
+			customMkdir(kerberosDir)
+            
+            filePath := kerberosDir + "potential_DC_commands.txt"
+            message := `Potential DC found. Enumerate further.
+                        Get the name of the domain and chuck it to:
+                        nmap -p 88 \ 
+                        --script=krb5-enum-users \
+                        --script-args krb5-enum-users.realm=\"{Domain_Name}\" \\\n,userdb={Big_Userlist} \\\n{IP}"`
+            writeTextToFile(filePath, message)
+
         case "110":
             fmt.Println("POP3 - Post Office Protocol")
         case "143":

@@ -25,22 +25,10 @@ var optRange 	= getopt.StringLong("range", 'r', "", "Specify a CIDR range to use
 var optTarget 	= getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
 
 func main() {
-	printPhase(0)
 	// Parse the program arguments
-	getopt.Parse()
+	// getopt.Parse()
 	// Get the remaining positional parameters
 	// args := getopt.Args()
-
-	fmt.Println("Debug:")
-	fmt.Printf("Again: %t\n", *optAgain)
-	fmt.Printf("Brute: %t\n", *optBrute)
-	fmt.Printf("DNS: %s\n", *optDNS)
-    fmt.Printf("Help: %t\n", *optHelp) 	
-	fmt.Printf("Output: %s\n", *optOutput)
-    fmt.Printf("Top ports: %s\n", *optTopPorts) 
-    fmt.Printf("Quiet: %t\n", *optQuiet)	
-    fmt.Printf("Range: %s\n", *optRange)	
-    fmt.Printf("Target: %s\n", *optTarget)
 	
 	// Perform pre-flight checks and get number of lines.
 	totalLines := checks()

@@ -47,8 +47,25 @@ func errorMsg(errMsg string) {
 func checks() int {
 	var totalLines int
 
-	// Check 1: If verbose, print banner
+	// Check 0: banner!
 	if !*optQuiet {printBanner()}
+	printPhase(0)
+
+	// Check 1: optional arguments passed fine?
+	getopt.Parse()
+	fmt.Println("--- Debug ---")
+	fmt.Printf("Again: %t\n", *optAgain)
+	fmt.Printf("Brute: %t\n", *optBrute)
+	fmt.Printf("DNS: %s\n", *optDNS)
+    fmt.Printf("Help: %t\n", *optHelp) 	
+	fmt.Printf("Output: %s\n", *optOutput)
+    fmt.Printf("Top ports: %s\n", *optTopPorts) 
+    fmt.Printf("Quiet: %t\n", *optQuiet)	
+    fmt.Printf("Range: %s\n", *optRange)	
+    fmt.Printf("Target: %s\n", *optTarget)
+	fmt.Println("--- Debug ---\n\n")
+
+
 	
 	// Check 2: Help flag passed?
 	if *optHelp {
@@ -156,24 +173,34 @@ func customMkdir(name string) {
 	}
 }
 
+func writeTextToFile(filePath string, message string) {
+	// Open file
+	f, err := os.Create(filePath)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer f.Close()
+
+	_, err2 := fmt.Fprintln(f, message)
+    if err2 != nil {
+        log.Fatal(err2)
+    }
+}
+
 // Write bytes output to file
 func writePortsToFile(filePath string, ports string, host string) string {
 	// Open file
 	fileName := fmt.Sprintf("%s/open_ports.txt", filePath)
 	f, err := os.Create(fileName)
-
     if err != nil {
         log.Fatal(err)
     }
-
     defer f.Close()
 
 	_, err2 := fmt.Fprintln(f, ports)
-
     if err2 != nil {
         log.Fatal(err2)
     }
-
     fmt.Printf("%s %s %s %s\n", green("[+] Successfully written open ports for host"), yellow(host), green("to file"), yellow(fileName))
 
 	return ports
