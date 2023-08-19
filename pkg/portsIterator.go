@@ -2,39 +2,41 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"strings"
-
-    // "github.com/fatih/color"
+	// "os"
+	// "os/exec"
 )
 
 // Core functionality of the script
 // Iterate through each port and automate launching tools
-func portsIterator(targetIP string, baseDir string, openPorts string) {
-	// ports covered so far: "21,22,25,465,587,53,79,80,443,8080,88,110,143,993,995,111,137,138,139,445,161,162,623,873,1433,1521"
-	portsArray := strings.Split(openPorts, ",")
-
-	// Iterate over each port in the array
-	for _, port := range portsArray {
+func portsIterator(target string, baseDir string, openPortsSlice []string) {
+    if *optDbg {fmt.Printf("%s %s\n", "Debug: baseDir: ", baseDir)} 
+	for _, port := range openPortsSlice {
 		switch port {
 		case "21":
 			// Handle port 21
 			fmt.Printf("%s\n", green("[+] FTP service detected. Running FTP nmap enum scripts."))
 			ftpDir := baseDir + "ftp/"
 			customMkdir(ftpDir)
+            if *optDbg {fmt.Printf("%s %s\n", "Debug: ftpDir", ftpDir)}
 
 			// Running Nmap scripts for FTP
-			cmd := exec.Command("nmap", "-sV", "-n", "-Pn", "-p21", targetIP, "--script", "ftp-* and not brute", "-v")
-			nmapOutput, err := cmd.CombinedOutput()
-			if err != nil {
-				fmt.Println("Error running nmap:", err)
-			}
-			nmapOutputFile := ftpDir + "ftp_enum.nmap"
-			err = os.WriteFile(nmapOutputFile, nmapOutput, 0644)
-			if err != nil {
-				fmt.Println("Error writing nmap output:", err)
-			}
+			// cmd := exec.Command("nmap", "-sV", "-n", "-Pn", "-p21", target, "--script", "ftp-* and not brute", "-v")
+			// nmapOutput, err := cmd.CombinedOutput()
+			// if err != nil {
+			// 	fmt.Println("Error running nmap:", err)
+			// }
+			// nmapOutputFile := ftpDir + "ftp_enum.nmap"
+			// err = os.WriteFile(nmapOutputFile, nmapOutput, 0644)
+			// if err != nil {
+			// 	fmt.Println("Error writing nmap output:", err)
+			// }
+            
+            nmapOutputFile := ftpDir + "ftp_enum"
+            nmapNSEScripts := "ftp-* and not brute"
+            individualPortScanner(target, port, nmapOutputFile, nmapNSEScripts)
+            // individualPortScanner(target, port, nmapOutputFile, "")
+
+            
         case "22":
 			fmt.Printf("%s\n", green("[+] SSH service detected. Running SSH nmap enum scripts."))
             sshDir := baseDir + "ssh/"
@@ -156,12 +158,13 @@ func portsIterator(targetIP string, baseDir string, openPorts string) {
 			customMkdir(winrmDir)
 
         case "10000":
-            // if not webmin, ndmp. 
+            // if not webmin, enum ndmp. 
             continue
-            
+
         default:
-            fmt.Println("Unknown port")
+            if *optVVervose {fmt.Printf("%s %s %s %s %s\n", red("[-] Port"), yellow(port), red("detected, but I don't know how to handle it yet. Please check the"), cyan("main Nmap"), red("scan"))}
         }
 	}
-
+    
+    fmt.Printf("%s %s\n", green("[+] Done! All well-known ports included in the script successfully parsed for"), yellow(target))
 }

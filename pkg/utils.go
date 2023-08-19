@@ -21,17 +21,19 @@ var (
 	cyan 	= color.New(color.FgCyan).SprintFunc()
 
 	// Declare flags and have getopt return pointers to the values.
-	// DEV: initialising vars only when they have been implemented in the code
+	// DEV: initialising vars only once they have been implemented/ported in the code
 	// var optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
 	// var optBrute	= getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
 	// var optDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
+	optDbg 		= getopt.BoolLong("Debug", 'D', "Activate debug text")
 	optHelp 	= getopt.BoolLong("help", 'h', "Display this help and exit.")
-	optOutput	= getopt.StringLong("output", 'o', "/tmp/autoEnum_output", "Select a different base folder for the output." )
+	optOutput	= getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output." )
 	// var optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
+	// DEV: For ^^, use nmap.WithMostCommonPorts()
 	optQuiet 	= getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
-	// var optRange 	= getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
+	// var optRange = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
 	optTarget 	= getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
-
+	optVVervose	= getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 	// Define a global regular expression pattern
 	alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 )
@@ -65,21 +67,21 @@ func checks() int {
 
 	// Check 1: optional arguments passed fine?
 	getopt.Parse()
-	fmt.Println("--- Debug ---")
-	// fmt.Printf("Again: %t\n", *optAgain)
-	// fmt.Printf("Brute: %t\n", *optBrute)
-	// fmt.Printf("DNS: %s\n", *optDNS)
-    fmt.Printf("Help: %t\n", *optHelp) 	
-	// fmt.Printf("Output: %s\n", *optOutput)
-    // fmt.Printf("Top ports: %s\n", *optTopPorts) 
-    fmt.Printf("Quiet: %t\n", *optQuiet)	
-    // fmt.Printf("Range: %s\n", *optRange)	
-    fmt.Printf("Target: %s\n", *optTarget)
-	fmt.Println("--- Debug ---\n\n")
-	
 	// Get the remaining positional parameters
 	// args := getopt.Args()
-
+	if *optDbg {
+		fmt.Println("--- Debug ---")
+		// fmt.Printf("Again: %t\n", *optAgain)
+		// fmt.Printf("Brute: %t\n", *optBrute)
+		// fmt.Printf("DNS: %s\n", *optDNS)
+		fmt.Printf("Help: %t\n", *optHelp) 	
+		// fmt.Printf("Output: %s\n", *optOutput)
+		// fmt.Printf("Top ports: %s\n", *optTopPorts) 
+		fmt.Printf("Quiet: %t\n", *optQuiet)	
+		// fmt.Printf("Range: %s\n", *optRange)	
+		fmt.Printf("Target: %s\n", *optTarget)
+		fmt.Println("--- Debug ---\n\n")
+	}
 	
 	// Check 2: Help flag passed?
 	if *optHelp {
@@ -99,10 +101,11 @@ func checks() int {
 	
 	// Check 5: Ensure base output directory is correctly set and exists
 	customMkdir(*optOutput)
+	if !*optQuiet {fmt.Printf("%s %s %s\n", green("[+] Using"), yellow(*optOutput), green("as base directory to save the output files"))}
 
 	// Check 6: Determine whether it is a single target or multi-target   
 	targetInput := net.ParseIP(*optTarget)
-	fmt.Printf("Debug: targetInput := %s\n", targetInput.To4())
+	if *optDbg {fmt.Printf("Debug: targetInput := %s\n", targetInput.To4())}
 	if targetInput.To4() == nil {
 		// Multi-target
 		// Check file exists and get lines
@@ -118,29 +121,14 @@ func checks() int {
 }
 
 func checkProgramExists(command string) {
+	// TODO: add more tool checks as required
 	_, err := exec.LookPath(command)
 	if err != nil {
-		fmt.Println(fmt.Errorf("AutoEnum needs '%s' to be installed. Please install it manually", command))
+		fmt.Println(fmt.Errorf("enumeraga needs '%s' to be installed. Please install it manually", command))
 		os.Exit(1)
 	} else {
-		fmt.Printf("'%s' is installed.\n", command)
+		if *optDbg {fmt.Printf("'%s' is installed.\n", command)}
 	}
-}
-
-func IsValidPath(fp string) bool {
-	// Check if file already exists
-	if _, err := os.Stat(fp); err == nil {
-	  return true
-	}
-
-	// Attempt to create it
-	var d []byte
-	if err := os.WriteFile(fp, d, 0644); err == nil {
-	  os.Remove(fp) // And delete it
-	  return true
-	}
-
-	return false
 }
                   
 func readTargetsFile(filename string) ([]string, int) {
@@ -162,11 +150,11 @@ func printPhase(phase int) {
 		case 1:
 			fmt.Printf("%s%s", yellow("1"), ": parsing the CIDR range ")
 		case 2:
-			fmt.Printf("%s%s", yellow("2"), ": parsing target or list of targets ")
+			fmt.Printf("%s%s", yellow("2"), ": sweeping target's ports ")
+		case 22:
+			fmt.Printf("%s%s", yellow("3"), ": running multi-target mode. Looping through the list, one target at a time ")
 		case 3:
 			fmt.Printf("%s%s", yellow("3"), ": parsing found ports ")
-		case 33:
-			fmt.Printf("%s%s", yellow("3"), ": running multi-target mode. Looping through the list, one target at a time ")
 		case 4:
 			fmt.Printf("%s%s", yellow("4"), ": background tools working ")
 		default:
@@ -177,13 +165,11 @@ func printPhase(phase int) {
 }
 
 func customMkdir(name string) {
-	if IsValidPath(name){
-		err := os.Mkdir(name, os.ModePerm)
-		if err != nil {
-			fmt.Println(red("[-] Error:"), red(err))
-		} else {
-			fmt.Printf("%s %s %s", green("[+] Directory"), yellow(name), green("created successfully"))
-		}
+	err := os.Mkdir(name, os.ModePerm)
+	if err != nil {
+		if *optVVervose {fmt.Println(red("[-] Error:"), red(err))}
+	} else {
+		if *optVVervose {fmt.Printf("%s %s %s\n", green("[+] Directory"), yellow(name), green("created successfully"))}
 	}
 }
 
@@ -204,7 +190,7 @@ func writeTextToFile(filePath string, message string) {
 // Write bytes output to file
 func writePortsToFile(filePath string, ports string, host string) string {
 	// Open file
-	fileName := fmt.Sprintf("%s/open_ports.txt", filePath)
+	fileName := fmt.Sprintf("%sopen_ports.txt", filePath)
 	f, err := os.Create(fileName)
     if err != nil {
         log.Fatal(err)
