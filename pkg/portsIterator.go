@@ -73,36 +73,92 @@ func portsIterator(targetIP string, baseDir string, openPorts string) {
                         --script-args krb5-enum-users.realm=\"{Domain_Name}\" \\\n,userdb={Big_Userlist} \\\n{IP}"`
             writeTextToFile(filePath, message)
 
-        case "110":
-            fmt.Println("POP3 - Post Office Protocol")
-        case "143":
-            fmt.Println("IMAP - Internet Message Access Protocol")
-        case "993":
-            fmt.Println("IMAP - Secure")
-        case "995":
-            fmt.Println("POP3 - Secure")
-        case "111":
-            fmt.Println("RPC - Remote Procedure Control")
-        case "137":
-            fmt.Println("NetBIOS Name Service")
-        case "138":
-            fmt.Println("NetBIOS Datagram Service")
-        case "139":
-            fmt.Println("NetBIOS Session Service")
-        case "445":
-            fmt.Println("SMB - Server Message Block")
-        case "161":
+        case "110", "143", "993", "995":
+            fmt.Printf("%s\n", green("[+] IMAP / POP3 service detected. Running IMAP / POP3 enum scripts."))
+            mailDir := baseDir + "imap_pop3/"
+			customMkdir(mailDir)
+
+        case "111": //UDP
+            fmt.Printf("%s\n", green("[+] RPC service detected. Running RPC nmap enum scripts."))
+            rpcDir := baseDir + "rpc/"
+			customMkdir(rpcDir)
+
+        case "113":
+            fmt.Printf("%s\n", green("[+] Ident service detected. Running Ident enum scripts."))
+            identDir := baseDir + "ident/"
+			customMkdir(identDir)
+            
+        case "135":
+            fmt.Printf("%s\n", green("[+] MSRPC detected. Running MSRPC enum tools."))
+            msrpcDir := baseDir + "msrpc/"
+			customMkdir(msrpcDir)
+
+        case "137","138","139","445":
+            fmt.Printf("%s\n", green("[+] NetBIOS/SMB detected. Running NB/SMB enum tools."))
+            nbSmbDir := baseDir + "nb_smb/"
+			customMkdir(nbSmbDir)
+            // Remember to add enum4linux-ng
+
+        case "161","162","10161","10162": // UDP
+            fmt.Printf("%s\n", green("[+] SNMP detected. Running SNMP enum tools."))
+            snmpDir := baseDir + "snmp/"
+			customMkdir(snmpDir)
+
             fmt.Println("SNMP - Simple Network Management Protocol")
-        case "162":
-            fmt.Println("SNMP - Trap")
+        case "389","636","3268","3269":
+            fmt.Printf("%s\n", green("[+] LDAP detected. Running LDAP enum tools."))
+            ldapDir := baseDir + "ldap/"
+			customMkdir(ldapDir)
+
+        case "512","513","514":
+            fmt.Printf("%s\n", green("[+] R-Services detected. Running R-Services enum tools."))
+            rDir := baseDir + "r-services/"
+			customMkdir(rDir)
+
         case "623":
-            fmt.Println("ASF - Remote Management and Control Protocol")
+            fmt.Printf("%s\n", green("[+] IPMI detected. Running IPMI enum tools."))
+            ipmiDir := baseDir + "ipmi/"
+			customMkdir(ipmiDir)
+
         case "873":
-            fmt.Println("RSYNC - Remote Sync")
+            fmt.Printf("%s\n", green("[+] RSync detected. Running RSync enum tools."))
+            rsyncDir := baseDir + "rsync/"
+			customMkdir(rsyncDir)
+
         case "1433":
-            fmt.Println("Microsoft SQL Server")
+            fmt.Printf("%s\n", green("[+] MSSQL detected. Running MSSQL enum tools."))
+            mssqlDir := baseDir + "mssql/"
+			customMkdir(mssqlDir)
+
         case "1521":
-            fmt.Println("Oracle Database")
+            fmt.Printf("%s\n", green("[+] Oracle TNS detected. Running Oracle TNS enum tools."))
+            tnsDir := baseDir + "tns/"
+			customMkdir(tnsDir)
+
+        case "2049":
+            fmt.Printf("%s\n", green("[+] NFS service detected. Running NFS enum tools."))
+            nfsDir := baseDir + "nfs/"
+			customMkdir(nfsDir)
+
+        case "3306":
+            fmt.Printf("%s\n", green("[+] MySQL detected. Running MySQL enum tools."))
+            mysqlDir := baseDir + "mysql/"
+			customMkdir(mysqlDir)
+
+        case "3389":
+            fmt.Printf("%s\n", green("[+] RDP detected. Running RDP enum tools."))
+            rdpDir := baseDir + "rdp/"
+			customMkdir(rdpDir)
+
+        case "5985","5986":
+            fmt.Printf("%s\n", green("[+] WinRM service detected. Running WinRM enum tools."))
+            winrmDir := baseDir + "winrm/"
+			customMkdir(winrmDir)
+
+        case "10000":
+            // if not webmin, ndmp. 
+            continue
+            
         default:
             fmt.Println("Unknown port")
         }

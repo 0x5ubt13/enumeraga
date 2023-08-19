@@ -14,10 +14,26 @@ import (
 )
 
 var (
+	// Declare colour vars
     yellow 	= color.New(color.FgYellow).SprintFunc()
 	red 	= color.New(color.FgRed).SprintFunc()
 	green 	= color.New(color.FgGreen).SprintFunc()
 	cyan 	= color.New(color.FgCyan).SprintFunc()
+
+	// Declare flags and have getopt return pointers to the values.
+	// DEV: initialising vars only when they have been implemented in the code
+	// var optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
+	// var optBrute	= getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
+	// var optDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
+	optHelp 	= getopt.BoolLong("help", 'h', "Display this help and exit.")
+	optOutput	= getopt.StringLong("output", 'o', "/tmp/autoEnum_output", "Select a different base folder for the output." )
+	// var optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
+	optQuiet 	= getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
+	// var optRange 	= getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
+	optTarget 	= getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
+
+	// Define a global regular expression pattern
+	alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 )
 
 func printBanner() {
@@ -28,10 +44,6 @@ func printBanner() {
 	fmt.Printf("%s%s%s\n", yellow(" /_____/  /_/ /_/\\__,_/ /_/ /_/ /_/\\___//_/    /_/  |_"),cyan("\\____/  "), yellow("/_/  |_|"))
 	fmt.Printf("%s\n\n", green("                            by 0x5ubt13"))   
 }
-                                           
-
-// Define a global regular expression pattern
-var alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
 // Use isAlphanumeric for regexp
 func isAlphanumeric(s string) bool {
@@ -54,17 +66,19 @@ func checks() int {
 	// Check 1: optional arguments passed fine?
 	getopt.Parse()
 	fmt.Println("--- Debug ---")
-	fmt.Printf("Again: %t\n", *optAgain)
-	fmt.Printf("Brute: %t\n", *optBrute)
-	fmt.Printf("DNS: %s\n", *optDNS)
+	// fmt.Printf("Again: %t\n", *optAgain)
+	// fmt.Printf("Brute: %t\n", *optBrute)
+	// fmt.Printf("DNS: %s\n", *optDNS)
     fmt.Printf("Help: %t\n", *optHelp) 	
-	fmt.Printf("Output: %s\n", *optOutput)
-    fmt.Printf("Top ports: %s\n", *optTopPorts) 
+	// fmt.Printf("Output: %s\n", *optOutput)
+    // fmt.Printf("Top ports: %s\n", *optTopPorts) 
     fmt.Printf("Quiet: %t\n", *optQuiet)	
-    fmt.Printf("Range: %s\n", *optRange)	
+    // fmt.Printf("Range: %s\n", *optRange)	
     fmt.Printf("Target: %s\n", *optTarget)
 	fmt.Println("--- Debug ---\n\n")
-
+	
+	// Get the remaining positional parameters
+	// args := getopt.Args()
 
 	
 	// Check 2: Help flag passed?
