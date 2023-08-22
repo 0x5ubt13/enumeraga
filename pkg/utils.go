@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
-	"net"
+	// "net"
 	"os"
-	"os/exec"
+	// "os/exec"
 	"regexp"
 	"strings"
 
@@ -22,18 +22,19 @@ var (
 
 	// Declare flags and have getopt return pointers to the values.
 	// DEV: initialising vars only once they have been implemented/ported in the code
-	// var optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
-	// var optBrute	= getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
+	// optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
+	optBrute	= getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
 	// var optDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
 	optDbg 		= getopt.BoolLong("Debug", 'D', "Activate debug text")
 	optHelp 	= getopt.BoolLong("help", 'h', "Display this help and exit.")
 	optOutput	= getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output." )
-	// var optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
+	// optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
 	// DEV: For ^^, use nmap.WithMostCommonPorts()
 	optQuiet 	= getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
-	// var optRange = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
+	// optRange = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
 	optTarget 	= getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
 	optVVervose	= getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
+	
 	// Define a global regular expression pattern
 	alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 )
@@ -55,80 +56,6 @@ func isAlphanumeric(s string) bool {
 // Custom error message printed out to terminal
 func errorMsg(errMsg string) {
 	red("[-] Error detected: %s\n", errMsg)
-}
-
-// Perform pre-flight checks and return total lines if multi-target
-func checks() int {
-	var totalLines int
-
-	// Check 0: banner!
-	if !*optQuiet {printBanner()}
-	printPhase(0)
-
-	// Check 1: optional arguments passed fine?
-	getopt.Parse()
-	// Get the remaining positional parameters
-	// args := getopt.Args()
-	if *optDbg {
-		fmt.Println("--- Debug ---")
-		// fmt.Printf("Again: %t\n", *optAgain)
-		// fmt.Printf("Brute: %t\n", *optBrute)
-		// fmt.Printf("DNS: %s\n", *optDNS)
-		fmt.Printf("Help: %t\n", *optHelp) 	
-		// fmt.Printf("Output: %s\n", *optOutput)
-		// fmt.Printf("Top ports: %s\n", *optTopPorts) 
-		fmt.Printf("Quiet: %t\n", *optQuiet)	
-		// fmt.Printf("Range: %s\n", *optRange)	
-		fmt.Printf("Target: %s\n", *optTarget)
-		fmt.Println("--- Debug ---\n\n")
-	}
-	
-	// Check 2: Help flag passed?
-	if *optHelp {
-		if !*optQuiet {(color.Cyan("[*] Help flag detected. Aborting other checks and printing usage.\n\n"))}
-        getopt.Usage()
-        os.Exit(0)
-    }
-
-	// Check 3: am I groot?!
-	if os.Geteuid() != 0 {errorMsg("Please run me as root!")}
-
-	// Check 4: Ensure there is a target
-	if *optTarget == "" {
-		errorMsg("You must provide an IP address or targets file with the flag -t to start the attack.")
-		os.Exit(1)
-	}
-	
-	// Check 5: Ensure base output directory is correctly set and exists
-	customMkdir(*optOutput)
-	if !*optQuiet {fmt.Printf("%s %s %s\n", green("[+] Using"), yellow(*optOutput), green("as base directory to save the output files"))}
-
-	// Check 6: Determine whether it is a single target or multi-target   
-	targetInput := net.ParseIP(*optTarget)
-	if *optDbg {fmt.Printf("Debug: targetInput := %s\n", targetInput.To4())}
-	if targetInput.To4() == nil {
-		// Multi-target
-		// Check file exists and get lines
-		_, totalLines = readTargetsFile(*optTarget)
-	} else {
-		totalLines = 0
-	}
-
-	// Check 7: locate exists in the system
-	checkProgramExists("locate")
-
-	return totalLines
-}
-
-func checkProgramExists(command string) {
-	// TODO: add more tool checks as required
-	_, err := exec.LookPath(command)
-	if err != nil {
-		fmt.Println(fmt.Errorf("enumeraga needs '%s' to be installed. Please install it manually", command))
-		os.Exit(1)
-	} else {
-		if *optDbg {fmt.Printf("'%s' is installed.\n", command)}
-	}
 }
                   
 func readTargetsFile(filename string) ([]string, int) {
@@ -171,6 +98,16 @@ func customMkdir(name string) {
 	} else {
 		if *optVVervose {fmt.Printf("%s %s %s\n", green("[+] Directory"), yellow(name), green("created successfully"))}
 	}
+}
+
+func runningTool(tool string) {
+	if !*optQuiet {
+		fmt.Printf("%s %s %s\n", yellow("[!] Starting"), cyan(tool), yellow("and sending it to the background."))
+	}
+}
+
+func announceProtocolDetected (string) {
+	fmt.Printf("%s %s %s\n", green("[+]"), cyan("FTP"), green("service detected."))
 }
 
 func writeTextToFile(filePath string, message string) {

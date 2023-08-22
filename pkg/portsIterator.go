@@ -9,33 +9,31 @@ import (
 // Core functionality of the script
 // Iterate through each port and automate launching tools
 func portsIterator(target string, baseDir string, openPortsSlice []string) {
+    // DEV: Debugging purposes
     if *optDbg {fmt.Printf("%s %s\n", "Debug: baseDir: ", baseDir)} 
-	for _, port := range openPortsSlice {
+
+    // Bruteforce flag?
+    if *optBrute {
+        if !*optQuiet {
+            fmt.Printf("%s\n", 
+            cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforcing tools where applicable."))
+        }
+        // TODO: implement getWordlists()
+    }
+
+    // Loop through every port
+    for _, port := range openPortsSlice {
 		switch port {
 		case "21":
-			// Handle port 21
-			fmt.Printf("%s\n", green("[+] FTP service detected. Running FTP nmap enum scripts."))
+			
 			ftpDir := baseDir + "ftp/"
 			customMkdir(ftpDir)
             if *optDbg {fmt.Printf("%s %s\n", "Debug: ftpDir", ftpDir)}
-
-			// Running Nmap scripts for FTP
-			// cmd := exec.Command("nmap", "-sV", "-n", "-Pn", "-p21", target, "--script", "ftp-* and not brute", "-v")
-			// nmapOutput, err := cmd.CombinedOutput()
-			// if err != nil {
-			// 	fmt.Println("Error running nmap:", err)
-			// }
-			// nmapOutputFile := ftpDir + "ftp_enum.nmap"
-			// err = os.WriteFile(nmapOutputFile, nmapOutput, 0644)
-			// if err != nil {
-			// 	fmt.Println("Error writing nmap output:", err)
-			// }
             
             nmapOutputFile := ftpDir + "ftp_enum"
             nmapNSEScripts := "ftp-* and not brute"
-            individualPortScanner(target, port, nmapOutputFile, nmapNSEScripts)
-            // individualPortScanner(target, port, nmapOutputFile, "")
-
+            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            // individualPortScanner(target, port, nmapOutputFile)
             
         case "22":
 			fmt.Printf("%s\n", green("[+] SSH service detected. Running SSH nmap enum scripts."))
