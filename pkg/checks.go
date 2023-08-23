@@ -6,7 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"bufio"
+	// "bufio"
+	// "sync"
 
 	getopt "github.com/pborman/getopt/v2"
 )
@@ -85,76 +86,70 @@ func checks() int {
 		"ident-user-enum",
 	}
 
+	// Loop through listed tool see which ones are missing
+	missingTools := []string{}
+	fullConsent := false
 	for _, tool := range keyTools {
-		checkToolExists(tool)
-	}
+		if checkToolExists(tool) {
+			continue
+		}
+		
+		// If full consent was given, stop prompting the user
+		if fullConsent == true {
+			missingTools = append(missingTools, tool)
+			continue
+		}
 
+		// Ask user
+		userConsent := consent(tool)
+		
+		if userConsent == 'a' {
+			fullConsent = true
+			missingTools = append(missingTools, tool)
+		}
+		
+		if userConsent == 'y' {
+			missingTools = append(missingTools, tool)
+			continue
+		}
+	}	
+
+	// Install all those who are missing
+	installMissingTools(missingTools)
+
+	// End of checks
 	return totalLines
 }
 
-func checkToolExists(tool string) {
-	// TODO: add more tool checks as required
+func checkToolExists(tool string) bool {
+	// Add more tool checks as required
 	_, err := exec.LookPath(tool)
 	if err == nil {
 		if *optDbg {fmt.Printf("'%s' is installed.\n", tool)}
-		return
+		return true
 	}
 
-	// Err not nil - Tool not found
-	fmt.Printf(
-		"%s '%s' %s\n",
-		red("[-] Enumeraga needs"),
-		cyan(tool), 
-		red("to be installed"),
-	)
-	
-	// Check if OS is debian-like
-	cat := exec.Command("cat", "/etc/*-release")
-	output, err := cat.CombinedOutput()
-	if err != nil {
-		fmt.Printf("Error reading /etc/*-release: %v\n", err)
-		os.Exit(1)
-	}
-
-	compatibleDistro := strings.Contains(strings.ToLower(strings.Split(string(output), "=")[1], "debian"))
-	if !compatibleDistro {
-		fmt.Printf(
-			"%s\n%s %s %s",
-			red("[-] This system is not running a Debian-like distribution."),
-			red("Please install"), 
-			cyan(tool), 
-			red("manually."),
-		)
-		os.Exit(1)
-	}
-
-	// Ask for user consent
-	fmt.Printf("%s %s %s", yellow("Do you want to install"), cyan(tool), yellow("(yes/no): )"))
-	consent := bufio.NewScanner(os.Stdin)
-	consent.Scan()
-	userInput := strings.ToLower(consent.Text())
-
-	if userInput != "yes" || userInput != "y" {
-		fmt.Printf("%s\n", red("[-] Please install it manually. Aborting..."))
-		os.Exit(1)
-	}
-
-	// User consented to install
-	installTool(tool)
+	return false
 }
 
-func installTool(tool string) {
-	// Run the apt-get command to install the package
-	cmd := exec.Command("apt-get", "install", tool)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// Execute the command
-	err := cmd.Run()
+func isCompatibleDistro() bool {
+	// Check if OS is debian-like
+	cat := exec.Command("cat", "/etc/os-release")
+	output, err := cat.CombinedOutput()
 	if err != nil {
-		fmt.Printf("Error executing apt-get: %v\n", err)
-		return
+		fmt.Printf("Error reading /etc/os-release: %v\n", err)
+		os.Exit(1)
 	}
 
-	fmt.Printf("%s %s %s", green("[+]"), cyan(tool), green("has been installed."))
+	compatibleDistro := strings.Contains(strings.ToLower(string(output)), "debian")
+	if !compatibleDistro {
+		fmt.Printf(
+			"%s\n%s",
+			red("[-] This system is not running a Debian-like distribution."),
+			red("Please install the tools manually"),  
+		)
+		return false
+	}
+
+	return true
 }

@@ -1,11 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	// "net"
 	"os"
-	// "os/exec"
+	"os/exec"
 	"regexp"
 	"strings"
 
@@ -142,3 +143,180 @@ func writePortsToFile(filePath string, ports string, host string) string {
 
 	return ports
 }
+
+func consent(tool string) rune {
+	// Ask for user consent
+	fmt.Printf(
+		"%s '%s' %s\n",
+		red("[-] Enumeraga needs"),
+		cyan(tool), 
+		red("to be installed"),
+	)
+
+	fmt.Printf(
+		"%s %s %s", 
+		yellow("Do you want to install"), 
+		cyan(tool), 
+		yellow("([Y] yes / [N] no / [A] yes to all): "),
+	)
+	consent := bufio.NewScanner(os.Stdin)
+	consent.Scan()
+	userInput := strings.ToLower(consent.Text())
+
+	if userInput == "yes" || userInput == "y" {
+		return 'y'
+	}
+
+	if userInput == "all" || userInput == "a" {
+		return 'a'
+	}
+
+	// If flow made it to down here, consent wasn't given
+	printConsentNotGiven(tool)
+	os.Exit(1)
+	return 'n'
+}
+
+func installMissingTools(tools []string) {
+	// Run the apt-get command to install the packages
+	if *optDbg {fmt.Println("Debug - Tools to install: ", strings.Join(tools, ","))}
+	aptGet := exec.Command("apt-get", "install", "-y", strings.Join(tools, ", "))
+	output, err := aptGet.CombinedOutput()
+	if err != nil {
+		if !strings.Contains(string(output), "Unable to locate package") {
+			fmt.Printf("Error executing apt-get: %v\n", err)
+			// Making sure we clean up if we are recursing this function
+			deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
+			panic(err)
+		}
+
+		fmt.Printf(
+			"%s\n%s %s %s %s", 
+			red("[-] It looks like apt-get is unable to locate some of the tools with your current sources."),
+			yellow("[!] Do you want to try"),
+			cyan("Kali's packaging repository source"),
+			yellow("(cleanup will be performed afterwards)?"),
+			yellow("[Y] yes / [N] no): "),
+		)
+		consent := bufio.NewScanner(os.Stdin)
+		consent.Scan()
+		userInput := strings.ToLower(consent.Text())
+		if userInput != "y" && userInput != "yes" {
+			printConsentNotGiven("Kali's packaging repository source")
+			// Making sure we clean up if we are recursing this function
+			deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
+			os.Exit(1)
+		}
+		
+		installWithKaliSourceRepo(tools)
+	}
+
+	if *optDbg {fmt.Printf("%s\n", green("[*] Debug - All tools have been installed."))}
+}
+
+func installWithKaliSourceRepo(tools []string) {
+	// Path to the sources.list file (typically located at /etc/apt/sources.list)
+	sourcesListPath := "/etc/apt/sources.list"
+	lineToAdd := "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware"
+
+	// Open the sources.list file for appending (to add the line)
+	file, err := os.OpenFile(sourcesListPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+	if err != nil {
+		fmt.Printf("Error opening sources.list file for appending: %v\n", err)
+		os.Exit(1)
+		return
+	}
+	defer file.Close()
+
+	// Write the line to add
+	_, err = file.WriteString(lineToAdd + "\n")
+	if err != nil {
+		fmt.Printf("Error adding line to sources.list: %v\n", err)
+		return
+	}
+
+	// Perform apt-get update
+	// Run the apt-get update command
+	update := exec.Command("apt-get", "update")
+
+	// Redirect the command's output to the standard output (your terminal)
+	update.Stdout = os.Stdout
+	update.Stderr = os.Stderr
+
+	// Run the command
+	updateErr := update.Run()
+	if err != nil {
+		fmt.Printf("Error running apt-get update: %v\n", updateErr)
+		return
+	}
+
+	if *optDbg {fmt.Println("apt-get update completed successfully.")}
+
+	// Now re-try the install function
+	installMissingTools(tools)
+
+	// Perform cleanup by deleting the added line
+	deleteLineFromFile(sourcesListPath, lineToAdd)
+
+	if *optDbg {fmt.Println("Debug - source line added successfully.")}
+}
+
+func deleteLineFromFile(filePath, lineToDelete string) {
+	// Open the file for reading
+	file, err := os.Open(filePath)
+	if err != nil {
+		fmt.Printf("Error opening file for reading: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	// Create a scanner to read the file line by line
+	scanner := bufio.NewScanner(file)
+
+	// Create a slice to store the lines
+	var lines []string
+
+	// Iterate through the lines
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Check if the line matches the line to delete
+		if line != lineToDelete {
+			lines = append(lines, line)
+		}
+	}
+
+	// Check for any scanner errors
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading file: %v\n", err)
+		return
+	}
+
+	// Open the file for writing (truncate mode)
+	file, err = os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, os.ModeAppend)
+	if err != nil {
+		fmt.Printf("Error opening file for writing: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	// Write the updated lines back to the file
+	_, err = file.WriteString(strings.Join(lines, "\n") + "\n")
+	if err != nil {
+		fmt.Printf("Error writing updated content to file: %v\n", err)
+		return
+	}
+
+	if *optDbg {fmt.Println("Debug - Line deleted successfully.")}
+}
+
+func printConsentNotGiven(tool string) {
+	fmt.Printf(
+		"%s\n%s %s %s\n", 
+		red("[-] Consent not given."), 
+		red("[-] Please install"), 
+		cyan(tool), 
+		red("manually. Aborting..."),
+	)
+}
+
