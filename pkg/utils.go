@@ -179,87 +179,88 @@ func consent(tool string) rune {
 
 func installMissingTools(tools []string) {
 	// Run the apt-get command to install the packages
-	if *optDbg {fmt.Println("Debug - Tools to install: ", strings.Join(tools, ","))}
-	aptGet := exec.Command("apt-get", "install", "-y", strings.Join(tools, ", "))
+	if *optDbg {fmt.Println("Debug - Tools to install: ", strings.Join(tools, ", "))}
+	aptGet := exec.Command("apt-get", "install", "-y", strings.Join(tools, " "))
 	output, err := aptGet.CombinedOutput()
 	if err != nil {
 		if !strings.Contains(string(output), "Unable to locate package") {
-			fmt.Printf("Error executing apt-get: %v\n", err)
-			// Making sure we clean up if we are recursing this function
-			deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
+			if *optDbg {fmt.Printf("Debug - Error executing apt-get: %v\n", err)}
+			fmt.Printf(
+				"%s %s %s\n",
+				red("[-] Please install"),
+				cyan(strings.Join(tools, ", ")),
+				red("manually. Aborting..."),
+			)
+
 			panic(err)
 		}
-
-		fmt.Printf(
-			"%s\n%s %s %s %s", 
-			red("[-] It looks like apt-get is unable to locate some of the tools with your current sources."),
-			yellow("[!] Do you want to try"),
-			cyan("Kali's packaging repository source"),
-			yellow("(cleanup will be performed afterwards)?"),
-			yellow("[Y] yes / [N] no): "),
-		)
-		consent := bufio.NewScanner(os.Stdin)
-		consent.Scan()
-		userInput := strings.ToLower(consent.Text())
-		if userInput != "y" && userInput != "yes" {
-			printConsentNotGiven("Kali's packaging repository source")
-			// Making sure we clean up if we are recursing this function
-			deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
-			os.Exit(1)
-		}
-		
-		installWithKaliSourceRepo(tools)
+		// Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
+		// deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
+		// fmt.Printf(
+		// 	"%s\n%s %s %s %s", 
+		// 	red("[-] It looks like apt-get is unable to locate some of the tools with your current sources."),
+		// 	yellow("[!] Do you want to try"),
+		// 	cyan("Kali's packaging repository source"),
+		// 	yellow("(cleanup will be performed afterwards)?"),
+		// 	yellow("[Y] yes / [N] no): "),
+		// )
+		// consent := bufio.NewScanner(os.Stdin)
+		// consent.Scan()
+		// userInput := strings.ToLower(consent.Text())
+		// if userInput != "y" && userInput != "yes" {
+		// 	printConsentNotGiven("Kali's packaging repository source")
+		// 	// Making sure we clean up if we are recursing this function
+		// 	deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
+		// 	os.Exit(1)
+		// }		
+		// installWithKaliSourceRepo(tools)
 	}
 
 	if *optDbg {fmt.Printf("%s\n", green("[*] Debug - All tools have been installed."))}
 }
 
-func installWithKaliSourceRepo(tools []string) {
-	// Path to the sources.list file (typically located at /etc/apt/sources.list)
-	sourcesListPath := "/etc/apt/sources.list"
-	lineToAdd := "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware"
+// Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
+// func installWithKaliSourceRepo(tools []string) {
+// 	// Path to the sources.list file (typically located at /etc/apt/sources.list)
+// 	sourcesListPath := "/etc/apt/sources.list"
+// 	lineToAdd := "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware"
+// 	debPkgName := "/tmp/kali-archive-keyring_2022.1_all.deb"
+// 	keyRingUrl := "https://http.kali.org/kali/pool/main/k/kali-archive-keyring/kali-archive-keyring_2022.1_all.deb"
 
-	// Open the sources.list file for appending (to add the line)
-	file, err := os.OpenFile(sourcesListPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
-	if err != nil {
-		fmt.Printf("Error opening sources.list file for appending: %v\n", err)
-		os.Exit(1)
-		return
-	}
-	defer file.Close()
+// 	// Open the sources.list file for appending (to add the line)
+// 	file, err := os.OpenFile(sourcesListPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+// 	if err != nil {
+// 		fmt.Printf("Error opening sources.list file for appending: %v\n", err)
+// 		os.Exit(1)
+// 		return
+// 	}
+// 	defer file.Close()
 
-	// Write the line to add
-	_, err = file.WriteString(lineToAdd + "\n")
-	if err != nil {
-		fmt.Printf("Error adding line to sources.list: %v\n", err)
-		return
-	}
+// 	// Write the line to add
+// 	_, err = file.WriteString(lineToAdd + "\n")
+// 	if err != nil {
+// 		fmt.Printf("Error adding line to sources.list: %v\n", err)
+// 		return
+// 	}
 
-	// Perform apt-get update
-	// Run the apt-get update command
-	update := exec.Command("apt-get", "update")
+// 	// Download Debian package for Kali archive keys
+// 	wgetCmd(debPkgName, keyRingUrl)
 
-	// Redirect the command's output to the standard output (your terminal)
-	update.Stdout = os.Stdout
-	update.Stderr = os.Stderr
+// 	// Install Debian package for Kali archive keys
+// 	dpkgCmd(debPkgName)
 
-	// Run the command
-	updateErr := update.Run()
-	if err != nil {
-		fmt.Printf("Error running apt-get update: %v\n", updateErr)
-		return
-	}
+// 	// Perform apt-get update
+// 	aptGetUpdateCmd()
 
-	if *optDbg {fmt.Println("apt-get update completed successfully.")}
+// 	// Now re-try the install function
+// 	installMissingTools(tools)
 
-	// Now re-try the install function
-	installMissingTools(tools)
+// 	// Clean everything up
+// 	rmCmd("/tmp/kali-archive-keyring_2022.1_all.deb")
+// 	deleteLineFromFile(sourcesListPath, lineToAdd)
 
-	// Perform cleanup by deleting the added line
-	deleteLineFromFile(sourcesListPath, lineToAdd)
-
-	if *optDbg {fmt.Println("Debug - source line added successfully.")}
-}
+// 	if *optDbg {fmt.Println("Debug - source line added successfully.")}
+// }
 
 func deleteLineFromFile(filePath, lineToDelete string) {
 	// Open the file for reading
