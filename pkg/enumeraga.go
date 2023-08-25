@@ -54,6 +54,7 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) {
 		}
 
 		for _, port := range host.Ports {
+			// string(port.State) not working for some reason, therefore using Sprintf
 			if fmt.Sprintf("%s", port.State) == "open" {
 				if *optDbg && *optVVervose {fmt.Println("Debug - Open port:", port.ID)}
 				text := strconv.FormatUint(uint64(port.ID), 10)

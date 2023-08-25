@@ -35,7 +35,6 @@ func checks() int {
 		fmt.Printf("Quiet: %t\n", *optQuiet)	
 		// fmt.Printf("Range: %s\n", *optRange)	
 		fmt.Printf("Target: %s\n", *optTarget)
-		fmt.Println("--- Debug ---\n\n")
 	}
 	
 	// Check 2: Help flag passed?
@@ -95,7 +94,7 @@ func checks() int {
 		}
 		
 		// If full consent was given, stop prompting the user
-		if fullConsent == true {
+		if fullConsent {
 			missingTools = append(missingTools, tool)
 			continue
 		}
@@ -114,8 +113,17 @@ func checks() int {
 		}
 	}	
 
-	// Install all those who are missing
-	installMissingTools(missingTools)
+	// Install all those that are missing
+	aptGetUpdateCmd()
+	
+	// installMissingTools(missingTools)
+	
+	for _, tool := range missingTools {
+		aptGetInstallCmd(tool)
+	}
+
+	if *optDbg {fmt.Printf("%s\n", green("[*] Debug - All tools have been installed."))}
+
 
 	// End of checks
 	return totalLines

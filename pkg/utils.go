@@ -6,7 +6,7 @@ import (
 	"log"
 	// "net"
 	"os"
-	"os/exec"
+	// "os/exec"
 	"regexp"
 	"strings"
 
@@ -51,14 +51,14 @@ func printBanner() {
 
 // Use isAlphanumeric for regexp
 func isAlphanumeric(s string) bool {
-  return alphanumericRegex.MatchString(s)
+	return alphanumericRegex.MatchString(s)
 }
 
 // Custom error message printed out to terminal
 func errorMsg(errMsg string) {
 	red("[-] Error detected: %s\n", errMsg)
 }
-                  
+
 func readTargetsFile(filename string) ([]string, int) {
 	// fetching the file
 	data, err := os.ReadFile(*optTarget)
@@ -180,43 +180,8 @@ func consent(tool string) rune {
 func installMissingTools(tools []string) {
 	// Run the apt-get command to install the packages
 	if *optDbg {fmt.Println("Debug - Tools to install: ", strings.Join(tools, ", "))}
-	aptGet := exec.Command("apt-get", "install", "-y", strings.Join(tools, " "))
-	output, err := aptGet.CombinedOutput()
-	if err != nil {
-		if !strings.Contains(string(output), "Unable to locate package") {
-			if *optDbg {fmt.Printf("Debug - Error executing apt-get: %v\n", err)}
-			fmt.Printf(
-				"%s %s %s\n",
-				red("[-] Please install"),
-				cyan(strings.Join(tools, ", ")),
-				red("manually. Aborting..."),
-			)
 
-			panic(err)
-		}
-		// Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
-		// deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
-		// fmt.Printf(
-		// 	"%s\n%s %s %s %s", 
-		// 	red("[-] It looks like apt-get is unable to locate some of the tools with your current sources."),
-		// 	yellow("[!] Do you want to try"),
-		// 	cyan("Kali's packaging repository source"),
-		// 	yellow("(cleanup will be performed afterwards)?"),
-		// 	yellow("[Y] yes / [N] no): "),
-		// )
-		// consent := bufio.NewScanner(os.Stdin)
-		// consent.Scan()
-		// userInput := strings.ToLower(consent.Text())
-		// if userInput != "y" && userInput != "yes" {
-		// 	printConsentNotGiven("Kali's packaging repository source")
-		// 	// Making sure we clean up if we are recursing this function
-		// 	deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
-		// 	os.Exit(1)
-		// }		
-		// installWithKaliSourceRepo(tools)
-	}
-
-	if *optDbg {fmt.Printf("%s\n", green("[*] Debug - All tools have been installed."))}
+	
 }
 
 // Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?

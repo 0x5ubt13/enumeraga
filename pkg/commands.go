@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	// "strings"
 )
 
 func wgetCmd(outputFile string, url string) {
@@ -79,6 +80,48 @@ func aptGetUpdateCmd() {
 	}
 
 	if *optDbg {green("[*] Debug - apt-get update completed successfully.")}
+}
+
+func aptGetInstallCmd(tool string) {
+	aptGetInstall := exec.Command("apt", "install", "-y", tool)
+
+	aptGetInstall.Stdout = os.Stdout
+	aptGetInstall.Stderr = os.Stderr
+
+	aptGetInstallErr := aptGetInstall.Run()
+	if aptGetInstallErr != nil {
+		// if !strings.Contains(string(aptGetInstall.Stdout), "Unable to locate package") {
+		if *optDbg {fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)}
+		fmt.Printf(
+			"%s\n%s\n%s\n",
+			red("[-] Please install the following tools manually: "),
+			cyan(tool),
+			red("[-] Aborting..."),
+		)
+
+		panic(aptGetInstallErr)
+		
+		// Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
+		// deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
+		// fmt.Printf(
+		// 	"%s\n%s %s %s %s", 
+		// 	red("[-] It looks like apt-get is unable to locate some of the tools with your current sources."),
+		// 	yellow("[!] Do you want to try"),
+		// 	cyan("Kali's packaging repository source"),
+		// 	yellow("(cleanup will be performed afterwards)?"),
+		// 	yellow("[Y] yes / [N] no): "),
+		// )
+		// consent := bufio.NewScanner(os.Stdin)
+		// consent.Scan()
+		// userInput := strings.ToLower(consent.Text())
+		// if userInput != "y" && userInput != "yes" {
+		// 	printConsentNotGiven("Kali's packaging repository source")
+		// 	// Making sure we clean up if we are recursing this function
+		// 	deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
+		// 	os.Exit(1)
+		// }		
+		// installWithKaliSourceRepo(tools)
+	}
 }
 
 func rmCmd(filePath string) {
