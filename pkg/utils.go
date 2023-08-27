@@ -56,7 +56,7 @@ func isAlphanumeric(s string) bool {
 
 // Custom error message printed out to terminal
 func errorMsg(errMsg string) {
-	red("[-] Error detected: %s\n", errMsg)
+	fmt.Printf("%s %s\n", red("[-] Error detected:"), errMsg)
 }
 
 func readTargetsFile(filename string) ([]string, int) {
@@ -107,6 +107,7 @@ func runningTool(tool string) {
 	}
 }
 
+// TODO: change for portsIterator
 func announceProtocolDetected (string) {
 	fmt.Printf("%s %s %s\n", green("[+]"), cyan("FTP"), green("service detected."))
 }
@@ -177,11 +178,58 @@ func consent(tool string) rune {
 	return 'n'
 }
 
-func installMissingTools(tools []string) {
-	// Run the apt-get command to install the packages
-	if *optDbg {fmt.Println("Debug - Tools to install: ", strings.Join(tools, ", "))}
+func installMissingTools() {
+	keyTools := []string{
+		"locate",
+		"nmap",
+		"hydra",
+		"finger",
+		"updatedb",
+		"locate",
+		"odat",
+		"ssh-audit",
+		"seclists",
+		"cewl",
+		"fping",
+		"ident-user-enum",
+	}
 
+	// Loop through listed tool see which ones are missing
+	missingTools := []string{}
+	fullConsent := false
+	for _, tool := range keyTools {
+		if checkToolExists(tool) {
+			continue
+		}
+		
+		// If full consent was given, stop prompting the user
+		if fullConsent {
+			missingTools = append(missingTools, tool)
+			continue
+		}
+
+		// Ask user
+		userConsent := consent(tool)
+		
+		if userConsent == 'a' {
+			fullConsent = true
+			missingTools = append(missingTools, tool)
+		}
+		
+		if userConsent == 'y' {
+			missingTools = append(missingTools, tool)
+			continue
+		}
+	}	
+
+	// Install all those that are missing
+	aptGetUpdateCmd()
 	
+	// installMissingTools(missingTools)
+	
+	for _, tool := range missingTools {
+		aptGetInstallCmd(tool)
+	}
 }
 
 // Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
@@ -226,6 +274,10 @@ func installMissingTools(tools []string) {
 
 // 	if *optDbg {fmt.Println("Debug - source line added successfully.")}
 // }
+
+func printInstallingTool(tool string) {
+	fmt.Printf("%s %s%s ", yellow("[!] Installing"), cyan(tool), yellow("..."))
+}
 
 func deleteLineFromFile(filePath, lineToDelete string) {
 	// Open the file for reading

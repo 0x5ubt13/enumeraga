@@ -14,14 +14,19 @@ import (
 
 // Perform pre-flight checks and return total lines if multi-target
 func checks() int {
-	var totalLines int
+	getopt.Parse()
 
 	// Check 0: banner!
 	if !*optQuiet {printBanner()}
 	printPhase(0)
 
+	if len(os.Args) == 1 {
+		errorMsg("No arguments were provided.")
+		getopt.Usage()
+		os.Exit(1)
+	}
+
 	// Check 1: optional arguments passed fine?
-	getopt.Parse()
 	// Get the remaining positional parameters
 	// args := getopt.Args()
 	if *optDbg {
@@ -57,7 +62,8 @@ func checks() int {
 	customMkdir(*optOutput)
 	if !*optQuiet {fmt.Printf("%s %s %s\n", green("[+] Using"), yellow(*optOutput), green("as base directory to save the output files"))}
 
-	// Check 6: Determine whether it is a single target or multi-target   
+	// Check 6: Determine whether it is a single target or multi-target  
+	var totalLines int 
 	targetInput := net.ParseIP(*optTarget)
 	if *optDbg {fmt.Printf("Debug: targetInput := %s\n", targetInput.To4())}
 	if targetInput.To4() == nil {
@@ -69,58 +75,7 @@ func checks() int {
 	}
 
 	// Check 7: key tools exist in the system
-	keyTools := []string{
-		"locate",
-		"nmap",
-		"hydra",
-		"nfs-common",
-		"updatedb",
-		"locate",
-		"odat",
-		"ssh-audit",
-		"seclists",
-		"cewl",
-		"wafW00f",
-		"fping",
-		"ident-user-enum",
-	}
-
-	// Loop through listed tool see which ones are missing
-	missingTools := []string{}
-	fullConsent := false
-	for _, tool := range keyTools {
-		if checkToolExists(tool) {
-			continue
-		}
-		
-		// If full consent was given, stop prompting the user
-		if fullConsent {
-			missingTools = append(missingTools, tool)
-			continue
-		}
-
-		// Ask user
-		userConsent := consent(tool)
-		
-		if userConsent == 'a' {
-			fullConsent = true
-			missingTools = append(missingTools, tool)
-		}
-		
-		if userConsent == 'y' {
-			missingTools = append(missingTools, tool)
-			continue
-		}
-	}	
-
-	// Install all those that are missing
-	aptGetUpdateCmd()
-	
-	// installMissingTools(missingTools)
-	
-	for _, tool := range missingTools {
-		aptGetInstallCmd(tool)
-	}
+	installMissingTools()
 
 	if *optDbg {fmt.Printf("%s\n", green("[*] Debug - All tools have been installed."))}
 
@@ -136,7 +91,7 @@ func checkToolExists(tool string) bool {
 		if *optDbg {fmt.Printf("'%s' is installed.\n", tool)}
 		return true
 	}
-
+	
 	return false
 }
 

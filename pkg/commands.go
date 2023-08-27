@@ -83,10 +83,13 @@ func aptGetUpdateCmd() {
 }
 
 func aptGetInstallCmd(tool string) {
-	aptGetInstall := exec.Command("apt", "install", "-y", tool)
+	printInstallingTool(tool)
 
-	aptGetInstall.Stdout = os.Stdout
-	aptGetInstall.Stderr = os.Stderr
+	if tool == "finger" {
+		tool = "nfs-common"
+	}
+
+	aptGetInstall := exec.Command("apt", "install", "-y", tool)
 
 	aptGetInstallErr := aptGetInstall.Run()
 	if aptGetInstallErr != nil {
@@ -99,7 +102,6 @@ func aptGetInstallCmd(tool string) {
 			red("[-] Aborting..."),
 		)
 
-		panic(aptGetInstallErr)
 		
 		// Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
 		// deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
@@ -122,6 +124,9 @@ func aptGetInstallCmd(tool string) {
 		// }		
 		// installWithKaliSourceRepo(tools)
 	}
+
+	fmt.Printf("%s\n", green("Done!"))
+
 }
 
 func rmCmd(filePath string) {
