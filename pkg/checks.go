@@ -60,7 +60,7 @@ func checks() int {
 	
 	// Check 5: Ensure base output directory is correctly set and exists
 	customMkdir(*optOutput)
-	if !*optQuiet {fmt.Printf("%s %s %s\n", green("[+] Using"), yellow(*optOutput), green("as base directory to save the output files"))}
+	if !*optQuiet {printCustomTripleMsg("green", "yellow", "[+] Using", *optOutput, "as base directory to save the output files")}
 
 	// Check 6: Determine whether it is a single target or multi-target  
 	var totalLines int 
@@ -79,7 +79,6 @@ func checks() int {
 
 	if *optDbg {fmt.Printf("%s\n", green("[*] Debug - All tools have been installed."))}
 
-
 	// End of checks
 	return totalLines
 }
@@ -91,7 +90,7 @@ func checkToolExists(tool string) bool {
 		if *optDbg {fmt.Printf("'%s' is installed.\n", tool)}
 		return true
 	}
-	
+
 	return false
 }
 

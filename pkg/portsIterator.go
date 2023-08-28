@@ -17,31 +17,37 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
         if !*optQuiet {
             fmt.Printf("%s\n", 
             cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforcing tools where applicable."))
+            getWordlists()
         }
-        // TODO: implement getWordlists()
-    }
+
+    
+    var (
+        caseDir string
+        visitedSMTP, visitedHTTP, visitedIMAP, visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
+    )
 
     // Loop through every port
     for _, port := range openPortsSlice {
 		switch port {
 		case "21":
-			
-			ftpDir := baseDir + "ftp/"
-			customMkdir(ftpDir)
-            if *optDbg {fmt.Printf("%s %s\n", "Debug: ftpDir", ftpDir)}
-            
-            nmapOutputFile := ftpDir + "ftp_enum"
+			caseDir = protocolDetected(baseDir, "FTP")
+            nmapOutputFile := caseDir + "ftp_scan"
             nmapNSEScripts := "ftp-* and not brute"
             individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
             // individualPortScanner(target, port, nmapOutputFile)
-            
+            hydraBruteforcing(target, caseDir, "ftp")
+
         case "22":
-			fmt.Printf("%s\n", green("[+] SSH service detected. Running SSH nmap enum scripts."))
-            sshDir := baseDir + "ssh/"
-			customMkdir(sshDir)
+            caseDir = protocolDetected("SSH")
+            nmapOutputFile := caseDir + "ssh_scan"
+            nmapNSEScripts := "ssh-* and not brute"
+            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            hydraBruteforcing(target, caseDir, "ssh")
 
         case "25", "465", "587":
-            fmt.Printf("%s %s\n", green("[+] SMTP service detected. Running SMTP enum tools in port"), yellow(port))
+            if visitedSMTP { continue }
+
+            caseDir := protocolDetected("SMTP")
             smtpDir := baseDir + "smtp/"
 			customMkdir(smtpDir)
 
@@ -56,6 +62,8 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			customMkdir(fingerDir)
 
         case "80", "443", "8080":
+            if visitedHTTP { continue }
+
             fmt.Printf("%s\n", green("[+] HTTP service detected. Running Web enum tools."))
             httpDir := baseDir + "http/"
 			customMkdir(httpDir)
@@ -74,6 +82,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             writeTextToFile(filePath, message)
 
         case "110", "143", "993", "995":
+            if visitedIMAP { continue }
             fmt.Printf("%s\n", green("[+] IMAP / POP3 service detected. Running IMAP / POP3 enum scripts."))
             mailDir := baseDir + "imap_pop3/"
 			customMkdir(mailDir)
@@ -94,12 +103,14 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			customMkdir(msrpcDir)
 
         case "137","138","139","445":
+            if visitedSMB { continue }
             fmt.Printf("%s\n", green("[+] NetBIOS/SMB detected. Running NB/SMB enum tools."))
             nbSmbDir := baseDir + "nb_smb/"
 			customMkdir(nbSmbDir)
             // Remember to add enum4linux-ng
 
         case "161","162","10161","10162": // UDP
+            if visitedSNMP { continue }
             fmt.Printf("%s\n", green("[+] SNMP detected. Running SNMP enum tools."))
             snmpDir := baseDir + "snmp/"
 			customMkdir(snmpDir)

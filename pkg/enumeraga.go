@@ -97,7 +97,7 @@ func multiTarget(targetsFile *string) {
 
 	// Loop through the targets in the file
 	targets, lines := readTargetsFile(*targetsFile)
-	if !*optQuiet { fmt.Printf("%s %s %s\n", green("[+] Found"), yellow(lines), green("targets")) }
+	if !*optQuiet { printCustomTripleMsg("green", "yellow", "[+] Found", lines, "targets")}
 	for i := 0; i < lines; i++ {
 		target := targets[i]
 		fmt.Printf("%s %v %s %v: %s\n", green("[+] Attacking target"), yellow(i+1), green("of"), yellow(lines), yellow(target))

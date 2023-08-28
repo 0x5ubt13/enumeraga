@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/Ullaakut/nmap/v3 v3.0.0
 	github.com/fatih/color v1.15.0
+	github.com/mattn/go-zglob v0.0.4
 	github.com/pborman/getopt/v2 v2.1.0
 )
 

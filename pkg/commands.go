@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 	// "strings"
 )
 
@@ -126,7 +128,27 @@ func aptGetInstallCmd(tool string) {
 	}
 
 	fmt.Printf("%s\n", green("Done!"))
+}
 
+func hydraBruteforcing(target, dir, protocol string) {
+	if *optBrute {
+		fmt.Printf("Running Hydra for %s\n", protocol)
+		hydra := exec.Command(
+			"hydra",
+			"-L", usersList,
+			"-P", darkwebTop1000,
+			fmt.Sprintf("%s://%s", protocol, target),
+			"-f",
+		)
+		// hydra.Stdout = os.Stdout
+		// hydra.Stderr = os.Stderr
+
+		if err := hydra.Run(); err != nil {
+			log.Fatalf("Error running Hydra for %s: %v\n", protocol, err)
+		}
+
+		fmt.Printf("Finished Hydra for %s\n", protocol)
+	}
 }
 
 func rmCmd(filePath string) {
@@ -145,6 +167,44 @@ func rmCmd(filePath string) {
 		return
 	}
 }
+
+// Announce tool and run it
+func runningTool(args []string, target, filePath string) {
+	tool := args[0]
+	printCustomTripleMsg("yellow", "cyan", "[!] Running", tool, "and sending it to the background")
+
+	cmd := exec.Command(strings.Join(args, ", "))
+
+    // Create a pipe to capture the command's output
+    stdout, err := cmd.StdoutPipe()
+    if err != nil {
+        fmt.Println("Error creating stdout pipe:", err)
+        os.Exit(1)
+    }
+
+    // Start the command asynchronously in a goroutine
+    if err := cmd.Start(); err != nil {
+        fmt.Println("Error starting command:", err)
+        os.Exit(1)
+    }
+
+    // This goroutine will capture and print the command's output
+    go func() {
+        _, err := io.Copy(os.Stdout, stdout)
+        if err != nil {
+            fmt.Println("Error copying output:", err)
+        }
+    }()
+
+    // Wait for the command to complete (optional)
+    if err := cmd.Wait(); err != nil {
+        fmt.Println("Command finished with error:", err)
+        os.Exit(1)
+    } else {
+		printCustomTripleMsg("green", "cyan", "[+]", tool, "finished successfully")
+	}
+
+}	
 
 
 
