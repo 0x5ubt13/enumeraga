@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	// "os"
 	// "os/exec"
 )
@@ -47,19 +48,24 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
         case "25", "465", "587":
             if visitedSMTP { continue }
 
-            caseDir := protocolDetected("SMTP")
-            smtpDir := baseDir + "smtp/"
-			customMkdir(smtpDir)
+            caseDir = protocolDetected("SMTP")
+            nmapOutputFile := caseDir + "smtp_scan"
+            nmapNSEScripts := "smtp-commands,smtp-enum-users,smtp-open-relay"
+            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
         case "53":
-            fmt.Printf("%s\n", green("[+] DNS service detected. Running DNS nmap enum scripts."))
-            dnsDir := baseDir + "dns/"
-			customMkdir(dnsDir)
+            caseDir = protocolDetected("DNS")
+            nmapOutputFile := caseDir + "dns_scan"
+            nmapNSEScripts := "*dns*"
+            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
         case "79":
-            fmt.Printf("%s\n", green("[+] Finger service detected. Running Finger nmap enum scripts."))
-            fingerDir := baseDir + "finger/"
-			customMkdir(fingerDir)
+            caseDir = protocolDetected("Finger")
+            nmapOutputFile := caseDir + "finger_scan"
+            individualPortScanner(target, port, nmapOutputFile)
+            
+            msfArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", target)}
+            runTool(msfArgs, target, caseDir)
 
         case "80", "443", "8080":
             if visitedHTTP { continue }
@@ -175,5 +181,5 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
         }
 	}
     
-    fmt.Printf("%s %s\n", green("[+] Done! All well-known ports included in the script successfully parsed for"), yellow(target))
+    printCustomTripleMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for", target, "were successfully parsed.")
 }

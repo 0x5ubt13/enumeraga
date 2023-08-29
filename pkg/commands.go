@@ -168,12 +168,33 @@ func rmCmd(filePath string) {
 	}
 }
 
+func msfconsoleCmd(oneliner []string) {
+	// Run the apt-get update command
+	msfconsole := exec.Command("msfconsole", "-q", "x", )
+
+	// Redirect the command's output to the standard output in terminal
+	msfconsole.Stdout = os.Stdout
+	msfconsole.Stderr = os.Stderr
+
+	// Run the command
+	msfconsoleErr := msfconsole.Run()
+	if msfconsoleErr != nil {
+		if *optDbg {fmt.Printf("Debug - Error running msfconsole: %v\n", msfconsoleErr)}
+		return
+	}
+
+	if *optDbg {green("[*] Debug - msfconsole completed successfully.")}
+}
+
 // Announce tool and run it
-func runningTool(args []string, target, filePath string) {
+func runTool(args []string, target, filePath string) {
 	tool := args[0]
+	command := strings.Join(args, ",")
 	printCustomTripleMsg("yellow", "cyan", "[!] Running", tool, "and sending it to the background")
 
-	cmd := exec.Command(strings.Join(args, ", "))
+	if *optDbg {fmt.Printf("Debug - command to exec: %s", command)}
+
+	cmd := exec.Command(command)
 
     // Create a pipe to capture the command's output
     stdout, err := cmd.StdoutPipe()

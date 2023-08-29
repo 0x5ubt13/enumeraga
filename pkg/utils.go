@@ -109,7 +109,7 @@ func customMkdir(name string) {
 }
 
 // Announce protocol, create base dir and return its name
-func protocolDetected (baseDir, protocol string) protocolDir {
+func protocolDetected (baseDir, protocol string) string {
 	if !*optQuiet {printCustomTripleMsg("green", "cyan", "[+]", protocol, "service detected")}
 	protocolDir := baseDir + strings.ToLower(protocol) + "/"
 	if *optDbg {fmt.Printf("%s %s\n", "Debug: protocolDir", protocolDir)}
