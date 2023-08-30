@@ -10,6 +10,11 @@ import (
 // Core functionality of the script
 // Iterate through each port and automate launching tools
 func portsIterator(target string, baseDir string, openPortsSlice []string) {
+    var (
+        caseDir string
+        visitedSMTP, visitedHTTP, visitedIMAP, visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
+    )
+
     // DEV: Debugging purposes
     if *optDbg {fmt.Printf("%s %s\n", "Debug: baseDir: ", baseDir)} 
 
@@ -21,20 +26,14 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             getWordlists()
         }
 
-    
-    var (
-        caseDir string
-        visitedSMTP, visitedHTTP, visitedIMAP, visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
-    )
-
     // Loop through every port
     for _, port := range openPortsSlice {
 		switch port {
-		case "21":
+		case "20", "21":
 			caseDir = protocolDetected(baseDir, "FTP")
             nmapOutputFile := caseDir + "ftp_scan"
             nmapNSEScripts := "ftp-* and not brute"
-            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            individualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
             // individualPortScanner(target, port, nmapOutputFile)
             hydraBruteforcing(target, caseDir, "ftp")
 
@@ -51,7 +50,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             caseDir = protocolDetected("SMTP")
             nmapOutputFile := caseDir + "smtp_scan"
             nmapNSEScripts := "smtp-commands,smtp-enum-users,smtp-open-relay"
-            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            individualPortScannerWithNSEScripts(target, "25,465,587", nmapOutputFile, nmapNSEScripts)
 
         case "53":
             caseDir = protocolDetected("DNS")
@@ -69,7 +68,8 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
         case "80", "443", "8080":
             if visitedHTTP { continue }
-
+            
+            // TODO, skipping for now
             fmt.Printf("%s\n", green("[+] HTTP service detected. Running Web enum tools."))
             httpDir := baseDir + "http/"
 			customMkdir(httpDir)
@@ -89,9 +89,14 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
         case "110", "143", "993", "995":
             if visitedIMAP { continue }
+
             fmt.Printf("%s\n", green("[+] IMAP / POP3 service detected. Running IMAP / POP3 enum scripts."))
             mailDir := baseDir + "imap_pop3/"
 			customMkdir(mailDir)
+
+            caseDir = protocolDetected("IMAP_POP3")
+            nmapOutputFile := caseDir + "imap_pop3_scan"
+            individualPortScanner(target, "110,143,993,995", nmapOutputFile)
 
         case "111": //UDP
             fmt.Printf("%s\n", green("[+] RPC service detected. Running RPC nmap enum scripts."))
