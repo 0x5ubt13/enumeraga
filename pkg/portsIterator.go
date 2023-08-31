@@ -90,28 +90,28 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
         case "110", "143", "993", "995":
             if visitedIMAP { continue }
 
-            fmt.Printf("%s\n", green("[+] IMAP / POP3 service detected. Running IMAP / POP3 enum scripts."))
-            mailDir := baseDir + "imap_pop3/"
-			customMkdir(mailDir)
-
-            caseDir = protocolDetected("IMAP_POP3")
+            caseDir = protocolDetected("IMAP/POP3")
             nmapOutputFile := caseDir + "imap_pop3_scan"
             individualPortScanner(target, "110,143,993,995", nmapOutputFile)
 
-        case "111": //UDP
-            fmt.Printf("%s\n", green("[+] RPC service detected. Running RPC nmap enum scripts."))
-            rpcDir := baseDir + "rpc/"
-			customMkdir(rpcDir)
+            // openssl
+            openSSLArgs := []string{"openssl", "s_client", "-connect", fmt.Sprintf("%s:imaps", target)}
+            runTool(openSSLArgs, target, caseDir)
+
+        case "111": //TODO: implement UDP scan to catch RPC
+            caseDir = protocolDetected("RPC")
+            nmapOutputFile := caseDir + "rpc"
+            individualPortScanner(target, port, nmapOutputFile)
 
         case "113":
-            fmt.Printf("%s\n", green("[+] Ident service detected. Running Ident enum scripts."))
-            identDir := baseDir + "ident/"
-			customMkdir(identDir)
+            caseDir = protocolDetected("Ident")
+            nmapOutputFile := caseDir + "ident"
+            individualPortScanner(target, port, nmapOutputFile)
             
         case "135":
-            fmt.Printf("%s\n", green("[+] MSRPC detected. Running MSRPC enum tools."))
-            msrpcDir := baseDir + "msrpc/"
-			customMkdir(msrpcDir)
+            caseDir = protocolDetected("MSRPC")
+            nmapOutputFile := caseDir + "msrpc"
+            individualPortScanner(target, port, nmapOutputFile)
 
         case "137","138","139","445":
             if visitedSMB { continue }

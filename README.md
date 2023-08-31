@@ -3,7 +3,7 @@
 Automatic enumeration tool written in Go that wraps Linux tools, ported from my tool [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a rich tool that leverages the features of Go.
 
 ~~~
-demo gif coming soon
+demo gif coming as soon as this works!
 ~~~
 
 ## Usage
