@@ -94,9 +94,13 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             nmapOutputFile := caseDir + "imap_pop3_scan"
             individualPortScanner(target, "110,143,993,995", nmapOutputFile)
 
-            // openssl
+            // Openssl
             openSSLArgs := []string{"openssl", "s_client", "-connect", fmt.Sprintf("%s:imaps", target)}
             runTool(openSSLArgs, target, caseDir)
+
+            // NC banner grabbing
+            ncArgs := []string{"nc", "-nv", target, port}
+            runTool(ncArgs, target, caseDir)
 
         case "111": //TODO: implement UDP scan to catch RPC
             caseDir = protocolDetected("RPC")
