@@ -112,10 +112,18 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             nmapOutputFile := caseDir + "ident"
             individualPortScanner(target, port, nmapOutputFile)
             
+            // ident-user-enum
+            spacedPorts := strings.Join(openPortsSlice, " ")
+            identUserEnumArgs := []string{"ident-user-enum", target, spacedPorts}
+            runTool(identUserEnumArgs, target, caseDir)
+
         case "135":
             caseDir = protocolDetected("MSRPC")
             nmapOutputFile := caseDir + "msrpc"
             individualPortScanner(target, port, nmapOutputFile)
+
+            rpcDumpArgs := []string{"rpcdump", port, } //TODO: rethink runTool()
+            runTool()
 
         case "137","138","139","445":
             if visitedSMB { continue }
