@@ -11,7 +11,7 @@ import (
 // Iterate through each port and automate launching tools
 func portsIterator(target string, baseDir string, openPortsSlice []string) {
     var (
-        caseDir string
+        caseDir, nmapNSEScripts string
         visitedSMTP, visitedHTTP, visitedIMAP, visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
     )
 
@@ -32,7 +32,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 		case "20", "21":
 			caseDir = protocolDetected(baseDir, "FTP")
             nmapOutputFile := caseDir + "ftp_scan"
-            nmapNSEScripts := "ftp-* and not brute"
+            nmapNSEScripts = "ftp-* and not brute"
             individualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
             // individualPortScanner(target, port, nmapOutputFile)
             hydraBruteforcing(target, caseDir, "ftp")
@@ -40,7 +40,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
         case "22":
             caseDir = protocolDetected("SSH")
             nmapOutputFile := caseDir + "ssh_scan"
-            nmapNSEScripts := "ssh-* and not brute"
+            nmapNSEScripts = "ssh-* and not brute"
             individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
             hydraBruteforcing(target, caseDir, "ssh")
 
@@ -49,13 +49,13 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
             caseDir = protocolDetected("SMTP")
             nmapOutputFile := caseDir + "smtp_scan"
-            nmapNSEScripts := "smtp-commands,smtp-enum-users,smtp-open-relay"
+            nmapNSEScripts = "smtp-commands,smtp-enum-users,smtp-open-relay"
             individualPortScannerWithNSEScripts(target, "25,465,587", nmapOutputFile, nmapNSEScripts)
 
         case "53":
             caseDir = protocolDetected("DNS")
             nmapOutputFile := caseDir + "dns_scan"
-            nmapNSEScripts := "*dns*"
+            nmapNSEScripts = "*dns*"
             individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
         case "79":
@@ -90,7 +90,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
         case "110", "143", "993", "995":
             if visitedIMAP { continue }
 
-            caseDir = protocolDetected("IMAP/POP3")
+            caseDir = protocolDetected("IMAP-POP3")
             nmapOutputFile := caseDir + "imap_pop3_scan"
             individualPortScanner(target, "110,143,993,995", nmapOutputFile)
 
@@ -104,12 +104,12 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
         case "111": //TODO: implement UDP scan to catch RPC
             caseDir = protocolDetected("RPC")
-            nmapOutputFile := caseDir + "rpc"
+            nmapOutputFile := caseDir + "rpc_scan"
             individualPortScanner(target, port, nmapOutputFile)
 
         case "113":
             caseDir = protocolDetected("Ident")
-            nmapOutputFile := caseDir + "ident"
+            nmapOutputFile := caseDir + "ident_scan"
             individualPortScanner(target, port, nmapOutputFile)
             
             // ident-user-enum
@@ -119,18 +119,30 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
         case "135":
             caseDir = protocolDetected("MSRPC")
-            nmapOutputFile := caseDir + "msrpc"
+            nmapOutputFile := caseDir + "msrpc_scan"
             individualPortScanner(target, port, nmapOutputFile)
 
-            rpcDumpArgs := []string{"rpcdump", port, } //TODO: rethink runTool()
-            runTool()
+            rpcDumpArgs := []string{"rpcdump", port}
+            runTool(prcDumpArgs, caseDir)
 
         case "137","138","139","445":
+            // Run only once
             if visitedSMB { continue }
-            fmt.Printf("%s\n", green("[+] NetBIOS/SMB detected. Running NB/SMB enum tools."))
-            nbSmbDir := baseDir + "nb_smb/"
-			customMkdir(nbSmbDir)
-            // Remember to add enum4linux-ng
+            caseDir = protocolDetected("NetBIOS-SMB")
+            
+            // Nmap
+			nmapOutputFile := caseDir + "nb_smb_scan"
+            nmapNSEScripts = "smb* and not brute"
+            individualPortScannerWithNSEScripts(target, "137,139,445", nmapOutputFile, nsenmapNSEScripts) // TCP
+            individualUDPPortScannerWithNSEScripts(target, "137", "nb_smb_UDP_scan", "nbstat.nse") // UDP
+            
+            // CME
+
+            // SMBMap
+
+            // NBLookup
+
+            // TODO: Remember to add enum4linux-ng
 
         case "161","162","10161","10162": // UDP
             if visitedSNMP { continue }

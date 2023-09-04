@@ -187,7 +187,7 @@ func msfconsoleCmd(oneliner []string) {
 }
 
 // Announce tool and run it
-func runTool(args []string, target, filePath string) {
+func runTool(args []string, filePath string) {
 	tool := args[0]
 	command := strings.Join(args, ",")
 	printCustomTripleMsg("yellow", "cyan", "[!] Running", tool, "and sending it to the background")
