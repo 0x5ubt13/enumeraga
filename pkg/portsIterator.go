@@ -12,7 +12,7 @@ import (
 func portsIterator(target string, baseDir string, openPortsSlice []string) {
     var (
         caseDir, nmapNSEScripts string
-        visitedSMTP, visitedHTTP, visitedIMAP, visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
+        visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP, visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
     )
 
     // DEV: Debugging purposes
@@ -30,6 +30,9 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
     for _, port := range openPortsSlice {
 		switch port {
 		case "20", "21":
+            if visitedFTP { continue }
+            visitedFTP = true
+
 			caseDir = protocolDetected(baseDir, "FTP")
             nmapOutputFile := caseDir + "ftp_scan"
             nmapNSEScripts = "ftp-* and not brute"
@@ -46,6 +49,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
         case "25", "465", "587":
             if visitedSMTP { continue }
+            visitedHTTP = true
 
             caseDir = protocolDetected("SMTP")
             nmapOutputFile := caseDir + "smtp_scan"
@@ -64,20 +68,20 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             individualPortScanner(target, port, nmapOutputFile)
             
             msfArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", target)}
-            runTool(msfArgs, target, caseDir)
+            runTool(msfArgs, caseDir)
 
-        case "80", "443", "8080":
+        case "80", "443", "8080": //TODO:
             if visitedHTTP { continue }
+            visitedHTTP = true
             
-            // TODO, skipping for now
-            fmt.Printf("%s\n", green("[+] HTTP service detected. Running Web enum tools."))
-            httpDir := baseDir + "http/"
-			customMkdir(httpDir)
+            caseDir = protocolDetected("HTTP")
+            nmapOutputFile := caseDir + "http_scan"
+            individualPortScanner(target, "80,443,8080", nmapOutputFile)
 
         case "88":
-            fmt.Printf("%s\n", green("[+] Kerberos service detected. Running Nmap enum scripts."))
-            kerberosDir := baseDir + "kerberos/"
-			customMkdir(kerberosDir)
+            caseDir = protocolDetected("Kerberos")
+            nmapOutputFile := caseDir + "kerberos_scan"
+            individualPortScanner(target, port, nmapOutputFile)
             
             filePath := kerberosDir + "potential_DC_commands.txt"
             message := `Potential DC found. Enumerate further.
@@ -89,6 +93,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
         case "110", "143", "993", "995":
             if visitedIMAP { continue }
+            visitedIMAP = true
 
             caseDir = protocolDetected("IMAP-POP3")
             nmapOutputFile := caseDir + "imap_pop3_scan"
@@ -96,11 +101,11 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
             // Openssl
             openSSLArgs := []string{"openssl", "s_client", "-connect", fmt.Sprintf("%s:imaps", target)}
-            runTool(openSSLArgs, target, caseDir)
+            runTool(openSSLArgs, caseDir)
 
             // NC banner grabbing
             ncArgs := []string{"nc", "-nv", target, port}
-            runTool(ncArgs, target, caseDir)
+            runTool(ncArgs, caseDir)
 
         case "111": //TODO: implement UDP scan to catch RPC
             caseDir = protocolDetected("RPC")
@@ -115,7 +120,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             // ident-user-enum
             spacedPorts := strings.Join(openPortsSlice, " ")
             identUserEnumArgs := []string{"ident-user-enum", target, spacedPorts}
-            runTool(identUserEnumArgs, target, caseDir)
+            runTool(identUserEnumArgs, caseDir)
 
         case "135":
             caseDir = protocolDetected("MSRPC")
@@ -128,6 +133,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
         case "137","138","139","445":
             // Run only once
             if visitedSMB { continue }
+            visitedSMB = true
             caseDir = protocolDetected("NetBIOS-SMB")
             
             // Nmap
@@ -145,12 +151,32 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             // TODO: Remember to add enum4linux-ng
 
         case "161","162","10161","10162": // UDP
+            // TODO: (outstanding from AutoEnum) 
+            // Hold on all SNMP enumeration until onesixtyone has finished bruteforcing community strings
+            // then launch the tools in a loop against all the found CS
             if visitedSNMP { continue }
-            fmt.Printf("%s\n", green("[+] SNMP detected. Running SNMP enum tools."))
-            snmpDir := baseDir + "snmp/"
-			customMkdir(snmpDir)
+            visitedSNMP = true
+            caseDir = protocolDetected("SNMP")
 
-            fmt.Println("SNMP - Simple Network Management Protocol")
+            // Nmap
+            nmapOutputFile := caseDir + "msrpc_scan"
+            nmapNSEScripts = "snmp* and not snmp-brute"
+            individualUDPPortScannerWithNSEScripts(target, "161,162,10161,10162", nmapOutputFile, nmapNSEScripts)
+
+            // SNMPWalk
+            snmpWalkArgs := []string{"snmpwalk", "-v2c", "-c", "public", target}
+            runTool(snmpWalkArgs, caseDir)
+
+            // OneSixtyOne
+            oneSixtyOneArgs := []string{"onesixtyone", "-c", "$(locate SNMP/snmp.txt -l 1)", target}
+            runTool(oneSixtyOneArgs, caseDir)
+
+            // Braa
+            // automate bf other CS than public
+            braaArgs := []string{"braa", fmt.Sprintf("public@%s:.1.3.6.*", target)}
+            runTool(braaArgs, caseDir)
+
+
         case "389","636","3268","3269":
             fmt.Printf("%s\n", green("[+] LDAP detected. Running LDAP enum tools."))
             ldapDir := baseDir + "ldap/"
