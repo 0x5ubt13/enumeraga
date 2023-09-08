@@ -10,6 +10,7 @@ import (
 func main() {
 	// Perform pre-flight checks and get number of lines.
 	totalLines := checks()
+	if *optBrute { getWordlists() }
 
 	// Get CIDR
 	// printPhase(1)

@@ -11,7 +11,7 @@ import (
 // Iterate through each port and automate launching tools
 func portsIterator(target string, baseDir string, openPortsSlice []string) {
     var (
-        caseDir, nmapNSEScripts string
+        caseDir, filePath, message, nmapOutputFile, nmapNSEScripts string
         visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP, visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
     )
 
@@ -34,7 +34,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             visitedFTP = true
 
 			caseDir = protocolDetected(baseDir, "FTP")
-            nmapOutputFile := caseDir + "ftp_scan"
+            nmapOutputFile = caseDir + "ftp_scan"
             nmapNSEScripts = "ftp-* and not brute"
             individualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
             // individualPortScanner(target, port, nmapOutputFile)
@@ -42,7 +42,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
         case "22":
             caseDir = protocolDetected("SSH")
-            nmapOutputFile := caseDir + "ssh_scan"
+            nmapOutputFile = caseDir + "ssh_scan"
             nmapNSEScripts = "ssh-* and not brute"
             individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
             hydraBruteforcing(target, caseDir, "ssh")
@@ -52,19 +52,19 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             visitedHTTP = true
 
             caseDir = protocolDetected("SMTP")
-            nmapOutputFile := caseDir + "smtp_scan"
+            nmapOutputFile = caseDir + "smtp_scan"
             nmapNSEScripts = "smtp-commands,smtp-enum-users,smtp-open-relay"
             individualPortScannerWithNSEScripts(target, "25,465,587", nmapOutputFile, nmapNSEScripts)
 
         case "53":
             caseDir = protocolDetected("DNS")
-            nmapOutputFile := caseDir + "dns_scan"
+            nmapOutputFile = caseDir + "dns_scan"
             nmapNSEScripts = "*dns*"
             individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
         case "79":
             caseDir = protocolDetected("Finger")
-            nmapOutputFile := caseDir + "finger_scan"
+            nmapOutputFile = caseDir + "finger_scan"
             individualPortScanner(target, port, nmapOutputFile)
             
             msfArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", target)}
@@ -75,15 +75,15 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             visitedHTTP = true
             
             caseDir = protocolDetected("HTTP")
-            nmapOutputFile := caseDir + "http_scan"
+            nmapOutputFile = caseDir + "http_scan"
             individualPortScanner(target, "80,443,8080", nmapOutputFile)
 
         case "88":
             caseDir = protocolDetected("Kerberos")
-            nmapOutputFile := caseDir + "kerberos_scan"
+            nmapOutputFile = caseDir + "kerberos_scan"
             individualPortScanner(target, port, nmapOutputFile)
             
-            filePath := kerberosDir + "potential_DC_commands.txt"
+            filePath = caseDir + "potential_DC_commands.txt"
             message := `Potential DC found. Enumerate further.
                         Get the name of the domain and chuck it to:
                         nmap -p 88 \ 
@@ -96,7 +96,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             visitedIMAP = true
 
             caseDir = protocolDetected("IMAP-POP3")
-            nmapOutputFile := caseDir + "imap_pop3_scan"
+            nmapOutputFile = caseDir + "imap_pop3_scan"
             individualPortScanner(target, "110,143,993,995", nmapOutputFile)
 
             // Openssl
@@ -109,12 +109,12 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
         case "111": //TODO: implement UDP scan to catch RPC
             caseDir = protocolDetected("RPC")
-            nmapOutputFile := caseDir + "rpc_scan"
+            nmapOutputFile = caseDir + "rpc_scan"
             individualPortScanner(target, port, nmapOutputFile)
 
         case "113":
             caseDir = protocolDetected("Ident")
-            nmapOutputFile := caseDir + "ident_scan"
+            nmapOutputFile = caseDir + "ident_scan"
             individualPortScanner(target, port, nmapOutputFile)
             
             // ident-user-enum
@@ -124,7 +124,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
         case "135":
             caseDir = protocolDetected("MSRPC")
-            nmapOutputFile := caseDir + "msrpc_scan"
+            nmapOutputFile = caseDir + "msrpc_scan"
             individualPortScanner(target, port, nmapOutputFile)
 
             rpcDumpArgs := []string{"rpcdump", port}
@@ -137,18 +137,32 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             caseDir = protocolDetected("NetBIOS-SMB")
             
             // Nmap
-			nmapOutputFile := caseDir + "nb_smb_scan"
+			nmapOutputFile = caseDir + "nb_smb_scan"
             nmapNSEScripts = "smb* and not brute"
             individualPortScannerWithNSEScripts(target, "137,139,445", nmapOutputFile, nsenmapNSEScripts) // TCP
             individualUDPPortScannerWithNSEScripts(target, "137", "nb_smb_UDP_scan", "nbstat.nse") // UDP
             
             // CME
+            cmeArgs := []string{"crackmapexec", "smb", target}
+            runTool(cmeArgs, caseDir)
+
+            // CME BruteForcing
+            cmeBfArgs := []string{"crackmapexec", "smb", "-u", usersList, "-p", darkwebTop1000, "--shares", "--sessions", "--disks", "--loggedon-users", "--users", "--groups", "--computers", "--local-groups", "--pass-pol", "--rid-brute", target}
+            runTool(cmeBfArgs, caseDir)
 
             // SMBMap
+            smbMapArgs := []string{"smbmap", "-H", target}
+            runTool(smbMapArgs, caseDir)
 
             // NBLookup
+            nbLookupArgs := []string{"nblookup", "-A", target}
+            runTool(smbMapArgs, caseDir)
 
-            // TODO: Remember to add enum4linux-ng
+            // Enum4linux
+            enum4linuxArgs := []string{"enum4linux", "-u", "''", "-p", "''", target}
+            runTool(enum4linuxArgs, caseDir)
+
+            // TODO: Remember to add enum4linux-ng to installs and here
 
         case "161","162","10161","10162": // UDP
             // TODO: (outstanding from AutoEnum) 
@@ -159,7 +173,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             caseDir = protocolDetected("SNMP")
 
             // Nmap
-            nmapOutputFile := caseDir + "msrpc_scan"
+            nmapOutputFile = caseDir + "snmp_scan"
             nmapNSEScripts = "snmp* and not snmp-brute"
             individualUDPPortScannerWithNSEScripts(target, "161,162,10161,10162", nmapOutputFile, nmapNSEScripts)
 
@@ -178,14 +192,39 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 
         case "389","636","3268","3269":
-            fmt.Printf("%s\n", green("[+] LDAP detected. Running LDAP enum tools."))
-            ldapDir := baseDir + "ldap/"
-			customMkdir(ldapDir)
+            if visitedLDAP { continue }
+            visitedLDAP = true
+            caseDir = protocolDetected("LDAP")
+
+            // Nmap
+            nmapNSEScripts = "ldap* and not brute"
+            individualPortScannerWithNSEScripts(target, "389,636,3268,3269", nmapOutputFile, nmapNSEScripts)
+
+            // LDAPSearch
+            ldapSearchArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("ldap://%s", target), "-D", "''", "-w", "''", "-b", "DC=<1_SUBDOMAIN>,DC=<TLD>"}
+            runTool(ldapSearchArgs, caseDir)
 
         case "512","513","514":
-            fmt.Printf("%s\n", green("[+] R-Services detected. Running R-Services enum tools."))
-            rDir := baseDir + "r-services/"
-			customMkdir(rDir)
+            if visitedRsvc { continue }
+            visitedRsvc = true
+            caseDir = protocolDetected("RServices")
+
+            // Nmap
+            individualPortScanner(target, "512,513,514", nmapOutputFile)
+
+            // Rwho
+            rwhoArgs := []string{"rwho", "-a", target}
+            runTool(rwhoArgs, caseDir)
+
+            // Rusers
+            rusersArgs := []string{"rusers", "-al", target}
+            runtool(rusersArgs, caseDir)
+            
+            filePath := caseDir + "potential_DC_commands.txt"
+            message = `Tip: Enumerate NFS, etc on the target server for /home/user/.rhosts and /etc/hosts.equiv files to use with rlogin, rsh and rexec.
+                        If found, use the following command:
+                        rlogin "target" -l "found_user"`
+            writeTextToFile(filePath, message)
 
         case "623":
             fmt.Printf("%s\n", green("[+] IPMI detected. Running IPMI enum tools."))
