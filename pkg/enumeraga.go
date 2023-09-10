@@ -12,7 +12,7 @@ func main() {
 	totalLines := checks()
 	if *optBrute { getWordlists() }
 
-	// Get CIDR
+	// TODO: Get CIDR
 	// printPhase(1)
 
 	// Main flow:
@@ -98,7 +98,7 @@ func multiTarget(targetsFile *string) {
 
 	// Loop through the targets in the file
 	targets, lines := readTargetsFile(*targetsFile)
-	if !*optQuiet { printCustomTripleMsg("green", "yellow", "[+] Found", lines, "targets")}
+	if !*optQuiet { printCustomTripleMsg("green", "yellow", "[+] Found", string(lines), "targets")}
 	for i := 0; i < lines; i++ {
 		target := targets[i]
 		fmt.Printf("%s %v %s %v: %s\n", green("[+] Attacking target"), yellow(i+1), green("of"), yellow(lines), yellow(target))

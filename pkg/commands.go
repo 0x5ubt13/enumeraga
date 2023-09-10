@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	// "strings"
+	"log"
 )
 
 func wgetCmd(outputFile string, url string) {
@@ -166,24 +167,6 @@ func rmCmd(filePath string) {
 		if *optDbg {fmt.Printf("Debug - Error running apt-get update: %v\n", rmErr)}
 		return
 	}
-}
-
-func msfconsoleCmd(oneliner []string) {
-	// Run the apt-get update command
-	msfconsole := exec.Command("msfconsole", "-q", "x", )
-
-	// Redirect the command's output to the standard output in terminal
-	msfconsole.Stdout = os.Stdout
-	msfconsole.Stderr = os.Stderr
-
-	// Run the command
-	msfconsoleErr := msfconsole.Run()
-	if msfconsoleErr != nil {
-		if *optDbg {fmt.Printf("Debug - Error running msfconsole: %v\n", msfconsoleErr)}
-		return
-	}
-
-	if *optDbg {green("[*] Debug - msfconsole completed successfully.")}
 }
 
 // Announce tool and run it
