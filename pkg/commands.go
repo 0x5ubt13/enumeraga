@@ -69,11 +69,17 @@ func dpkgCmd(debPkgPath string) {
 
 func aptGetUpdateCmd() {
 	// Run the apt-get update command
+	fmt.Printf("%s %s%s ", yellow("[!] Running"), cyan("apt-get update"), yellow("..."))
 	update := exec.Command("apt-get", "update")
 
-	// Redirect the command's output to the standard output in terminal
-	update.Stdout = os.Stdout
+	// Redirect the command's error output to the standard output in terminal
 	update.Stderr = os.Stderr
+	
+	// Only print to stdout if debugging 
+	if *optDbg {
+		fmt.Println(cyan("[*] Debug -> printing apt-get update's output ------"))
+		update.Stdout = os.Stdout
+	}
 
 	// Run the command
 	updateErr := update.Run()
@@ -82,7 +88,8 @@ func aptGetUpdateCmd() {
 		return
 	}
 
-	if *optDbg {green("[*] Debug - apt-get update completed successfully.")}
+	fmt.Println(green("Done!"))
+
 }
 
 func aptGetInstallCmd(tool string) {

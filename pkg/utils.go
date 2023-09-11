@@ -184,6 +184,8 @@ func consent(tool string) rune {
 }
 
 func installMissingTools() {
+	var updated bool
+
 	keyTools := []string{
 		"locate",
 		"nmap",
@@ -227,12 +229,9 @@ func installMissingTools() {
 		}
 	}	
 
-	// Install all those that are missing
-	aptGetUpdateCmd()
-	
-	// installMissingTools(missingTools)
-	
+	// Install all those that are missing	
 	for _, tool := range missingTools {
+		if !updated { aptGetUpdateCmd(); updated = true }
 		aptGetInstallCmd(tool)
 	}
 }

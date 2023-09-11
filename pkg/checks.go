@@ -14,6 +14,7 @@ import (
 
 // Perform pre-flight checks and return total lines if multi-target
 func checks() int {
+	// Parse optional arguments
 	getopt.Parse()
 
 	// Check 0: banner!
@@ -44,13 +45,13 @@ func checks() int {
 	
 	// Check 2: Help flag passed?
 	if *optHelp {
-		if !*optQuiet {(cyan("[*] Help flag detected. Aborting other checks and printing usage.\n\n"))}
+		if !*optQuiet { fmt.Println(cyan("[*] Help flag detected. Aborting other checks and printing usage.\n")) }
         getopt.Usage()
         os.Exit(0)
     }
 
 	// Check 3: am I groot?!
-	if os.Geteuid() != 0 {errorMsg("Please run me as root!")}
+	if os.Geteuid() != 0 { errorMsg("Please run me as root!") }
 
 	// Check 4: Ensure there is a target
 	if *optTarget == "" {
@@ -65,7 +66,7 @@ func checks() int {
 	// Check 6: Determine whether it is a single target or multi-target  
 	var totalLines int 
 	targetInput := net.ParseIP(*optTarget)
-	if *optDbg {fmt.Printf("Debug: targetInput := %s\n", targetInput.To4())}
+	if *optDbg {fmt.Printf("Debug: targetInput = %s\n", targetInput.To4())}
 	if targetInput.To4() == nil {
 		// Multi-target
 		// Check file exists and get lines
