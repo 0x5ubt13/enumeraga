@@ -12,8 +12,10 @@ func main() {
 	totalLines := checks()
 	if *optBrute { getWordlists() }
 
-	// TODO: Get CIDR
-	// printPhase(1)
+	if *optRange != "" {
+		// Run CIDR range tools
+		runRangeTools()
+	}
 
 	// Main flow:
 	if totalLines == 0 {

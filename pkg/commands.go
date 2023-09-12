@@ -107,12 +107,12 @@ func aptGetInstallCmd(tool string) {
 		if *optDbg {fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)}
 		fmt.Printf(
 			"%s\n%s\n%s\n",
-			red("[-] Please install the following tools manually: "),
+			red("[-] Error. Please install the following package manually: "),
 			cyan(tool),
 			red("[-] Aborting..."),
 		)
+		os.Exit(2)
 
-		
 		// Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
 		// deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
 		// fmt.Printf(
@@ -130,7 +130,7 @@ func aptGetInstallCmd(tool string) {
 		// 	printConsentNotGiven("Kali's packaging repository source")
 		// 	// Making sure we clean up if we are recursing this function
 		// 	deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
-		// 	os.Exit(1)
+		// 	os.Exit(2)
 		// }		
 		// installWithKaliSourceRepo(tools)
 	}
@@ -215,8 +215,47 @@ func runTool(args []string, filePath string) {
     } else {
 		printCustomTripleMsg("green", "cyan", "[+]", tool, "finished successfully")
 	}
-
 }	
+
+// Enumerate a whole CIDR range using specific range tools
+func runRangeTools(cidrRange string) {
+	// Prep
+	printCustomTripleMsg("yellow", "cyan", "[*]", "CIDR Range", "flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
+	if *optDbg { fmt.Println("[*] Debug: CIDR range string -> ", cidrRange) }
+
+	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *optOutput, strings.Replace(cidrRange, "/", "_", 1))
+	if *optDbg { fmt.Println("[*] Debug: cidrDir -> ", cidrDir) }
+	customMkdir(cidrDir)
+
+ 	// Run range tools
+    // nbtscan-unixwiz
+	nbtscanArgs := []string{"nbtscan-unixwiz", "-f", cidrRange}
+	nbtscanPath	:= fmt.Sprintf("%snbtscan-unixwiz.out", cidrDir)
+	runTool(nbtscanArgs, nbtscanPath)
+//     nbtscan-unixwiz -f "$cidr" >> "${cidr_dir}"nbtscan-unixwiz.out 2>&1 && \
+//       finished_tool "nbtscan-unixwiz" "$cidr" "${cidr_dir}nbtscan-unixwiz.out" &
+    
+//     running_tool "Responder-RunFinger"
+//     responder-RunFinger -i "$cidr" >> "${cidr_dir}"runfinger.out 2>&1 && \
+//       finished_tool "responder-RunFinger" "$cidr" "${cidr_dir}runfinger.out" &
+    
+//     running_tool "onesixtyone"
+//     onesixtyone -c "$(locate "SNMP/snmp.txt" -l 1)" "$cidr" -w 100 >> "${cidr_dir}"onesixtyone.out 2>&1 && \
+//       finished_tool "onesixtyone" "$cidr" "${cidr_dir}onesixtyone.out" &
+
+//     running_tool "fping"
+//     fping -asgq "$cidr" >> "${cidr_dir}"fping.out 2>&1 && \
+//       finished_tool "fping" "$cidr" "${cidr_dir}fping.out" &
+    
+//     # Very fun wee module to detect quite low hanging fruit
+//     running_tool "Metasploit scan module for EternalBlue"
+//     msfconsole -q -x "use use scanner/smb/smb_ms17_010;set rhosts ${cidr};set threads 10;run;exit" >> "${cidr_dir}"eternalblue_sweep.out 2>&1 && \
+//       finished_tool "Metasploit module for EternalBlue" "${1}" "-R ${cidr_dir}eternalblue_sweep.out" && \
+//       post_eternalblue_sweep_check &
+//   else
+//     printf "%b[!] CIDR range %bNOT%b detected. Remember you can also pass a range in CIDR notation to use enum tools that scan a wide range with '%bautoenum -r <IP address>/<network mask>%b'%b\n" "${YELLOW}" "${RED}" "${YELLOW}" "${BLUE}" "${YELLOW}" "${RESTORE}" 
+//   fi
+}
 
 
 

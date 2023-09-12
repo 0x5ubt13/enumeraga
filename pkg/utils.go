@@ -31,9 +31,9 @@ var (
 	optHelp 	= getopt.BoolLong("help", 'h', "Display this help and exit.")
 	optOutput	= getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output." )
 	// optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
-	// DEV: For ^^, use nmap.WithMostCommonPorts()
+	// DEV: For ^^^, use nmap.WithMostCommonPorts()
 	optQuiet 	= getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
-	// optRange = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
+	optRange 	= getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
 	optTarget 	= getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
 	optVVervose	= getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 	
@@ -112,7 +112,7 @@ func customMkdir(name string) {
 func protocolDetected (protocol string) string {
 	if !*optQuiet {printCustomTripleMsg("green", "cyan", "[+]", protocol, "service detected")}
 	protocolDir := fmt.Sprintf("%s/%s/", *optOutput, strings.ToLower(protocol))
-	if *optDbg {fmt.Printf("%s %s\n", "Debug: protocolDir", protocolDir)}
+	if *optDbg {fmt.Printf("%s %s\n", "[*] Debug: protocolDir ->", protocolDir)}
 	customMkdir(protocolDir)
 	return protocolDir
 }
@@ -388,7 +388,9 @@ func printCustomTripleMsg(dominantColour, secondaryColour, start, middle, end st
 		}
 
 	case "yellow":
-		fmt.Printf("%s %s %s.\n", yellow(start), cyan(middle), yellow(end))
+		if secondaryColour == "cyan" {
+			fmt.Printf("%s %s %s.\n", yellow(start), cyan(middle), yellow(end))
+		}
 		
 	case "red":
 		if secondaryColour == "cyan" {
@@ -398,5 +400,12 @@ func printCustomTripleMsg(dominantColour, secondaryColour, start, middle, end st
 		if secondaryColour == "yellow" {
 			fmt.Printf("%s %s %s.\n", red(start), cyan(yellow), red(end))
 		}
+
+	case "cyan":
+		if secondaryColour == "yellow" {
+			fmt.Printf("%s %s %s.\n", cyan(start), yellow(middle), cyan(end))
+		}
 	}
+
+
 }

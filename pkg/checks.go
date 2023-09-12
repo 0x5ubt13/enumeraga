@@ -39,7 +39,7 @@ func checks() int {
 		// fmt.Printf("Output: %s\n", *optOutput)
 		// fmt.Printf("Top ports: %s\n", *optTopPorts) 
 		fmt.Printf("Quiet: %t\n", *optQuiet)	
-		// fmt.Printf("Range: %s\n", *optRange)	
+		fmt.Printf("Range: %s\n", *optRange)	
 		fmt.Printf("Target: %s\n", *optTarget)
 	}
 	
