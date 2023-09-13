@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"time"
+
 	// "net"
 	"os"
 	// "os/exec"
@@ -11,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	getopt "github.com/pborman/getopt/v2"
 	zglob "github.com/mattn/go-zglob"
+	getopt "github.com/pborman/getopt/v2"
 )
 
 var (
@@ -41,10 +43,7 @@ var (
 	alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
 	// Declare wordlists global vars
-    dirListMedium string
-    darkwebTop1000 string
-    extensionsList string
-    usersList string
+    dirListMedium, darkwebTop1000, extensionsList, usersList string
 )
 
 func printBanner() {
@@ -102,16 +101,16 @@ func printPhase(phase int) {
 func customMkdir(name string) {
 	err := os.Mkdir(name, os.ModePerm)
 	if err != nil {
-		if *optVVervose {fmt.Println(red("[-] Error:"), red(err))}
+		fmt.Println(red("[-] Error:"), red(err))
 	} else {
-		if *optVVervose {printCustomTripleMsg("green", "yellow", "[+] Directory", name, "created successfully")}
+		printCustomTripleMsg("green", "yellow", "[+] Directory", name, "created successfully")
 	}
 }
 
 // Announce protocol, create base dir and return its name
-func protocolDetected (protocol string) string {
+func protocolDetected (protocol, baseDir string) string {
 	if !*optQuiet {printCustomTripleMsg("green", "cyan", "[+]", protocol, "service detected")}
-	protocolDir := fmt.Sprintf("%s/%s/", *optOutput, strings.ToLower(protocol))
+	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
 	if *optDbg {fmt.Printf("%s %s\n", "[*] Debug: protocolDir ->", protocolDir)}
 	customMkdir(protocolDir)
 	return protocolDir
@@ -148,6 +147,11 @@ func writePortsToFile(filePath string, ports string, host string) string {
     fmt.Printf("%s %s %s %s\n", green("[+] Successfully written open ports for host"), yellow(host), green("to file"), yellow(fileName))
 
 	return ports
+}
+
+func timeTracker(start time.Time, name string) {
+	elapsed := time.Since(start)
+	log.Printf("%s took %s", name, elapsed)
 }
 
 func consent(tool string) rune {
@@ -344,28 +348,32 @@ func printConsentNotGiven(tool string) {
 
 func getWordlists() {
 	// Locate the "raft-medium-directories-lowercase" file
-	dirListMedium, err := zglob.Glob("raft-medium-directories-lowercase")
+	dirListMediumSlice, err := zglob.Glob("raft-medium-directories-lowercase")
 	if err != nil {
 		log.Fatalf("Error locating 'raft-medium-directories-lowercase': %v\n", err)
 	}
+	dirListMedium = dirListMediumSlice[0]
 	
 	// Locate the "darkweb2017-top1000.txt" file
-	darkwebTop1000, err := zglob.Glob("darkweb2017-top1000.txt")
+	darkwebTop1000Slice, err := zglob.Glob("darkweb2017-top1000.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'darkweb2017-top1000.txt': %v\n", err)
 	}
+	darkwebTop1000 = darkwebTop1000Slice[0]
 	
 	// Locate the "web-extensions.txt" file
-	extensionsList, err := zglob.Glob("web-extensions.txt")
+	extensionsListSlice, err := zglob.Glob("web-extensions.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'web-extensions.txt': %v\n", err)
-	}
+	} 
+	extensionsList = extensionsListSlice[0]
 	
 	// Locate the "top-usernames-shortlist" file
-	usersList, err := zglob.Glob("top-usernames-shortlist")
+	usersListSlice, err := zglob.Glob("top-usernames-shortlist")
 	if err != nil {
 		log.Fatalf("Error locating 'top-usernames-shortlist': %v\n", err)
 	}
+	usersList = usersListSlice[0]
 
 	if *optDbg {
 		fmt.Println("Located Files:")
@@ -390,6 +398,10 @@ func printCustomTripleMsg(dominantColour, secondaryColour, start, middle, end st
 	case "yellow":
 		if secondaryColour == "cyan" {
 			fmt.Printf("%s %s %s.\n", yellow(start), cyan(middle), yellow(end))
+		}
+
+		if secondaryColour == "red" {
+			fmt.Printf("%s %s %s.\n", yellow(start), red(middle), yellow(end))
 		}
 		
 	case "red":

@@ -6,8 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
 	// "strings"
 	"log"
+
+	zglob "github.com/mattn/go-zglob"
 )
 
 func wgetCmd(outputFile string, url string) {
@@ -218,46 +221,119 @@ func runTool(args []string, filePath string) {
 }	
 
 // Enumerate a whole CIDR range using specific range tools
-func runRangeTools(cidrRange string) {
+func runRangeTools(targetRange string) {
 	// Prep
-	printCustomTripleMsg("yellow", "cyan", "[*]", "CIDR Range", "flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
-	if *optDbg { fmt.Println("[*] Debug: CIDR range string -> ", cidrRange) }
 
-	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *optOutput, strings.Replace(cidrRange, "/", "_", 1))
+	// Print Flag detected
+	printCustomTripleMsg("yellow", "cyan", "[*]", "CIDR Range", "flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
+	if *optDbg { fmt.Println("[*] Debug: target CIDR range string -> ", targetRange) }
+
+	// Make CIDR dir
+	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *optOutput, strings.Replace(targetRange, "/", "_", 1))
 	if *optDbg { fmt.Println("[*] Debug: cidrDir -> ", cidrDir) }
 	customMkdir(cidrDir)
 
- 	// Run range tools
-    // nbtscan-unixwiz
-	nbtscanArgs := []string{"nbtscan-unixwiz", "-f", cidrRange}
-	nbtscanPath	:= fmt.Sprintf("%snbtscan-unixwiz.out", cidrDir)
-	runTool(nbtscanArgs, nbtscanPath)
-//     nbtscan-unixwiz -f "$cidr" >> "${cidr_dir}"nbtscan-unixwiz.out 2>&1 && \
-//       finished_tool "nbtscan-unixwiz" "$cidr" "${cidr_dir}nbtscan-unixwiz.out" &
-    
-//     running_tool "Responder-RunFinger"
-//     responder-RunFinger -i "$cidr" >> "${cidr_dir}"runfinger.out 2>&1 && \
-//       finished_tool "responder-RunFinger" "$cidr" "${cidr_dir}runfinger.out" &
-    
-//     running_tool "onesixtyone"
-//     onesixtyone -c "$(locate "SNMP/snmp.txt" -l 1)" "$cidr" -w 100 >> "${cidr_dir}"onesixtyone.out 2>&1 && \
-//       finished_tool "onesixtyone" "$cidr" "${cidr_dir}onesixtyone.out" &
+	// Locate the "SNMP/snmp.txt" file
+	snmpListSlice, err := zglob.Glob("SNMP/snmp.txt")
+	if err != nil {
+		log.Fatalf("Error locating 'SNMP/snmp.txt': %v\n", err)
+	}
+	snmpList := snmpListSlice[0]
+	if *optDbg { fmt.Printf("snmp_list: %v\n", snmpList) }
 
-//     running_tool "fping"
-//     fping -asgq "$cidr" >> "${cidr_dir}"fping.out 2>&1 && \
-//       finished_tool "fping" "$cidr" "${cidr_dir}fping.out" &
+ 	// Run range tools
+
+    // nbtscan-unixwiz
+	nbtscanArgs := []string{"nbtscan-unixwiz", "-f", targetRange}
+	nbtscanPath	:= fmt.Sprintf("%snbtscan-unixwiz.out", cidrDir)
+	callRunTool(nbtscanArgs, nbtscanPath)
     
-//     # Very fun wee module to detect quite low hanging fruit
-//     running_tool "Metasploit scan module for EternalBlue"
-//     msfconsole -q -x "use use scanner/smb/smb_ms17_010;set rhosts ${cidr};set threads 10;run;exit" >> "${cidr_dir}"eternalblue_sweep.out 2>&1 && \
-//       finished_tool "Metasploit module for EternalBlue" "${1}" "-R ${cidr_dir}eternalblue_sweep.out" && \
-//       post_eternalblue_sweep_check &
-//   else
-//     printf "%b[!] CIDR range %bNOT%b detected. Remember you can also pass a range in CIDR notation to use enum tools that scan a wide range with '%bautoenum -r <IP address>/<network mask>%b'%b\n" "${YELLOW}" "${RED}" "${YELLOW}" "${BLUE}" "${YELLOW}" "${RESTORE}" 
-//   fi
+	// Responder-RunFinger
+	responderArgs := []string{"responder-RunFinger", "-i", targetRange}
+	responderPath := fmt.Sprintf("%srunfinger.out", cidrDir)
+	callRunTool(responderArgs, responderPath)
+
+	// OneSixtyOne
+    oneSixtyOneArgs := []string{"onesixtyone", "-c", usersList, targetRange, "-w", "100"}
+    oneSixtyOnePath := fmt.Sprintf("%sonesixtyone.out", cidrDir)
+	callRunTool(oneSixtyOneArgs, oneSixtyOnePath)
+
+    // fping
+	fpingArgs := []string{"fping", "-asgq", targetRange}
+    fpingPath := fmt.Sprintf("%sfping.out", cidrDir)
+	callRunTool(fpingArgs, fpingPath)
+
+	// Metasploit scan module for EternalBlue
+    msfEternalBlueArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use use scanner/smb/smb_ms17_010;set rhosts %s;set threads 10;run;exit", targetRange)}
+    msfEternalBluePath := fmt.Sprintf("%seternalblue_sweep", cidrDir)
+	callRunTool(msfEternalBlueArgs, msfEternalBluePath)
+
+    // TODO: implement function post_eternalblue_sweep_check()
 }
 
+// Goroutine for runTool()
+func callRunTool(args []string, filePath string) {
+	wg.Add(1)
 
+	go func(args []string, filePath string) {
+		defer wg.Done()
 
+		runTool(args, filePath)
+	}(args, filePath)
+}
 
+// Goroutine for individualPortScannerWithNSEScripts()
+func callIndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) {
+	wg.Add(1)
+
+	go func(target, port, outFile, scripts string) {
+		defer wg.Done()
+
+		individualPortScannerWithNSEScripts(target, port, outFile, scripts)
+	}(target, port, outFile, scripts)
+}
+
+// Goroutine for individualPortScannerWithNSEScriptsAndScriptArgs()
+func callIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string) {
+	wg.Add(1)
+
+	go func(target, port, outFile, scripts string, scriptArgs map[string]string) {
+		defer wg.Done()
+
+		individualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs)
+	}(target, port, outFile, scripts, scriptArgs)
+}
+
+// Goroutine for individualPortScannerWithNSEScriptsAndScriptArgs()
+func callIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string) {
+	wg.Add(1)
+
+	go func(target, port, outFile, scripts string) {
+		defer wg.Done()
+
+		individualUDPPortScannerWithNSEScripts(target, port, outFile, scripts)
+	}(target, port, outFile, scripts)
+}
+
+// Goroutine for individualPortScanner()
+func callIndividualPortScanner(target, port, outFile string) {
+	wg.Add(1)
+
+	go func(target, port, outFile string) {
+		defer wg.Done()
+
+		individualPortScanner(target, port, outFile)
+	}(target, port, outFile)
+}
+
+// Goroutine for individualPortScanner()
+func callFullAggressiveScan(target, ports, outFile string) {
+	wg.Add(1)
+
+	go func(target, ports, outFile string) {
+		defer wg.Done()
+
+		fullAggressiveScan(target, ports, outFile)
+	}(target, ports, outFile)
+}
 

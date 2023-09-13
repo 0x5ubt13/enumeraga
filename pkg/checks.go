@@ -18,7 +18,7 @@ func checks() int {
 	getopt.Parse()
 
 	// Check 0: banner!
-	if !*optQuiet {printBanner()}
+	if !*optQuiet { printBanner() }
 	printPhase(0)
 
 	if len(os.Args) == 1 {
@@ -36,7 +36,7 @@ func checks() int {
 		fmt.Printf("Brute: %t\n", *optBrute)
 		// fmt.Printf("DNS: %s\n", *optDNS)
 		fmt.Printf("Help: %t\n", *optHelp) 	
-		// fmt.Printf("Output: %s\n", *optOutput)
+		fmt.Printf("Output: %s\n", *optOutput)
 		// fmt.Printf("Top ports: %s\n", *optTopPorts) 
 		fmt.Printf("Quiet: %t\n", *optQuiet)	
 		fmt.Printf("Range: %s\n", *optRange)	
@@ -51,7 +51,7 @@ func checks() int {
     }
 
 	// Check 3: am I groot?!
-	if os.Geteuid() != 0 { errorMsg("Please run me as root!") }
+	if os.Geteuid() != 0 { errorMsg("Please run me as root!"); os.Exit(99) }
 
 	// Check 4: Ensure there is a target
 	if *optTarget == "" {

@@ -10,6 +10,11 @@ import (
 // Core functionality of the script
 // Iterate through each port and automate launching tools
 func portsIterator(target string, baseDir string, openPortsSlice []string) {
+    if *optDbg { 
+		fmt.Println("Debug - Start of portsIterator function") 
+		defer fmt.Println("Debug - End of portsIterator function") 
+	}
+
     var (
         msfArgs []string
         caseDir, filePath, message, nmapOutputFile, nmapNSEScripts string
@@ -35,55 +40,55 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             if visitedFTP { continue }
             visitedFTP = true
 
-			caseDir = protocolDetected("FTP")
+			caseDir = protocolDetected("FTP", baseDir)
             nmapOutputFile = caseDir + "ftp_scan"
             nmapNSEScripts = "ftp-* and not brute"
-            individualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
-            // individualPortScanner(target, port, nmapOutputFile)
+            callIndividualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
             hydraBruteforcing(target, caseDir, "ftp")
 
         case "22":
-            caseDir = protocolDetected("SSH")
+            caseDir = protocolDetected("SSH", baseDir)
             nmapOutputFile = caseDir + "ssh_scan"
             nmapNSEScripts = "ssh-* and not brute"
-            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
             hydraBruteforcing(target, caseDir, "ssh")
 
         case "25", "465", "587":
             if visitedSMTP { continue }
             visitedHTTP = true
 
-            caseDir = protocolDetected("SMTP")
+            caseDir = protocolDetected("SMTP", baseDir)
             nmapOutputFile = caseDir + "smtp_scan"
             nmapNSEScripts = "smtp-commands,smtp-enum-users,smtp-open-relay"
-            individualPortScannerWithNSEScripts(target, "25,465,587", nmapOutputFile, nmapNSEScripts)
+            callIndividualPortScannerWithNSEScripts(target, "25,465,587", nmapOutputFile, nmapNSEScripts)
 
         case "53":
-            caseDir = protocolDetected("DNS")
+            caseDir = protocolDetected("DNS", baseDir)
             nmapOutputFile = caseDir + "dns_scan"
             nmapNSEScripts = "*dns*"
-            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
         case "79":
-            caseDir = protocolDetected("Finger")
+            caseDir = protocolDetected("Finger", baseDir)
             nmapOutputFile = caseDir + "finger_scan"
-            individualPortScanner(target, port, nmapOutputFile)
+            callIndividualPortScanner(target, port, nmapOutputFile)
             
             msfArgs = []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", target)}
-            runTool(msfArgs, caseDir)
+            msfPath	:= fmt.Sprintf("%smsfconsole.out", caseDir)
+            callRunTool(msfArgs, msfPath)
 
         case "80", "443", "8080": //TODO:
             if visitedHTTP { continue }
             visitedHTTP = true
             
-            caseDir = protocolDetected("HTTP")
+            caseDir = protocolDetected("HTTP", baseDir)
             nmapOutputFile = caseDir + "http_scan"
-            individualPortScanner(target, "80,443,8080", nmapOutputFile)
+            callIndividualPortScanner(target, "80,443,8080", nmapOutputFile)
 
         case "88":
-            caseDir = protocolDetected("Kerberos")
+            caseDir = protocolDetected("Kerberos", baseDir)
             nmapOutputFile = caseDir + "kerberos_scan"
-            individualPortScanner(target, port, nmapOutputFile)
+            callIndividualPortScanner(target, port, nmapOutputFile)
             
             filePath = caseDir + "potential_DC_commands.txt"
             message  = `
@@ -98,72 +103,72 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             if visitedIMAP { continue }
             visitedIMAP = true
 
-            caseDir = protocolDetected("IMAP-POP3")
+            caseDir = protocolDetected("IMAP-POP3", baseDir)
             nmapOutputFile = caseDir + "imap_pop3_scan"
-            individualPortScanner(target, "110,143,993,995", nmapOutputFile)
+            callIndividualPortScanner(target, "110,143,993,995", nmapOutputFile)
 
             // Openssl
             openSSLArgs := []string{"openssl", "s_client", "-connect", fmt.Sprintf("%s:imaps", target)}
-            runTool(openSSLArgs, caseDir)
+            callRunTool(openSSLArgs, caseDir)
 
             // NC banner grabbing
             ncArgs := []string{"nc", "-nv", target, port}
-            runTool(ncArgs, caseDir)
+            callRunTool(ncArgs, caseDir)
 
         case "111": //TODO: implement UDP scan to catch RPC
-            caseDir = protocolDetected("RPC")
+            caseDir = protocolDetected("RPC", baseDir)
             nmapOutputFile = caseDir + "rpc_scan"
-            individualPortScanner(target, port, nmapOutputFile)
+            callIndividualPortScanner(target, port, nmapOutputFile)
 
         case "113":
-            caseDir = protocolDetected("Ident")
+            caseDir = protocolDetected("Ident", baseDir)
             nmapOutputFile = caseDir + "ident_scan"
-            individualPortScanner(target, port, nmapOutputFile)
+            callIndividualPortScanner(target, port, nmapOutputFile)
             
             // ident-user-enum
             spacedPorts := strings.Join(openPortsSlice, " ")
             identUserEnumArgs := []string{"ident-user-enum", target, spacedPorts}
-            runTool(identUserEnumArgs, caseDir)
+            callRunTool(identUserEnumArgs, caseDir)
 
         case "135":
-            caseDir = protocolDetected("MSRPC")
+            caseDir = protocolDetected("MSRPC", baseDir)
             nmapOutputFile = caseDir + "msrpc_scan"
-            individualPortScanner(target, port, nmapOutputFile)
+            callIndividualPortScanner(target, port, nmapOutputFile)
 
             rpcDumpArgs := []string{"rpcdump", port}
-            runTool(rpcDumpArgs, caseDir)
+            callRunTool(rpcDumpArgs, caseDir)
 
         case "137","138","139","445":
             // Run only once
             if visitedSMB { continue }
             visitedSMB = true
-            caseDir = protocolDetected("NetBIOS-SMB")
+            caseDir = protocolDetected("NetBIOS-SMB", baseDir)
             
             // Nmap
 			nmapOutputFile = caseDir + "nb_smb_scan"
             nmapNSEScripts = "smb* and not brute"
-            individualPortScannerWithNSEScripts(target, "137,139,445", nmapOutputFile, nmapNSEScripts) // TCP
-            individualUDPPortScannerWithNSEScripts(target, "137", "nb_smb_UDP_scan", "nbstat.nse") // UDP
+            callIndividualPortScannerWithNSEScripts(target, "137,139,445", nmapOutputFile, nmapNSEScripts) // TCP
+            callIndividualUDPPortScannerWithNSEScripts(target, "137", "nb_smb_UDP_scan", "nbstat.nse") // UDP
             
             // CME
             cmeArgs := []string{"crackmapexec", "smb", target}
-            runTool(cmeArgs, caseDir)
+            callRunTool(cmeArgs, caseDir)
 
             // CME BruteForcing
             cmeBfArgs := []string{"crackmapexec", "smb", "-u", usersList, "-p", darkwebTop1000, "--shares", "--sessions", "--disks", "--loggedon-users", "--users", "--groups", "--computers", "--local-groups", "--pass-pol", "--rid-brute", target}
-            runTool(cmeBfArgs, caseDir)
+            callRunTool(cmeBfArgs, caseDir)
 
             // SMBMap
             smbMapArgs := []string{"smbmap", "-H", target}
-            runTool(smbMapArgs, caseDir)
+            callRunTool(smbMapArgs, caseDir)
 
             // NBLookup
             nbLookupArgs := []string{"nblookup", "-A", target}
-            runTool(nbLookupArgs, caseDir)
+            callRunTool(nbLookupArgs, caseDir)
 
             // Enum4linux
             enum4linuxArgs := []string{"enum4linux", "-u", "''", "-p", "''", target}
-            runTool(enum4linuxArgs, caseDir)
+            callRunTool(enum4linuxArgs, caseDir)
 
             // TODO: Remember to add enum4linux-ng to installs and here
 
@@ -173,55 +178,55 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             // then launch the tools in a loop against all the found CS
             if visitedSNMP { continue }
             visitedSNMP = true
-            caseDir = protocolDetected("SNMP")
+            caseDir = protocolDetected("SNMP", baseDir)
 
             // Nmap
             nmapOutputFile = caseDir + "snmp_scan"
             nmapNSEScripts = "snmp* and not snmp-brute"
-            individualUDPPortScannerWithNSEScripts(target, "161,162,10161,10162", nmapOutputFile, nmapNSEScripts)
+            callIndividualUDPPortScannerWithNSEScripts(target, "161,162,10161,10162", nmapOutputFile, nmapNSEScripts)
 
             // SNMPWalk
             snmpWalkArgs := []string{"snmpwalk", "-v2c", "-c", "public", target}
-            runTool(snmpWalkArgs, caseDir)
+            callRunTool(snmpWalkArgs, caseDir)
 
             // OneSixtyOne
             oneSixtyOneArgs := []string{"onesixtyone", "-c", "$(locate SNMP/snmp.txt -l 1)", target}
-            runTool(oneSixtyOneArgs, caseDir)
+            callRunTool(oneSixtyOneArgs, caseDir)
 
             // Braa
             // automate bf other CS than public
             braaArgs := []string{"braa", fmt.Sprintf("public@%s:.1.3.6.*", target)}
-            runTool(braaArgs, caseDir)
+            callRunTool(braaArgs, caseDir)
 
 
         case "389","636","3268","3269":
             if visitedLDAP { continue }
             visitedLDAP = true
-            caseDir = protocolDetected("LDAP")
+            caseDir = protocolDetected("LDAP", baseDir)
 
             // Nmap
             nmapNSEScripts = "ldap* and not brute"
-            individualPortScannerWithNSEScripts(target, "389,636,3268,3269", nmapOutputFile, nmapNSEScripts)
+            callIndividualPortScannerWithNSEScripts(target, "389,636,3268,3269", nmapOutputFile, nmapNSEScripts)
 
             // LDAPSearch
             ldapSearchArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("ldap://%s", target), "-D", "''", "-w", "''", "-b", "DC=<1_SUBDOMAIN>,DC=<TLD>"}
-            runTool(ldapSearchArgs, caseDir)
+            callRunTool(ldapSearchArgs, caseDir)
 
         case "512","513","514":
             if visitedRsvc { continue }
             visitedRsvc = true
-            caseDir = protocolDetected("RServices")
+            caseDir = protocolDetected("RServices", baseDir)
 
             // Nmap
-            individualPortScanner(target, "512,513,514", nmapOutputFile)
+            callIndividualPortScanner(target, "512,513,514", nmapOutputFile)
 
             // Rwho
             rwhoArgs := []string{"rwho", "-a", target}
-            runTool(rwhoArgs, caseDir)
+            callRunTool(rwhoArgs, caseDir)
 
             // Rusers
             rusersArgs := []string{"rusers", "-al", target}
-            runTool(rusersArgs, caseDir)
+            callRunTool(rusersArgs, caseDir)
             
             filePath = caseDir + "next_step_tip.txt"
             message  = `
@@ -231,25 +236,25 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             writeTextToFile(filePath, message)
 
         case "623":
-            caseDir = protocolDetected("IPMI")
+            caseDir = protocolDetected("IPMI", baseDir)
             nmapOutputFile = caseDir + "ipmi_scan"
 
             // Nmap
             nmapNSEScripts = "ipmi*"
-            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
             // Metasploit
             msfArgs = []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/ipmi/ipmi_dumphashes; set rhosts %s; set output_john_file %sipmi_hashes.john; run; exit", target, caseDir)}
-            runTool(msfArgs, caseDir)
+            callRunTool(msfArgs, caseDir)
 
         case "873":
-            caseDir = protocolDetected("Rsync")
+            caseDir = protocolDetected("Rsync", baseDir)
             nmapOutputFile = caseDir + "rsync_scan"
-            individualPortScanner(target, port, nmapOutputFile)
+            callIndividualPortScanner(target, port, nmapOutputFile)
 
             // Netcat
             ncArgs := []string{"nc", "-nv", target, port}
-            runTool(ncArgs, caseDir)
+            callRunTool(ncArgs, caseDir)
 
             filePath = caseDir + "next_steps_tip.txt"
             message  =  `Tip: If nc's output has a drive in it after enumerating the version, for example 'dev', your natural following step should be:
@@ -257,7 +262,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             writeTextToFile(filePath, message)
 
         case "1433":
-            caseDir = protocolDetected("MSSQL")
+            caseDir = protocolDetected("MSSQL", baseDir)
             nmapOutputFile = caseDir + "mssql"
             nmapNSEScripts = "ms-sql-info,ms-sql-empty-password,ms-sql-xp-cmdshell,ms-sql-config,ms-sql-ntlm-info,ms-sql-tables,ms-sql-hasdbaccess,ms-sql-dac,ms-sql-dump-hashes"
             nmapNSEScriptsArgs := map[string]string{
@@ -266,18 +271,18 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
                 "mssql.password": "",
                 "mssql.instance-name": "MSSQLSERVER",
             }
-            individualPortScannerWithNSEScriptsAndScriptArgs(target, port, nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs)
+            callIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs)
 
             if *optBrute {
                 bruteCMEArgs := []string{"crackmapexec", "smb", target, "-u", usersList, "-p", darkwebTop1000}
-                runTool(bruteCMEArgs, caseDir)
+                callRunTool(bruteCMEArgs, caseDir)
             }
 
         case "1521":
-            caseDir = protocolDetected("TNS")
+            caseDir = protocolDetected("TNS", baseDir)
             nmapOutputFile = caseDir + "tns_scan"
             nmapNSEScripts = "oracle-sid-brute"
-            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
             
             // TODO: Check executing this: odat all -s "${1}" >> "${tns_dir}odat.out" && 
             startSentence := "[!] Run this manually: '"
@@ -285,10 +290,10 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             printCustomTripleMsg("yellow", "cyan", startSentence, midSentence, "'")
         
         case "2049":
-            caseDir = protocolDetected("NFS")
+            caseDir = protocolDetected("NFS", baseDir)
             nmapOutputFile = caseDir + "nfs_scan"
             nmapNSEScripts = "nfs-ls,nfs-showmount,nfs-statfs"
-            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
             
             // TODO: port code for showmount + mount:
             // running_tool "Showmount + mount"
@@ -305,18 +310,18 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             // printf "To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n" "${nfs_dir}mounted_NFS_contents/" > "${nfs_dir}cleanup_readme.txt" &
 
         case "3306":
-            caseDir = protocolDetected("MYSQL")
+            caseDir = protocolDetected("MYSQL", baseDir)
             nmapOutputFile = caseDir + "mysql_scan"
             nmapNSEScripts = "mysql*"
-            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
             
             hydraBruteforcing(target, caseDir, "mysql")
 
         case "3389":
-            caseDir = protocolDetected("RDP")
+            caseDir = protocolDetected("RDP", baseDir)
             nmapOutputFile = caseDir + "rdp_scan"
             nmapNSEScripts = "rdp*"
-            individualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+            callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
             hydraBruteforcing(target, caseDir, "rdp")
 
@@ -324,15 +329,15 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
             if visitedWinRM { continue }
             visitedWinRM = true
 
-            caseDir = protocolDetected("WinRM")
+            caseDir = protocolDetected("WinRM", baseDir)
             nmapOutputFile = caseDir + "winrm_scan"
-            individualPortScanner(target, "5985,5986", nmapOutputFile)
+            callIndividualPortScanner(target, "5985,5986", nmapOutputFile)
 
         case "10000":
             // TODO: if not webmin, enum ndmp. 
-            caseDir = protocolDetected("webmin")
+            caseDir = protocolDetected("webmin", baseDir)
             nmapOutputFile = caseDir + "webmin_scan"
-            individualPortScanner(target, port, nmapOutputFile)
+            callIndividualPortScanner(target, port, nmapOutputFile)
 
         default:
             if *optVVervose {fmt.Printf("%s %s %s %s %s\n", red("[-] Port"), yellow(port), red("detected, but I don't know how to handle it yet. Please check the"), cyan("main Nmap"), red("scan"))}

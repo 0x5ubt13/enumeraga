@@ -4,35 +4,83 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
+
+var wg sync.WaitGroup
 
 // Main logic of enumeraga
 func main() {
+	// Timing the execution time
+	defer timeTracker(time.Now(), "main")
+
+	if *optDbg { 
+		fmt.Println("Debug - Start of main function") 
+		defer fmt.Println("Debug - End of main function") 
+	}
+
 	// Perform pre-flight checks and get number of lines.
 	totalLines := checks()
-	if *optBrute { getWordlists() }
+	if *optDbg { fmt.Printf("Debug - lines: %v\n", totalLines) }
 
-	if *optRange != "" {
-		// Run CIDR range tools
-		runRangeTools()
+	// Cidr handling
+	cidrErr := cidrInit()
+	if cidrErr != nil {
+		printCustomTripleMsg("yellow", "red", "[!] CIDR range", "NOT", "detected. Remember you can also pass a range in CIDR notation to use enum tools that scan a wide range with '-r'")
 	}
 
 	// Main flow:
-	if totalLines == 0 {
-		singleTarget(*optTarget, *optOutput, false)
-	} else {
-		multiTarget(optTarget)
+	flowErr := targetInit(totalLines)
+	if flowErr != nil {
+		errorMsg(fmt.Sprintf("%s", flowErr))
+	} 
+
+	// Wait for goroutines to finish
+	wg.Wait()
+}
+
+// Check whether a target CIDR range has been passed to Enumeraga 
+func cidrInit() error {
+	printPhase(1)
+	if *optRange != "" {
+		// Run CIDR range tools
+		runRangeTools(*optRange)
+		return nil
 	}
 
-	if *optDbg {
-		fmt.Printf("Debug - lines: %v\n", totalLines)
-		fmt.Println("Debug - End of main function")
+	return fmt.Errorf("CIDR range target not passed to Enumeraga")
+}
+
+// Main flow
+// Check total number of lines. 
+// If it's 0, init singleTarget
+// If it's not 0, init multiTarget
+func targetInit(totalLines int) error {
+	// If bruteforce flag was passed, initialise the wordlists
+	if *optBrute { getWordlists() }
+
+	if totalLines != 0 {
+		multiTarget(optTarget)
+		// if err != nil {
+		// 	return err
+		// }
+		// return nil
 	}
+
+	err := singleTarget(*optTarget, *optOutput, false)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Run all phases of scanning using a single target
-func singleTarget(target string, baseFilePath string, multiTarget bool) {
+func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 	if *optDbg {
+		fmt.Println("Debug - Start of singleTarget function") 
+		defer fmt.Println("Debug - End of singleTarget function") 
 		fmt.Printf("Debug - Single target: %s\n", target)
 		fmt.Printf("Debug - Base file path: %s\n", baseFilePath)
 	}
@@ -57,7 +105,7 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) {
 		}
 
 		for _, port := range host.Ports {
-			// string(port.State) not working for some reason, therefore using Sprintf
+			// Error below: string(port.State) not working for some reason, therefore using Sprintf
 			if fmt.Sprintf("%s", port.State) == "open" {
 				if *optDbg && *optVVervose {fmt.Println("Debug - Open port:", port.ID)}
 				text := strconv.FormatUint(uint64(port.ID), 10)
@@ -72,24 +120,29 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) {
 	if len(openPorts) > 0 {
 		fmt.Printf("%s %s: %v\n", green("[+] Open ports for target"), yellow(target), openPorts)
 		writePortsToFile(targetPath, openPorts, target)
+
+		// Launch main aggressive nmap scan in parallel that covers all open ports found
+		outFile := targetPath + "aggressive_scan"
+		callFullAggressiveScan(target, openPorts, outFile)
 	} else {
-		fmt.Printf("%s %s%s\n", red("[-] No open ports were found in host"), yellow(target), red(". Aborting the rest of scans for this host"))
-		return 
+		return fmt.Errorf("no ports were found open") 
 	}
 
 	if !multiTarget && !*optQuiet {printPhase(3)}
 
-	// Launch main aggressive nmap scan that covers all open ports found
-	
-	
 	// Run ports iterator with the open ports found
 	portsIterator(target, targetPath, openPortsSlice)
 
-
+	return nil
 }
 
 // Wrapper of single target for multi-target
 func multiTarget(targetsFile *string) {
+	if *optDbg { 
+		fmt.Println("Debug - Start of multiTarget function") 
+		defer fmt.Println("Debug - End of multiTarget function") 
+	}
+
 	if !*optQuiet { fmt.Printf("%s%s\n", green("[+] Using multi-targets file: "), yellow(*targetsFile)) }
 	fileNameWithExtension := strings.Split(*targetsFile, "/")
 	fileName := strings.Split(fileNameWithExtension[len(fileNameWithExtension)-1], ".")
@@ -100,10 +153,13 @@ func multiTarget(targetsFile *string) {
 
 	// Loop through the targets in the file
 	targets, lines := readTargetsFile(*targetsFile)
-	if !*optQuiet { printCustomTripleMsg("green", "yellow", "[+] Found", string(lines), "targets")}
+	if !*optQuiet { printCustomTripleMsg("green", "yellow", "[+] Found", fmt.Sprintf("%d", lines), "targets")}
 	for i := 0; i < lines; i++ {
 		target := targets[i]
 		fmt.Printf("%s %v %s %v: %s\n", green("[+] Attacking target"), yellow(i+1), green("of"), yellow(lines), yellow(target))
-		singleTarget(target, targetsBaseFilePath, true)
+		err := singleTarget(target, targetsBaseFilePath, true)
+		if err != nil {
+			printCustomTripleMsg("red", "yellow", "[-] No open ports were found in host", target, ". Aborting the rest of scans for this host")
+		}
 	}
 }
