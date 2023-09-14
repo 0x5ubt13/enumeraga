@@ -19,40 +19,45 @@ import (
 
 var (
 	// Declare colour vars
-    yellow 	= color.New(color.FgYellow).SprintFunc()
-	red 	= color.New(color.FgRed).SprintFunc()
-	green 	= color.New(color.FgGreen).SprintFunc()
-	cyan 	= color.New(color.FgCyan).SprintFunc()
+	yellow = color.New(color.FgYellow).SprintFunc()
+	red    = color.New(color.FgRed).SprintFunc()
+	green  = color.New(color.FgGreen).SprintFunc()
+	cyan   = color.New(color.FgCyan).SprintFunc()
 
 	// Declare flags and have getopt return pointers to the values.
 	// DEV: initialising vars only once they have been implemented/ported in the code
 	// optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
-	optBrute	= getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
+	optBrute = getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
 	// var optDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
-	optDbg 		= getopt.BoolLong("Debug", 'D', "Activate debug text")
-	optHelp 	= getopt.BoolLong("help", 'h', "Display this help and exit.")
-	optOutput	= getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output." )
+	optDbg    = getopt.BoolLong("Debug", 'D', "Activate debug text")
+	optHelp   = getopt.BoolLong("help", 'h', "Display this help and exit.")
+	optOutput = getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
 	// optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
 	// DEV: For ^^^, use nmap.WithMostCommonPorts()
-	optQuiet 	= getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
-	optRange 	= getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
-	optTarget 	= getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
-	optVVervose	= getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
-	
+	optQuiet    = getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
+	optRange    = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
+	optTarget   = getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
+	optVVervose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
+
 	// Define a global regular expression pattern
 	alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
 	// Declare wordlists global vars
-    dirListMedium, darkwebTop1000, extensionsList, usersList string
+	dirListMedium, darkwebTop1000, extensionsList, usersList string
+
+	// Declare globals updated and updatedb, as these may consume a lot of time and aren't needed more than once
+	updated bool
+	updatedbRan bool
+
 )
 
 func printBanner() {
-	fmt.Printf("\n%s%s%s\n", yellow(" __________                                    ________"),cyan("________"), yellow("______ "))
-	fmt.Printf("%s%s%s\n", yellow(" ___  ____/__________  ________ __________________    |"),cyan("_  ____/"), yellow("__    |"))
-	fmt.Printf("%s%s%s\n", yellow(" __  __/  __  __ \\  / / /_  __ `__ \\  _ \\_  ___/_  /| |"),cyan("  / __ "), yellow("__  /| |"))
-	fmt.Printf("%s%s%s\n", yellow(" _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ "),cyan("/ /_/ / "), yellow("_  ___ |"))
-	fmt.Printf("%s%s%s\n", yellow(" /_____/  /_/ /_/\\__,_/ /_/ /_/ /_/\\___//_/    /_/  |_"),cyan("\\____/  "), yellow("/_/  |_|"))
-	fmt.Printf("%s\n\n", green("                            by 0x5ubt13"))   
+	fmt.Printf("\n%s%s%s\n", yellow(" __________                                    ________"), cyan("________"), yellow("______ "))
+	fmt.Printf("%s%s%s\n", yellow(" ___  ____/__________  ________ __________________    |"), cyan("_  ____/"), yellow("__    |"))
+	fmt.Printf("%s%s%s\n", yellow(" __  __/  __  __ \\  / / /_  __ `__ \\  _ \\_  ___/_  /| |"), cyan("  / __ "), yellow("__  /| |"))
+	fmt.Printf("%s%s%s\n", yellow(" _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ "), cyan("/ /_/ / "), yellow("_  ___ |"))
+	fmt.Printf("%s%s%s\n", yellow(" /_____/  /_/ /_/\\__,_/ /_/ /_/ /_/\\___//_/    /_/  |_"), cyan("\\____/  "), yellow("/_/  |_|"))
+	fmt.Printf("%s\n\n", green("                            by 0x5ubt13"))
 }
 
 // Use isAlphanumeric for regexp
@@ -68,11 +73,13 @@ func errorMsg(errMsg string) {
 func readTargetsFile(filename string) ([]string, int) {
 	// fetching the file
 	data, err := os.ReadFile(*optTarget)
-	if err != nil {panic(err)}
+	if err != nil {
+		panic(err)
+	}
 
 	// Get lines
 	lines := strings.Split(string(data), "\n")
-	return lines, len(lines)-1
+	return lines, len(lines) - 1
 }
 
 func printPhase(phase int) {
@@ -101,17 +108,25 @@ func printPhase(phase int) {
 func customMkdir(name string) {
 	err := os.Mkdir(name, os.ModePerm)
 	if err != nil {
-		fmt.Println(red("[-] Error:"), red(err))
+		if *optVVervose {
+			fmt.Println(red("[-] Error:"), red(err))
+		}
 	} else {
-		printCustomTripleMsg("green", "yellow", "[+] Directory", name, "created successfully")
+		if *optVVervose {
+			printCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
+		}
 	}
 }
 
 // Announce protocol, create base dir and return its name
-func protocolDetected (protocol, baseDir string) string {
-	if !*optQuiet {printCustomTripleMsg("green", "cyan", "[+]", protocol, "service detected")}
+func protocolDetected(protocol, baseDir string) string {
+	if !*optQuiet {
+		printCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
+	}
 	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
-	if *optDbg {fmt.Printf("%s %s\n", "[*] Debug: protocolDir ->", protocolDir)}
+	if *optDbg {
+		fmt.Printf("%s\n", cyan("[*] Debug: protocolDir ->", protocolDir))
+	}
 	customMkdir(protocolDir)
 	return protocolDir
 }
@@ -119,15 +134,15 @@ func protocolDetected (protocol, baseDir string) string {
 func writeTextToFile(filePath string, message string) {
 	// Open file
 	f, err := os.Create(filePath)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer f.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
 
 	_, err2 := fmt.Fprintln(f, message)
-    if err2 != nil {
-        log.Fatal(err2)
-    }
+	if err2 != nil {
+		log.Fatal(err2)
+	}
 }
 
 // Write bytes output to file
@@ -135,40 +150,46 @@ func writePortsToFile(filePath string, ports string, host string) string {
 	// Open file
 	fileName := fmt.Sprintf("%sopen_ports.txt", filePath)
 	f, err := os.Create(fileName)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer f.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
 
 	_, err2 := fmt.Fprintln(f, ports)
-    if err2 != nil {
-        log.Fatal(err2)
-    }
-    fmt.Printf("%s %s %s %s\n", green("[+] Successfully written open ports for host"), yellow(host), green("to file"), yellow(fileName))
+	if err2 != nil {
+		log.Fatal(err2)
+	}
+	printCustomBiColourMsg("green", "yellow", "[+] Successfully written open ports for host '", host, "' to file '", fileName, "'")
 
 	return ports
 }
 
-func timeTracker(start time.Time, name string) {
+// Finish the main flow with time tracker and a couple nice messages to the terminal
+func finishLine(start time.Time) {
+	printPhase(4)
 	elapsed := time.Since(start)
-	log.Printf("%s took %s", name, elapsed)
+
+	if elapsed.Seconds() < 1 {
+		// Convert duration to float of Milliseconds
+		ms := float64(elapsed.Nanoseconds()) / 1e6
+		output := fmt.Sprintf("%.2fms", ms)
+		printCustomBiColourMsg("cyan", "green", "[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.\n")
+		return
+	}
+
+	// Convert duration to float of Seconds
+	s := elapsed.Seconds()
+	output := fmt.Sprintf("%.2fs", s)
+	printCustomBiColourMsg("cyan", "green", "[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.\n")
+
 }
 
 func consent(tool string) rune {
 	// Ask for user consent
-	fmt.Printf(
-		"%s '%s' %s\n",
-		red("[-] Enumeraga needs"),
-		cyan(tool), 
-		red("to be installed"),
-	)
+	printCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be installed")
 
-	fmt.Printf(
-		"%s %s %s", 
-		yellow("Do you want to install"), 
-		cyan(tool), 
-		yellow("([Y] yes / [N] no / [A] yes to all): "),
-	)
+	printCustomBiColourMsg("yellow", "cyan", "Do you want to install '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
+
 	consent := bufio.NewScanner(os.Stdin)
 	consent.Scan()
 	userInput := strings.ToLower(consent.Text())
@@ -188,8 +209,6 @@ func consent(tool string) rune {
 }
 
 func installMissingTools() {
-	var updated bool
-
 	keyTools := []string{
 		"locate",
 		"nmap",
@@ -203,6 +222,10 @@ func installMissingTools() {
 		"cewl",
 		"fping",
 		"ident-user-enum",
+		"smbclient",
+		"odat",
+		"wafw00f",
+		"enum4linux-ng",
 	}
 
 	// Loop through listed tool see which ones are missing
@@ -212,7 +235,7 @@ func installMissingTools() {
 		if checkToolExists(tool) {
 			continue
 		}
-		
+
 		// If full consent was given, stop prompting the user
 		if fullConsent {
 			missingTools = append(missingTools, tool)
@@ -221,21 +244,29 @@ func installMissingTools() {
 
 		// Ask user
 		userConsent := consent(tool)
-		
+
 		if userConsent == 'a' {
 			fullConsent = true
 			missingTools = append(missingTools, tool)
 		}
-		
+
 		if userConsent == 'y' {
 			missingTools = append(missingTools, tool)
 			continue
 		}
-	}	
+	}
 
-	// Install all those that are missing	
+	// Install all those that are missing
+	compatibilityErr := isCompatibleDistro()
+	if compatibilityErr != nil {
+		os.Exit(3)
+	}
+
 	for _, tool := range missingTools {
-		if !updated { aptGetUpdateCmd(); updated = true }
+		if !updated {
+			aptGetUpdateCmd()
+			updated = true
+		}
 		aptGetInstallCmd(tool)
 	}
 }
@@ -333,15 +364,17 @@ func deleteLineFromFile(filePath, lineToDelete string) {
 		return
 	}
 
-	if *optDbg {fmt.Println("Debug - Line deleted successfully.")}
+	if *optDbg {
+		fmt.Println("Debug - Line deleted successfully.")
+	}
 }
 
 func printConsentNotGiven(tool string) {
 	fmt.Printf(
-		"%s\n%s %s %s\n", 
-		red("[-] Consent not given."), 
-		red("[-] Please install"), 
-		cyan(tool), 
+		"%s\n%s %s %s\n",
+		red("[-] Consent not given."),
+		red("[-] Please install"),
+		cyan(tool),
 		red("manually. Aborting..."),
 	)
 }
@@ -353,21 +386,21 @@ func getWordlists() {
 		log.Fatalf("Error locating 'raft-medium-directories-lowercase': %v\n", err)
 	}
 	dirListMedium = dirListMediumSlice[0]
-	
+
 	// Locate the "darkweb2017-top1000.txt" file
 	darkwebTop1000Slice, err := zglob.Glob("darkweb2017-top1000.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'darkweb2017-top1000.txt': %v\n", err)
 	}
 	darkwebTop1000 = darkwebTop1000Slice[0]
-	
+
 	// Locate the "web-extensions.txt" file
 	extensionsListSlice, err := zglob.Glob("web-extensions.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'web-extensions.txt': %v\n", err)
-	} 
+	}
 	extensionsList = extensionsListSlice[0]
-	
+
 	// Locate the "top-usernames-shortlist" file
 	usersListSlice, err := zglob.Glob("top-usernames-shortlist")
 	if err != nil {
@@ -384,40 +417,34 @@ func getWordlists() {
 	}
 }
 
-func printCustomTripleMsg(dominantColour, secondaryColour, start, middle, end string) {
-	switch dominantColour {
-	case "green":
-		if secondaryColour == "cyan" {
-			fmt.Printf("%s %s %s.\n", green(start), cyan(middle), green(end))
+// // Loop over the necessary colours, printing one at a time
+func printCustomBiColourMsg(dominantColour, secondaryColour string, text ...string) {
+	for i, str := range text {
+		if i%2 == 0 || i == 0 {
+			switch dominantColour {
+			case "green":
+				fmt.Printf("%s", green(str))
+			case "yellow":
+				fmt.Printf("%s", yellow(str))
+			case "red":
+				fmt.Printf("%s", red(str))
+			case "cyan":
+				fmt.Printf("%s", cyan(str))
+			}
+			continue
 		}
 
-		if secondaryColour == "yellow" {
-			fmt.Printf("%s %s %s.\n", green(start), yellow(middle), green(end))
-		}
-
-	case "yellow":
-		if secondaryColour == "cyan" {
-			fmt.Printf("%s %s %s.\n", yellow(start), cyan(middle), yellow(end))
-		}
-
-		if secondaryColour == "red" {
-			fmt.Printf("%s %s %s.\n", yellow(start), red(middle), yellow(end))
-		}
-		
-	case "red":
-		if secondaryColour == "cyan" {
-			fmt.Printf("%s %s %s.\n", red(start), cyan(middle), red(end))
-		}
-
-		if secondaryColour == "yellow" {
-			fmt.Printf("%s %s %s.\n", red(start), cyan(yellow), red(end))
-		}
-
-	case "cyan":
-		if secondaryColour == "yellow" {
-			fmt.Printf("%s %s %s.\n", cyan(start), yellow(middle), cyan(end))
+		switch secondaryColour {
+		case "green":
+			fmt.Printf("%s", green(str))
+		case "yellow":
+			fmt.Printf("%s", yellow(str))
+		case "red":
+			fmt.Printf("%s", red(str))
+		case "cyan":
+			fmt.Printf("%s", cyan(str))
 		}
 	}
 
-
+	fmt.Printf("\n")
 }

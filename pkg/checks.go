@@ -6,9 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
 	// "bufio"
 	// "sync"
 
+	zglob "github.com/mattn/go-zglob"
 	getopt "github.com/pborman/getopt/v2"
 )
 
@@ -18,7 +20,9 @@ func checks() int {
 	getopt.Parse()
 
 	// Check 0: banner!
-	if !*optQuiet { printBanner() }
+	if !*optQuiet {
+		printBanner()
+	}
 	printPhase(0)
 
 	if len(os.Args) == 1 {
@@ -35,38 +39,47 @@ func checks() int {
 		// fmt.Printf("Again: %t\n", *optAgain)
 		fmt.Printf("Brute: %t\n", *optBrute)
 		// fmt.Printf("DNS: %s\n", *optDNS)
-		fmt.Printf("Help: %t\n", *optHelp) 	
+		fmt.Printf("Help: %t\n", *optHelp)
 		fmt.Printf("Output: %s\n", *optOutput)
-		// fmt.Printf("Top ports: %s\n", *optTopPorts) 
-		fmt.Printf("Quiet: %t\n", *optQuiet)	
-		fmt.Printf("Range: %s\n", *optRange)	
+		// fmt.Printf("Top ports: %s\n", *optTopPorts)
+		fmt.Printf("Quiet: %t\n", *optQuiet)
+		fmt.Printf("Range: %s\n", *optRange)
 		fmt.Printf("Target: %s\n", *optTarget)
 	}
-	
+
 	// Check 2: Help flag passed?
 	if *optHelp {
-		if !*optQuiet { fmt.Println(cyan("[*] Help flag detected. Aborting other checks and printing usage.\n")) }
-        getopt.Usage()
-        os.Exit(0)
-    }
+		if !*optQuiet {
+			fmt.Println(cyan("[*] Help flag detected. Aborting other checks and printing usage.\n"))
+		}
+		getopt.Usage()
+		os.Exit(0)
+	}
 
 	// Check 3: am I groot?!
-	if os.Geteuid() != 0 { errorMsg("Please run me as root!"); os.Exit(99) }
+	if os.Geteuid() != 0 {
+		errorMsg("Please run me as root!")
+		os.Exit(99)
+	}
 
 	// Check 4: Ensure there is a target
 	if *optTarget == "" {
 		errorMsg("You must provide an IP address or targets file with the flag -t to start the attack.")
 		os.Exit(1)
 	}
-	
+
 	// Check 5: Ensure base output directory is correctly set and exists
 	customMkdir(*optOutput)
-	if !*optQuiet {printCustomTripleMsg("green", "yellow", "[+] Using", *optOutput, "as base directory to save the output files")}
+	if !*optQuiet {
+		printCustomBiColourMsg("green", "yellow", "[+] Using '", *optOutput, "' as base directory to save the ", "output ", "files")
+	}
 
-	// Check 6: Determine whether it is a single target or multi-target  
-	var totalLines int 
+	// Check 6: Determine whether it is a single target or multi-target
+	var totalLines int
 	targetInput := net.ParseIP(*optTarget)
-	if *optDbg {fmt.Printf("Debug: targetInput = %s\n", targetInput.To4())}
+	if *optDbg {
+		fmt.Printf("Debug: targetInput = %s\n", targetInput.To4())
+	}
 	if targetInput.To4() == nil {
 		// Multi-target
 		// Check file exists and get lines
@@ -76,9 +89,14 @@ func checks() int {
 	}
 
 	// Check 7: key tools exist in the system
+	if !*optQuiet {
+		fmt.Println(cyan("[*] Checking all tools are installed... "))
+	}
 	installMissingTools()
 
-	if *optDbg {fmt.Printf("%s\n", green("[*] Debug - All tools have been installed."))}
+	if *optDbg {
+		fmt.Printf("%s\n", green("[*] Debug - All tools have been installed."))
+	}
 
 	// End of checks
 	return totalLines
@@ -86,33 +104,74 @@ func checks() int {
 
 func checkToolExists(tool string) bool {
 	// Add more tool checks as required
-	_, err := exec.LookPath(tool)
-	if err == nil {
-		if *optDbg {fmt.Printf("'%s' is installed.\n", tool)}
+
+	// Check with exec.LookPath
+	_, lookPatherr := exec.LookPath(tool)
+	if lookPatherr == nil {
+		if *optDbg { fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed", )) }
 		return true
+	} else {
+		if *optDbg { fmt.Println("Debug - Error: ", lookPatherr.Error()) }
 	}
 
-	return false
+	// Check with zglob
+	_, zglobErr := zglob.Glob(tool)
+	if zglobErr == nil {
+		if *optDbg { fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed", )) }
+		return true
+	} else {
+		if *optDbg { fmt.Println("Error: ", zglobErr.Error()) }
+	}
+
+	// Last resource, check with locate
+	if !updatedbRan {
+		updatedbRan = true
+		fmt.Printf("%s %s%s ", yellow("[!] Running"), cyan("updatedb"), yellow("..."))
+		updatedb := exec.Command("updatedb")
+		updatedbErr := updatedb.Start()
+		if updatedbErr != nil {
+			if *optDbg { fmt.Println("Debug - Updatedb error: ", updatedbErr) }
+			os.Exit(42)
+		}
+
+		err := updatedb.Wait()
+		if err != nil {
+			if *optDbg { fmt.Printf("Debug - Command finished with error: %v", err) }
+			os.Exit(44)
+		}
+
+		fmt.Println(green("Done!"))
+	}
+
+	// Run locate
+	locate := exec.Command("locate", tool)	
+	locateOutput, _ := locate.Output()
+
+	if string(locateOutput) == "" {
+		if *optDbg { fmt.Println("Debug - Error: locate could not find tool on the system") }
+		return false
+	}
+
+	if *optDbg { fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed", )) }
+
+	fmt.Println(green("Done!"))
+	return true
 }
 
-func isCompatibleDistro() bool {
+func isCompatibleDistro() error {
 	// Check if OS is debian-like
 	cat := exec.Command("cat", "/etc/os-release")
 	output, err := cat.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error reading /etc/os-release: %v\n", err)
-		os.Exit(1)
+		os.Exit(5)
 	}
 
 	compatibleDistro := strings.Contains(strings.ToLower(string(output)), "debian")
 	if !compatibleDistro {
-		fmt.Printf(
-			"%s\n%s",
-			red("[-] This system is not running a Debian-like distribution."),
-			red("Please install the tools manually"),  
-		)
-		return false
+		errorMsg("This system is not running a Debian-like distribution. Please install the tools manually.")
+		return fmt.Errorf("not compatible distro")
 	}
 
-	return true
+	return nil
 }

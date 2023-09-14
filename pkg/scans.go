@@ -13,7 +13,7 @@ func portSweep(target string) []nmap.Host {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Equivalent to `/usr/local/bin/nmap -p 80,443,843 google.com facebook.com youtube.com`,
+	// Equivalent to `/usr/local/bin/nmap -p1-65535 --min-rate=2000 --privileged <target>`,
 	// with a 5-minute timeout.
 	scanner, err := nmap.NewScanner(
 		ctx,
@@ -34,21 +34,6 @@ func portSweep(target string) []nmap.Host {
 		log.Fatalf("unable to run nmap scan: %v", err)
 	}
 
-	// Use the results to print an example output
-	// for _, host := range result.Hosts {
-	// 	if len(host.Ports) == 0 || len(host.Addresses) == 0 {
-	// 		continue
-	// 	}
-
-	// 	// fmt.Printf("Host %q:\n", host.Addresses[0])
-
-	// 	for _, port := range host.Ports {
-	// 		fmt.Printf("\tPort %d/%s %s %s\n", port.ID, port.Protocol, port.State, port.Service.Name)
-	// 	}
-	// }
-
-	fmt.Printf("Nmap done: %d hosts up scanned in %.2f seconds\n", len(result.Hosts), result.Stats.Finished.Elapsed)
-
 	return result.Hosts
 }
 
@@ -58,10 +43,10 @@ func individualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	
+
 	scanner, err := nmap.NewScanner(
 		ctx,
 		nmap.WithTargets(target),
@@ -95,10 +80,10 @@ func individualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 func individualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string) {
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	
+
 	scanner, err := nmap.NewScanner(
 		ctx,
 		nmap.WithTargets(target),
@@ -146,10 +131,10 @@ func individualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 func individualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string) {
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	
+
 	scanner, err := nmap.NewScanner(
 		ctx,
 		nmap.WithTargets(target),
@@ -197,10 +182,10 @@ func individualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 func individualPortScanner(target, port, outFile string) {
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	
+
 	scanner, err := nmap.NewScanner(
 		ctx,
 		nmap.WithTargets(target),
@@ -245,14 +230,14 @@ func individualPortScanner(target, port, outFile string) {
 
 // Run main aggressive scan for the target
 func fullAggressiveScan(target, ports, outFile string) {
-    fmt.Printf("%s %s %s%s%s\n", yellow("[!] Starting"), cyan("main aggressive vuln nmap scan"), yellow("against '"), cyan(target), yellow("' and sending it to the background"))
+	printCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive vuln nmap scan ", "against '", target, "' and sending it to the background")
 
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	
+
 	scanner, err := nmap.NewScanner(
 		ctx,
 		nmap.WithTargets(target),
@@ -260,8 +245,8 @@ func fullAggressiveScan(target, ports, outFile string) {
 		nmap.WithPrivileged(),
 		nmap.WithDisabledDNSResolution(),
 		nmap.WithNmapOutput(oN),
-		nmap.WithOSDetection(), 
-		nmap.WithServiceInfo(), 
+		nmap.WithOSDetection(),
+		nmap.WithServiceInfo(),
 		nmap.WithDefaultScript(),
 		nmap.WithGrepOutput(oG),
 		nmap.WithSkipHostDiscovery(),
@@ -280,6 +265,6 @@ func fullAggressiveScan(target, ports, outFile string) {
 		log.Fatalf("unable to run nmap scan: %v", err)
 	}
 
-	printCustomTripleMsg("green", "cyan", "[+] Done! Main aggresive vuln nmap against target", target, "finished successfully")
+	printCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggresive vuln nmap", " against target '", target, "' finished successfully")
 
 }
