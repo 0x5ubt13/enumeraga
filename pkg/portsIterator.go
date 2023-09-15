@@ -81,7 +81,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			msfPath := fmt.Sprintf("%smsfconsole.out", caseDir)
 			callRunTool(msfArgs, msfPath)
 
-		case "80", "443", "8080": //TODO:
+		case "80", "443", "8080":
 			if visitedHTTP {
 				continue
 			}
@@ -169,11 +169,11 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 			// Port 8080
 
-			// WordPress
+			// WordPress on port 8080
 			wpEnumeration(fmt.Sprintf("https://%s:8080", target), caseDir, "8080")
 
 			// Tomcat
-			// tomcat_enumeration "${1}"
+			tomcatEnumeration(fmt.Sprintf(target, fmt.Sprintf("https://%s:8080/docs", target), caseDir, "8080"))
 
 		case "88":
 			caseDir = protocolDetected("Kerberos", baseDir)
@@ -274,8 +274,6 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			enum4linuxNgArgs := []string{"enum4linux-ng", "-A", "-C", target}
 			enum4linuxNgPath := fmt.Sprintf("%snblookup.out", caseDir)
 			callRunTool(enum4linuxNgArgs, enum4linuxNgPath)
-
-			// TODO: Remember to add enum4linux-ng to installs and here
 
 		case "161", "162", "10161", "10162": // UDP
 			// TODO: (outstanding from AutoEnum)

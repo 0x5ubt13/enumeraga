@@ -207,38 +207,16 @@ func aptGetInstallCmd(tool string) {
 	fmt.Printf("%s\n", green("Done!"))
 }
 
-func hydraBruteforcing(target, dir, protocol string) {
-	// TODO: save output to file
-	if *optBrute {
-		fmt.Printf("Running Hydra for %s\n", protocol)
-		hydra := exec.Command(
-			"hydra",
-			"-L", usersList,
-			"-P", darkwebTop1000,
-			fmt.Sprintf("%s://%s", protocol, target),
-			"-f",
-		)
-		// hydra.Stdout = os.Stdout
-		// hydra.Stderr = os.Stderr
-
-		if err := hydra.Run(); err != nil {
-			log.Fatalf("Error running Hydra for %s: %v\n", protocol, err)
-		}
-
-		fmt.Printf("Finished Hydra for %s\n", protocol)
-	}
-}
-
 // Enumeration for WordPress
 func wpEnumeration(targetUrl, caseDir, port string) {
-	// Run curl
+	// Identify WordPress: Run curl
 	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
 	curlOutput, _ := curl.Output()
 
 	// grep 'wp-content'
 	if !strings.Contains(string(curlOutput), "wp-content") {
 		if *optDbg {
-			fmt.Println(debug("Debug Error: locate could not find tool on the system"))
+			fmt.Println(debug("Debug Error: wordpress not detected"))
 		}
 		return
 	}
@@ -247,6 +225,39 @@ func wpEnumeration(targetUrl, caseDir, port string) {
 	wpScanArgs := []string{"wpscan", "--url", targetUrl, "-e", "p,u"}
 	wpScanPath := fmt.Sprintf("%swpscan_%s.out", caseDir, port)
 	runTool(wpScanArgs, wpScanPath)
+}
+
+func tomcatEnumeration(target, targetUrl, caseDir, port string) {
+	// Identify Tomat: Run curl
+	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
+	curlOutput, _ := curl.Output()
+
+	// grep 'wp-content'
+	if !strings.Contains(strings.ToLower(string(curlOutput)), "tomcat") {
+		if *optDbg {
+			fmt.Println(debug("Debug Error: tomcat not detected"))
+		}
+		return
+	}
+
+	printCustomBiColourMsg("yellow", "cyan", "[!]", "Tomcat detected. Running", "WPScan", "...")
+	
+	// Run Gobuster
+	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "u", fmt.Sprintf("%s:8080", target), "-w", dirListMedium}
+	gobusterPath := fmt.Sprintf("%stomcat_gobuster.out", caseDir, port)
+	callRunTool(gobusterArgs, gobusterPath)
+
+	// Run hydra
+	if !*optBrute { return }
+	hydraArgs := []string{
+		"hydra",
+		"-L", usersList, 
+		"-P", darkwebTop1000, 
+		"-f", target, 
+		"http-get", "/manager/html",
+	}
+	hydraPath := fmt.Sprintf("%stomcat_hydra.out", caseDir)
+	callRunTool(hydraArgs, hydraPath)
 }
 
 func runCewlandFfufKeywords(target, caseDir, port string) {
@@ -380,11 +391,53 @@ func runRangeTools(targetRange string) {
 	callRunTool(fpingArgs, fpingPath)
 
 	// Metasploit scan module for EternalBlue
-	msfEternalBlueArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use use scanner/smb/smb_ms17_010;set rhosts %s;set threads 10;run;exit", targetRange)}
-	msfEternalBluePath := fmt.Sprintf("%seternalblue_sweep", cidrDir)
-	callRunTool(msfEternalBlueArgs, msfEternalBluePath)
+	msfEternalBlueArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use scanner/smb/smb_ms17_010;set rhosts %s;set threads 10;run;exit", targetRange)}
+	msfEternalBluePath := fmt.Sprintf("%seternalblue_sweep.txt", cidrDir)
+	eternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, targetRange)
+}
 
-	// TODO: implement function post_eternalblue_sweep_check()
+// Wee fun module to detect quite low hanging fruit
+func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
+	// Run msf recon first
+	runTool(msfEternalBlueArgs, msfEternalBluePath)
+
+	var confirmedVuln = false
+
+	// Check how many of them are likely
+	file, err := os.Open(msfEternalBluePath)
+	if err != nil {
+	    log.Fatal(err)
+	}
+	defer file.Close()
+
+	confirmedFile := fmt.Sprintf("%seternalblue_confirmed.txt")
+	confirmed, err := os.Create(confirmedFile)
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
+    defer confirmed.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+	    line := scanner.Text()
+		// Grep -i likely
+		if strings.Contains(strings.ToLower(line), "likely") {
+			confirmedVuln = true
+			confirmed.WriteString(line + "\n")
+		}
+	}
+	
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+	
+	if !confirmedVuln {
+		printCustomBiColourMsg("red", "cyan", "[-] No matches", "<- Metasploit module for EternalBlue")
+		return
+	}
+	
+	printCustomBiColourMsg("green", "cyan", "[+] Positive Match! IPs vulnerable to ", "EternalBlue", " !\n\tShortcut: '", fmt.Sprintf("less -R %s", confirmedFile), "'")
 }
 
 // Goroutine for runCewlandFfufKeywords()
