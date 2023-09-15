@@ -7,9 +7,6 @@ import (
 	"os/exec"
 	"strings"
 
-	// "bufio"
-	// "sync"
-
 	zglob "github.com/mattn/go-zglob"
 	getopt "github.com/pborman/getopt/v2"
 )
@@ -35,16 +32,16 @@ func checks() int {
 	// Get the remaining positional parameters
 	// args := getopt.Args()
 	if *optDbg {
-		fmt.Println("--- Debug ---")
+		fmt.Println(debug("--- Debug ---"))
 		// fmt.Printf("Again: %t\n", *optAgain)
-		fmt.Printf("Brute: %t\n", *optBrute)
+		fmt.Printf("%s%t\n", debug("Brute: "), *optBrute)
 		// fmt.Printf("DNS: %s\n", *optDNS)
-		fmt.Printf("Help: %t\n", *optHelp)
-		fmt.Printf("Output: %s\n", *optOutput)
+		fmt.Printf("%s%t\n", debug("Help: "), *optHelp)
+		fmt.Printf("%s%s\n", debug("Output: "), *optOutput)
 		// fmt.Printf("Top ports: %s\n", *optTopPorts)
-		fmt.Printf("Quiet: %t\n", *optQuiet)
-		fmt.Printf("Range: %s\n", *optRange)
-		fmt.Printf("Target: %s\n", *optTarget)
+		fmt.Printf("%s%t\n", debug("Quiet: "), *optQuiet)
+		fmt.Printf("%s%s\n", debug("Range:"), *optRange)
+		fmt.Printf("%s%s\n", debug("Target: "), *optTarget)
 	}
 
 	// Check 2: Help flag passed?
@@ -78,7 +75,7 @@ func checks() int {
 	var totalLines int
 	targetInput := net.ParseIP(*optTarget)
 	if *optDbg {
-		fmt.Printf("Debug: targetInput = %s\n", targetInput.To4())
+		fmt.Printf("%s%s\n", debug("Debug: targetInput = "), targetInput.To4())
 	}
 	if targetInput.To4() == nil {
 		// Multi-target
@@ -108,19 +105,27 @@ func checkToolExists(tool string) bool {
 	// Check with exec.LookPath
 	_, lookPatherr := exec.LookPath(tool)
 	if lookPatherr == nil {
-		if *optDbg { fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed", )) }
+		if *optDbg {
+			fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed"))
+		}
 		return true
 	} else {
-		if *optDbg { fmt.Println("Debug - Error: ", lookPatherr.Error()) }
+		if *optDbg {
+			fmt.Println(debug("Debug - Error: ", lookPatherr.Error()))
+		}
 	}
 
 	// Check with zglob
 	_, zglobErr := zglob.Glob(tool)
 	if zglobErr == nil {
-		if *optDbg { fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed", )) }
+		if *optDbg {
+			fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed"))
+		}
 		return true
 	} else {
-		if *optDbg { fmt.Println("Error: ", zglobErr.Error()) }
+		if *optDbg {
+			fmt.Println("Error: ", zglobErr.Error())
+		}
 	}
 
 	// Last resource, check with locate
@@ -130,13 +135,17 @@ func checkToolExists(tool string) bool {
 		updatedb := exec.Command("updatedb")
 		updatedbErr := updatedb.Start()
 		if updatedbErr != nil {
-			if *optDbg { fmt.Println("Debug - Updatedb error: ", updatedbErr) }
+			if *optDbg {
+				fmt.Println(debug("Debug - Updatedb error: ", updatedbErr))
+			}
 			os.Exit(42)
 		}
 
 		err := updatedb.Wait()
 		if err != nil {
-			if *optDbg { fmt.Printf("Debug - Command finished with error: %v", err) }
+			if *optDbg {
+				fmt.Printf("%s%v\n", debug("Debug - Command finished with error: "), err)
+			}
 			os.Exit(44)
 		}
 
@@ -144,15 +153,19 @@ func checkToolExists(tool string) bool {
 	}
 
 	// Run locate
-	locate := exec.Command("locate", tool)	
+	locate := exec.Command("locate", tool)
 	locateOutput, _ := locate.Output()
 
 	if string(locateOutput) == "" {
-		if *optDbg { fmt.Println("Debug - Error: locate could not find tool on the system") }
+		if *optDbg {
+			fmt.Println(debug("Debug - Error: locate could not find tool on the system"))
+		}
 		return false
 	}
 
-	if *optDbg { fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed", )) }
+	if *optDbg {
+		fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed"))
+	}
 
 	fmt.Println(green("Done!"))
 	return true

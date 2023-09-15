@@ -1,78 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
-	"bufio"
-
-	// "strings"
-	"log"
 
 	zglob "github.com/mattn/go-zglob"
 )
-
-func wgetCmd(outputFile string, url string) {
-	wget := exec.Command("wget", "--no-check-certificate", "-O", outputFile, url)
-
-	if *optDbg {
-		// Redirect the command's output to the standard output in terminal
-		wget.Stdout = os.Stdout
-		wget.Stderr = os.Stderr
-	}
-
-	// Run the command
-	wgetErr := wget.Run()
-	if wgetErr != nil {
-		if *optDbg {
-			fmt.Printf("Debug - Error running wget: %v\n", wgetErr)
-			fmt.Printf("Debug - Trying curl")
-		}
-		curlCmd(outputFile, url)
-		return
-	}
-}
-
-func curlCmd(outputFile string, url string) {
-	curl := exec.Command("curl", "-o", outputFile, url, "-L")
-
-	if *optDbg {
-		// Redirect the command's output to the standard output in terminal
-		curl.Stdout = os.Stdout
-		curl.Stderr = os.Stderr
-	}
-
-	// Run the command
-	curlErr := curl.Run()
-	if curlErr != nil {
-		if *optDbg {
-			fmt.Printf("Debug - Error running curl: %v\n", curlErr)
-		}
-
-		return
-	}
-}
-
-func dpkgCmd(debPkgPath string) {
-	dpkg := exec.Command("sudo", "dpkg", "-i", debPkgPath)
-
-	if *optDbg {
-		// Redirect the command's output to the standard output in terminal
-		dpkg.Stdout = os.Stdout
-		dpkg.Stderr = os.Stderr
-	}
-
-	// Run the command
-	dpkgErr := dpkg.Run()
-	if dpkgErr != nil {
-		if *optDbg {
-			fmt.Printf("Debug - Error running wget: %v\n", dpkgErr)
-		}
-		return
-	}
-}
 
 func aptGetUpdateCmd() {
 	// Run the apt-get update command
@@ -102,7 +40,7 @@ func aptGetUpdateCmd() {
 
 func installEnum4linuxNg() error {
 	// Ask for consent first of all
-	printCustomBiColourMsg("yellow", "cyan", "Do you want for ", "Enumeraga ", "to try and handle the installation of '", "enum4linux-ng", "'? \nBear in mind that this will call '", "pip", "' as root (", "[Y] ", "'yes, do it for me' / ", "[N] ", "'no, I want to install it myself': ")
+	printCustomBiColourMsg("yellow", "cyan", "Do you want for ", "Enumeraga ", "to try and handle the installation of '", "enum4linux-ng", "'? \nIt might be the case you have it in your machine but not in your $PATH.\nBear in mind that this will call '", "pip", "' as root (", "[Y] ", "'yes, install it for me' / ", "[N] ", "'no, I want to install it myself': ")
 	consentv2 := bufio.NewScanner(os.Stdin)
 	consentv2.Scan()
 	userInputv2 := strings.ToLower(consentv2.Text())
@@ -125,7 +63,7 @@ func installEnum4linuxNg() error {
 
 	// Run git clone "https://github.com/cddmp/enum4linux-ng"
 	printCustomBiColourMsg("yellow", "cyan", "[!] Installing '", "enum4linux-ng", "' ...")
-	
+
 	// Git clone
 	gitClone := exec.Command("git", "clone", "https://github.com/cddmp/enum4linux-ng", "/usr/share/enum4linux-ng")
 
@@ -264,27 +202,6 @@ func aptGetInstallCmd(tool string) {
 
 		printCustomBiColourMsg("red", "cyan", "[-] Error. Please install the following package manually: '", tool, "'\n[-] Aborting...")
 		os.Exit(2)
-
-		// Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
-		// deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
-		// fmt.Printf(
-		// 	"%s\n%s %s %s %s",
-		// 	red("[-] It looks like apt-get is unable to locate some of the tools with your current sources."),
-		// 	yellow("[!] Do you want to try"),
-		// 	cyan("Kali's packaging repository source"),
-		// 	yellow("(cleanup will be performed afterwards)?"),
-		// 	yellow("[Y] yes / [N] no): "),
-		// )
-		// consent := bufio.NewScanner(os.Stdin)
-		// consent.Scan()
-		// userInput := strings.ToLower(consent.Text())
-		// if userInput != "y" && userInput != "yes" {
-		// 	printConsentNotGiven("Kali's packaging repository source")
-		// 	// Making sure we clean up if we are recursing this function
-		// 	deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
-		// 	os.Exit(2)
-		// }
-		// installWithKaliSourceRepo(tools)
 	}
 
 	fmt.Printf("%s\n", green("Done!"))
@@ -312,49 +229,63 @@ func hydraBruteforcing(target, dir, protocol string) {
 	}
 }
 
-func rmCmd(filePath string) {
-	rm := exec.Command("rm", "-f", filePath)
+// Enumeration for WordPress
+func wpEnumeration(targetUrl, caseDir, port string) {
+	// Run curl
+	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
+	curlOutput, _ := curl.Output()
 
-	if *optDbg {
-		// Redirect the command's output to the standard output in terminal
-		rm.Stdout = os.Stdout
-		rm.Stderr = os.Stderr
-	}
-
-	// Run the command
-	rmErr := rm.Run()
-	if rmErr != nil {
+	// grep 'wp-content'
+	if !strings.Contains(string(curlOutput), "wp-content") {
 		if *optDbg {
-			fmt.Printf("Debug - Error running apt-get update: %v\n", rmErr)
+			fmt.Println(debug("Debug Error: locate could not find tool on the system"))
 		}
 		return
 	}
+
+	printCustomBiColourMsg("yellow", "cyan", "[!]", "WordPress detected. Running", "WPScan", "...")
+	wpScanArgs := []string{"wpscan", "--url", targetUrl, "-e", "p,u"}
+	wpScanPath := fmt.Sprintf("%swpscan_%s.out", caseDir, port)
+	runTool(wpScanArgs, wpScanPath)
 }
 
-func runCewlandffuf(target, caseDir, port string) {
-	keywordsList := fmt.Sprintf("%scewl_keywordslist_80.out", caseDir)
-	targetURL := fmt.Sprintf("http://%s:80", target)
-
+func runCewlandFfufKeywords(target, caseDir, port string) {
 	if port == "80" {
+		keywordsList := fmt.Sprintf("%scewl_keywordslist_80.out", caseDir)
+		targetURL := fmt.Sprintf("http://%s:80", target)
 		cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
 		cewlPath := fmt.Sprintf("%scewl_80.out", caseDir)
 		runTool(cewlArgs, cewlPath)
 
 		ffufArgs := []string{
-			"ffuf", 
-			"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", dirListMedium, keywordsList, extensionsList), 
+			"ffuf",
+			"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", dirListMedium, keywordsList, extensionsList),
 			"-u", fmt.Sprintf("http://%s/FOLDERS/KEYWORDSEXTENSIONS", target),
-			"-v", 
+			"-v",
 			"-maxtime", "300",
 			"-maxtime-job", "300",
 		}
 		ffufPath := fmt.Sprintf("%sffuf_keywords_80.out", caseDir)
 		runTool(ffufArgs, ffufPath)
+		return
 	}
 
-	if port == "443" {
+	keywordsList := fmt.Sprintf("%scewl_keywordslist_433.out", caseDir)
+	targetURL := fmt.Sprintf("http://%s:443", target)
+	cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
+	cewlPath := fmt.Sprintf("%scewl_443.out", caseDir)
+	runTool(cewlArgs, cewlPath)
 
+	ffufArgs := []string{
+		"ffuf",
+		"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", dirListMedium, keywordsList, extensionsList),
+		"-u", fmt.Sprintf("http://%s/FOLDERS/KEYWORDSEXTENSIONS", target),
+		"-v",
+		"-maxtime", "300",
+		"-maxtime-job", "300",
 	}
+	ffufPath := fmt.Sprintf("%sffuf_keywords_443.out", caseDir)
+	runTool(ffufArgs, ffufPath)
 }
 
 // Announce tool and run it
@@ -364,7 +295,7 @@ func runTool(args []string, filePath string) {
 	printCustomBiColourMsg("yellow", "cyan", "[!] Running", tool, "and sending it to the background")
 
 	if *optDbg {
-		fmt.Printf(cyan("Debug - command to exec: %s", command))
+		fmt.Printf("%s%s\n", debug("Debug - command to exec: "), command)
 	}
 
 	cmd := exec.Command(command)
@@ -454,6 +385,17 @@ func runRangeTools(targetRange string) {
 	callRunTool(msfEternalBlueArgs, msfEternalBluePath)
 
 	// TODO: implement function post_eternalblue_sweep_check()
+}
+
+// Goroutine for runCewlandFfufKeywords()
+func callRunCewlandFfufKeywords(target, caseDir, port string) {
+	wg.Add(1)
+
+	go func(target, caseDir, port string) {
+		defer wg.Done()
+
+		runCewlandFfufKeywords(target, caseDir, port)
+	}(target, caseDir, port)
 }
 
 // Goroutine for runTool()

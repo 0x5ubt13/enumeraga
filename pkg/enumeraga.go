@@ -17,14 +17,14 @@ func main() {
 
 	// DEV: Helpful strings for debugging purposes to check how goroutines work
 	if *optDbg {
-		fmt.Println("Debug - Start of main function")
-		defer fmt.Println("Debug - End of main function")
+		fmt.Println(debug("Debug Start of main function"))
+		defer fmt.Println(debug("Debug End of main function"))
 	}
 
 	// Perform pre-flight checks and get number of lines.
 	totalLines := checks()
 	if *optDbg {
-		fmt.Printf("Debug - lines: %v\n", totalLines)
+		fmt.Printf("%s%v\n", debug("Debug - lines: "), totalLines)
 	}
 
 	// Cidr handling
@@ -88,10 +88,10 @@ func targetInit(totalLines int) error {
 // Run all phases of scanning using a single target
 func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 	if *optDbg {
-		fmt.Println("Debug - Start of singleTarget function")
-		defer fmt.Println("Debug - End of singleTarget function")
-		fmt.Printf("Debug - Single target: %s\n", target)
-		fmt.Printf("Debug - Base file path: %s\n", baseFilePath)
+		fmt.Println(debug("Debug Start of singleTarget function"))
+		defer fmt.Println(debug("Debug End of singleTarget function"))
+		fmt.Printf("%s%s\n", debug("Debug - Single target: "), target)
+		fmt.Printf("%s%s\n", debug("Debug - Base file path: "), baseFilePath)
 	}
 
 	targetPath := fmt.Sprintf("%s/%s/", baseFilePath, target)
@@ -119,7 +119,7 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 			// Error below: string(port.State) not working for some reason, therefore using Sprintf
 			if fmt.Sprintf("%s", port.State) == "open" {
 				if *optDbg && *optVVervose {
-					fmt.Println("Debug - Open port:", port.ID)
+					fmt.Println(debug("Debug Open port:", port.ID))
 				}
 				text := strconv.FormatUint(uint64(port.ID), 10)
 				openPortsSlice = append(openPortsSlice, text)
@@ -154,8 +154,8 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 // Wrapper of single target for multi-target
 func multiTarget(targetsFile *string) {
 	if *optDbg {
-		fmt.Println("Debug - Start of multiTarget function")
-		defer fmt.Println("Debug - End of multiTarget function")
+		fmt.Println(debug("Debug Start of multiTarget function"))
+		defer fmt.Println(debug("Debug End of multiTarget function"))
 	}
 
 	if !*optQuiet {

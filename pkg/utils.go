@@ -5,11 +5,7 @@ import (
 	"fmt"
 	"log"
 	"time"
-
-	// "net"
 	"os"
-	// "os/exec"
-	"regexp"
 	"strings"
 
 	"github.com/fatih/color"
@@ -21,8 +17,9 @@ var (
 	// Declare colour vars
 	yellow = color.New(color.FgYellow).SprintFunc()
 	red    = color.New(color.FgRed).SprintFunc()
-	green  = color.New(color.FgGreen).SprintFunc()
+	green  = color.New(color.FgHiGreen).SprintFunc()
 	cyan   = color.New(color.FgCyan).SprintFunc()
+	debug  = color.New(color.FgMagenta).SprintFunc()
 
 	// Declare flags and have getopt return pointers to the values.
 	// DEV: initialising vars only once they have been implemented/ported in the code
@@ -39,16 +36,12 @@ var (
 	optTarget   = getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
 	optVVervose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 
-	// Define a global regular expression pattern
-	alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
-
 	// Declare wordlists global vars
 	dirListMedium, darkwebTop1000, extensionsList, usersList string
 
 	// Declare globals updated and updatedb, as these may consume a lot of time and aren't needed more than once
 	updated bool
 	updatedbRan bool
-
 )
 
 func printBanner() {
@@ -58,11 +51,6 @@ func printBanner() {
 	fmt.Printf("%s%s%s\n", yellow(" _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ "), cyan("/ /_/ / "), yellow("_  ___ |"))
 	fmt.Printf("%s%s%s\n", yellow(" /_____/  /_/ /_/\\__,_/ /_/ /_/ /_/\\___//_/    /_/  |_"), cyan("\\____/  "), yellow("/_/  |_|"))
 	fmt.Printf("%s\n\n", green("                            by 0x5ubt13"))
-}
-
-// Use isAlphanumeric for regexp
-func isAlphanumeric(s string) bool {
-	return alphanumericRegex.MatchString(s)
 }
 
 // Custom error message printed out to terminal
@@ -271,102 +259,8 @@ func installMissingTools() {
 	}
 }
 
-// Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
-// func installWithKaliSourceRepo(tools []string) {
-// 	// Path to the sources.list file (typically located at /etc/apt/sources.list)
-// 	sourcesListPath := "/etc/apt/sources.list"
-// 	lineToAdd := "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware"
-// 	debPkgName := "/tmp/kali-archive-keyring_2022.1_all.deb"
-// 	keyRingUrl := "https://http.kali.org/kali/pool/main/k/kali-archive-keyring/kali-archive-keyring_2022.1_all.deb"
-
-// 	// Open the sources.list file for appending (to add the line)
-// 	file, err := os.OpenFile(sourcesListPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
-// 	if err != nil {
-// 		fmt.Printf("Error opening sources.list file for appending: %v\n", err)
-// 		os.Exit(1)
-// 		return
-// 	}
-// 	defer file.Close()
-
-// 	// Write the line to add
-// 	_, err = file.WriteString(lineToAdd + "\n")
-// 	if err != nil {
-// 		fmt.Printf("Error adding line to sources.list: %v\n", err)
-// 		return
-// 	}
-
-// 	// Download Debian package for Kali archive keys
-// 	wgetCmd(debPkgName, keyRingUrl)
-
-// 	// Install Debian package for Kali archive keys
-// 	dpkgCmd(debPkgName)
-
-// 	// Perform apt-get update
-// 	aptGetUpdateCmd()
-
-// 	// Now re-try the install function
-// 	installMissingTools(tools)
-
-// 	// Clean everything up
-// 	rmCmd("/tmp/kali-archive-keyring_2022.1_all.deb")
-// 	deleteLineFromFile(sourcesListPath, lineToAdd)
-
-// 	if *optDbg {fmt.Println("Debug - source line added successfully.")}
-// }
-
 func printInstallingTool(tool string) {
 	fmt.Printf("%s %s%s ", yellow("[!] Installing"), cyan(tool), yellow("..."))
-}
-
-func deleteLineFromFile(filePath, lineToDelete string) {
-	// Open the file for reading
-	file, err := os.Open(filePath)
-	if err != nil {
-		fmt.Printf("Error opening file for reading: %v\n", err)
-		return
-	}
-	defer file.Close()
-
-	// Create a scanner to read the file line by line
-	scanner := bufio.NewScanner(file)
-
-	// Create a slice to store the lines
-	var lines []string
-
-	// Iterate through the lines
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		// Check if the line matches the line to delete
-		if line != lineToDelete {
-			lines = append(lines, line)
-		}
-	}
-
-	// Check for any scanner errors
-	if err := scanner.Err(); err != nil {
-		fmt.Printf("Error reading file: %v\n", err)
-		return
-	}
-
-	// Open the file for writing (truncate mode)
-	file, err = os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, os.ModeAppend)
-	if err != nil {
-		fmt.Printf("Error opening file for writing: %v\n", err)
-		return
-	}
-	defer file.Close()
-
-	// Write the updated lines back to the file
-	_, err = file.WriteString(strings.Join(lines, "\n") + "\n")
-	if err != nil {
-		fmt.Printf("Error writing updated content to file: %v\n", err)
-		return
-	}
-
-	if *optDbg {
-		fmt.Println("Debug - Line deleted successfully.")
-	}
 }
 
 func printConsentNotGiven(tool string) {

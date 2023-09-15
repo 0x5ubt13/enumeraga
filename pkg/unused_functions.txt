@@ -1,0 +1,227 @@
+Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
+func installWithKaliSourceRepo(tools []string) {
+	// Path to the sources.list file (typically located at /etc/apt/sources.list)
+	sourcesListPath := "/etc/apt/sources.list"
+	lineToAdd := "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware"
+	debPkgName := "/tmp/kali-archive-keyring_2022.1_all.deb"
+	keyRingUrl := "https://http.kali.org/kali/pool/main/k/kali-archive-keyring/kali-archive-keyring_2022.1_all.deb"
+
+  // Open the sources.list file for appending (to add the line)
+  file, err := os.OpenFile(sourcesListPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+  if err != nil {
+  	fmt.Printf("Error opening sources.list file for appending: %v\n", err)
+  	os.Exit(1)
+  	return
+  }
+  defer file.Close()
+  
+  // Write the line to add
+  _, err = file.WriteString(lineToAdd + "\n")
+  if err != nil {
+  	fmt.Printf("Error adding line to sources.list: %v\n", err)
+  	return
+  }
+  
+  // Download Debian package for Kali archive keys
+  wgetCmd(debPkgName, keyRingUrl)
+  
+  // Install Debian package for Kali archive keys
+  dpkgCmd(debPkgName)
+  
+  // Perform apt-get update
+  aptGetUpdateCmd()
+  
+  // Now re-try the install function
+  installMissingTools(tools)
+  
+  // Clean everything up
+  rmCmd("/tmp/kali-archive-keyring_2022.1_all.deb")
+  deleteLineFromFile(sourcesListPath, lineToAdd)
+  
+  if *optDbg {fmt.Println(cyan("Debug source line added successfully.")}
+}
+
+func deleteLineFromFile(filePath, lineToDelete string) {
+	// Open the file for reading
+	file, err := os.Open(filePath)
+	if err != nil {
+		fmt.Printf("Error opening file for reading: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	// Create a scanner to read the file line by line
+	scanner := bufio.NewScanner(file)
+
+	// Create a slice to store the lines
+	var lines []string
+
+	// Iterate through the lines
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Check if the line matches the line to delete
+		if line != lineToDelete {
+			lines = append(lines, line)
+		}
+	}
+
+	// Check for any scanner errors
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading file: %v\n", err)
+		return
+	}
+
+	// Open the file for writing (truncate mode)
+	file, err = os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, os.ModeAppend)
+	if err != nil {
+		fmt.Printf("Error opening file for writing: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	// Write the updated lines back to the file
+	_, err = file.WriteString(strings.Join(lines, "\n") + "\n")
+	if err != nil {
+		fmt.Printf("Error writing updated content to file: %v\n", err)
+		return
+	}
+
+	if *optDbg {
+		fmt.Println(cyan("Debug - Line deleted successfully."))
+	}
+}
+
+func aptGetInstallCmd(tool string) {
+	printInstallingTool(tool)
+
+	if tool == "finger" {
+		tool = "nfs-common"
+	}
+
+	aptGetInstall := exec.Command("apt", "install", "-y", tool)
+
+	aptGetInstallErr := aptGetInstall.Run()
+	if aptGetInstallErr != nil {
+		// if !strings.Contains(string(aptGetInstall.Stdout), "Unable to locate package") {
+		if *optDbg {
+			fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
+		}
+
+		// Notify of enum4linux-ng as it's not currently in the official kali repo
+		if tool == "enum4linux-ng" {
+			installErr := installEnum4linuxNg()
+			if installErr != nil {
+				errorMsg(installErr.Error())
+				printCustomBiColourMsg("red", "cyan", "[-] Error. ", "enum4linux-ng", " needs to be manually installed.\nPlease see: ", "https://github.com/cddmp/enum4linux-ng/blob/master/README.md#kali-linuxdebianubuntulinux-mint")
+				os.Exit(2)
+			}
+			return
+		}
+
+		printCustomBiColourMsg("red", "cyan", "[-] Error. Please install the following package manually: '", tool, "'\n[-] Aborting...")
+		os.Exit(2)
+	}
+
+    //  Commenting this all out as it's not working in my WSL-based debian. Leaving it here for the future perhaps?
+	// 	deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
+	// 	fmt.Printf(
+	// 		"%s\n%s %s %s %s",
+	// 		red("[-] It looks like apt-get is unable to locate some of the tools with your current sources."),
+	// 		yellow("[!] Do you want to try"),
+	// 		cyan("Kali's packaging repository source"),
+	// 		yellow("(cleanup will be performed afterwards)?"),
+	// 		yellow("[Y] yes / [N] no): "),
+	// 	)
+	// 	consent := bufio.NewScanner(os.Stdin)
+	// 	consent.Scan()
+	// 	userInput := strings.ToLower(consent.Text())
+	// 	if userInput != "y" && userInput != "yes" {
+	// 		printConsentNotGiven("Kali's packaging repository source")
+	// 		// Making sure we clean up if we are recursing this function
+	// 		deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
+	// 		os.Exit(2)
+	// 	}
+	// 	installWithKaliSourceRepo(tools)
+
+	fmt.Printf("%s\n", green("Done!"))
+}
+
+func wgetCmd(outputFile string, url string) {
+	wget := exec.Command("wget", "--no-check-certificate", "-O", outputFile, url)
+
+	if *optDbg {
+		// Redirect the command's output to the standard output in terminal
+		wget.Stdout = os.Stdout
+		wget.Stderr = os.Stderr
+	}
+
+	// Run the command
+	wgetErr := wget.Run()
+	if wgetErr != nil {
+		if *optDbg {
+			fmt.Printf("%s%v\n", cyan("Debug - Error running wget: "), wgetErr)
+			fmt.Println(cyan("Debug - Trying curl"))
+		}
+		curlCmd(outputFile, url)
+		return
+	}
+}
+
+func curlCmd(outputFile string, url string) {
+	curl := exec.Command("curl", "-o", outputFile, url, "-L")
+
+	if *optDbg {
+		// Redirect the command's output to the standard output in terminal
+		curl.Stdout = os.Stdout
+		curl.Stderr = os.Stderr
+	}
+
+	// Run the command
+	curlErr := curl.Run()
+	if curlErr != nil {
+		if *optDbg {
+			fmt.Printf("%s%v\n", cyan("Debug - Error running curl: "), curlErr)
+		}
+
+		return
+	}
+}
+
+func dpkgCmd(debPkgPath string) {
+	dpkg := exec.Command("sudo", "dpkg", "-i", debPkgPath)
+
+	if *optDbg {
+		// Redirect the command's output to the standard output in terminal
+		dpkg.Stdout = os.Stdout
+		dpkg.Stderr = os.Stderr
+	}
+
+	// Run the command
+	dpkgErr := dpkg.Run()
+	if dpkgErr != nil {
+		if *optDbg {
+			fmt.Printf("Debug - Error running wget: %v\n", dpkgErr)
+		}
+		return
+	}
+}
+
+func rmCmd(filePath string) {
+	rm := exec.Command("rm", "-f", filePath)
+
+	if *optDbg {
+		// Redirect the command's output to the standard output in terminal
+		rm.Stdout = os.Stdout
+		rm.Stderr = os.Stderr
+	}
+
+	// Run the command
+	rmErr := rm.Run()
+	if rmErr != nil {
+		if *optDbg {
+			fmt.Printf("Debug - Error running apt-get update: %v\n", rmErr)
+		}
+		return
+	}
+}

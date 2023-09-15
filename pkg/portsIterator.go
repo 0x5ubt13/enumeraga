@@ -3,27 +3,25 @@ package main
 import (
 	"fmt"
 	"strings"
-	// "os"
-	// "os/exec"
 )
 
 // Core functionality of the script
 // Iterate through each port and automate launching tools
 func portsIterator(target string, baseDir string, openPortsSlice []string) {
 	if *optDbg {
-		fmt.Println("Debug - Start of portsIterator function")
-		defer fmt.Println("Debug - End of portsIterator function")
+		fmt.Println(debug("Debug Start of portsIterator function"))
+		defer fmt.Println(debug("Debug End of portsIterator function"))
 	}
 
 	var (
 		msfArgs                                                                                                            []string
-		caseDir, filePath, message, nmapOutputFile, nmapNSEScripts, msfPath                                                   string
+		caseDir, filePath, message, nmapOutputFile, nmapNSEScripts                                                         string
 		visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP, visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
 	)
 
 	// DEV: Debugging purposes
 	if *optDbg {
-		fmt.Printf("%s %s\n", "Debug: baseDir: ", baseDir)
+		fmt.Printf("%s %s\n", debug("Debug: baseDir: "), baseDir)
 	}
 
 	// Bruteforce flag?
@@ -95,6 +93,9 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 			// Port 80:
 
+			// WordPress on port 80
+			wpEnumeration(fmt.Sprintf("https://%s:80", target), caseDir, "80")
+
 			// Nikto on port 80
 			nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", target)}
 			nikto80Path := fmt.Sprintf("%snikto_80.out", caseDir)
@@ -110,10 +111,69 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			whatWeb80Path := fmt.Sprintf("%swhatweb_80.out", caseDir)
 			callRunTool(whatWeb80Args, whatWeb80Path)
 
-			// Ffuf
 			if *optBrute {
-				runCewlandffuf(target, caseDir, "80")
+				// CeWL + Ffuf Keywords Bruteforcing
+				callRunCewlandFfufKeywords(target, caseDir, "80")
+				callRunCewlandFfufKeywords(target, caseDir, "443")
+
+				// Ffuf Dirbusting port 80
+				ffufDir80Args := []string{
+					"ffuf",
+					"-u", fmt.Sprintf("http://%s:80/FUZZ", target),
+					"-w", fmt.Sprintf("%s:FUZZ", dirListMedium),
+					"-v",
+					"-recursion", "-recursion-depth 1",
+					"-e", ".php,.asp,.aspx",
+					"-t 20",
+					"-maxtime", "300",
+					"-maxtime-job", "300",
+				}
+				ffufDir80Path := fmt.Sprintf("%sffuf_dir_80.out", caseDir)
+				callRunTool(ffufDir80Args, ffufDir80Path)
+
+				// Ffuf Dirbusting port 443
+				ffufDir443Args := []string{
+					"ffuf",
+					"-u", fmt.Sprintf("https://%s:443/FUZZ", target),
+					"-w", fmt.Sprintf("%s:FUZZ", dirListMedium),
+					"-v",
+					"-recursion", "-recursion-depth 1",
+					"-e", ".php,.asp,.aspx",
+					"-t 20",
+					"-maxtime", "300",
+					"-maxtime-job", "300",
+				}
+				ffufDir443Path := fmt.Sprintf("%sffuf_dir_443.out", caseDir)
+				callRunTool(ffufDir443Args, ffufDir443Path)
 			}
+
+			// Port 443:
+
+			// WordPress on port 443
+			wpEnumeration(fmt.Sprintf("https://%s:443", target), caseDir, "443")
+
+			// Nikto on port 443
+			nikto443Args := []string{"nikto", "-host", fmt.Sprintf("https://%s:443", target)}
+			nikto443Path := fmt.Sprintf("%snikto_443.out", caseDir)
+			callRunTool(nikto443Args, nikto443Path)
+
+			// Wafw00f on port 443
+			wafw00f443Args := []string{"wafw00f", "-v", fmt.Sprintf("http://%s:443", target)}
+			wafw00f443Path := fmt.Sprintf("%swafw00f_443.out", caseDir)
+			callRunTool(wafw00f443Args, wafw00f443Path)
+
+			// WhatWeb on port 443
+			whatWeb443Args := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("http://%s:443", target)}
+			whatWeb443Path := fmt.Sprintf("%swhatweb_443.out", caseDir)
+			callRunTool(whatWeb443Args, whatWeb443Path)
+
+			// Port 8080
+
+			// WordPress
+			wpEnumeration(fmt.Sprintf("https://%s:8080", target), caseDir, "8080")
+
+			// Tomcat
+			// tomcat_enumeration "${1}"
 
 		case "88":
 			caseDir = protocolDetected("Kerberos", baseDir)
@@ -301,8 +361,8 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 			// Metasploit
 			msfArgs = []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/ipmi/ipmi_dumphashes; set rhosts %s; set output_john_file %sipmi_hashes.john; run; exit", target, caseDir)}
-			msfPath = fmt.Sprintf("%snblookup.out", caseDir)
-			callRunTool(msfArgs, caseDir)
+			msfPath := fmt.Sprintf("%snblookup.out", caseDir)
+			callRunTool(msfArgs, msfPath)
 
 		case "873":
 			caseDir = protocolDetected("Rsync", baseDir)
