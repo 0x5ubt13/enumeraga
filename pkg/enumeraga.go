@@ -12,7 +12,7 @@ var wg sync.WaitGroup
 
 // Main logic of enumeraga
 func main() {
-	// Timing the execution time
+	// Timing the execution
 	start := time.Now()
 
 	// DEV: Helpful strings for debugging purposes to check how goroutines work
@@ -59,23 +59,13 @@ func cidrInit() error {
 	return fmt.Errorf("CIDR range target not passed to Enumeraga")
 }
 
-// Main flow
-// Check total number of lines.
-// If it's 0, init singleTarget
-// If it's not 0, init multiTarget
+// Start of main flow:
+// Check total number of lines to select targets accordingly
 func targetInit(totalLines int) error {
 	// If bruteforce flag was passed, initialise the wordlists
-	if *optBrute {
-		getWordlists()
-	}
+	if *optBrute { getWordlists() }
 
-	if totalLines != 0 {
-		multiTarget(optTarget)
-		// if err != nil {
-		// 	return err
-		// }
-		// return nil
-	}
+	if totalLines != 0 { multiTarget(optTarget) }
 
 	err := singleTarget(*optTarget, *optOutput, false)
 	if err != nil {
@@ -94,15 +84,18 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 		fmt.Printf("%s%s\n", debug("Debug - Base file path: "), baseFilePath)
 	}
 
-	targetPath := fmt.Sprintf("%s/%s/", baseFilePath, target)
 	// Make base dir for the target
+	targetPath := fmt.Sprintf("%s/%s/", baseFilePath, target)
 	customMkdir(targetPath)
 
 	// Perform ports sweep
-	if !multiTarget && !*optQuiet {
-		printPhase(2)
-	}
-	sweptHost := portSweep(target)
+	if !multiTarget && !*optQuiet { printPhase(2) }
+	if *optDbg { fmt.Println(debug("Debug - Starting TCP ports sweep")) }
+	sweptHostTcp := tcpPortSweep(target)
+
+	if *optDbg { fmt.Println(debug("Debug - Starting UDP ports sweep")) }
+	sweptHostUdp := udpPortSweep(target)
+
 
 	// Save open ports in dedicated slice
 	// Convert slice to nmap-friendly formatted numbers
@@ -110,7 +103,25 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 
 	// Create a string slice using strconv.FormatUint
 	// ... Append strings to it.
-	for _, host := range sweptHost {
+	for _, host := range sweptHostTcp {
+		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
+			continue
+		}
+
+		for _, port := range host.Ports {
+			// Error below: string(port.State) not working for some reason, therefore using Sprintf
+			if fmt.Sprintf("%s", port.State) == "open" {
+				if *optDbg && *optVVervose {
+					fmt.Println(debug("Debug Open port:", port.ID))
+				}
+				text := strconv.FormatUint(uint64(port.ID), 10)
+				openPortsSlice = append(openPortsSlice, text)
+			}
+		}
+	}
+
+	// Same than above but for the swept ports running on UDP
+	for _, host := range sweptHostUdp {
 		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
 			continue
 		}
@@ -141,11 +152,8 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 		return fmt.Errorf("no ports were found open")
 	}
 
-	if !multiTarget && !*optQuiet {
-		printPhase(3)
-	}
-
 	// Run ports iterator with the open ports found
+	if !multiTarget && !*optQuiet { printPhase(3) }
 	portsIterator(target, targetPath, openPortsSlice)
 
 	return nil
@@ -158,9 +166,7 @@ func multiTarget(targetsFile *string) {
 		defer fmt.Println(debug("Debug End of multiTarget function"))
 	}
 
-	if !*optQuiet {
-		fmt.Printf("%s%s\n", green("[+] Using multi-targets file: "), yellow(*targetsFile))
-	}
+	if !*optQuiet { printCustomBiColourMsg("green", "yellow", "[+] Using multi-targets file: '", *targetsFile, "'") }
 	fileNameWithExtension := strings.Split(*targetsFile, "/")
 	fileName := strings.Split(fileNameWithExtension[len(fileNameWithExtension)-1], ".")
 
@@ -175,10 +181,10 @@ func multiTarget(targetsFile *string) {
 	}
 	for i := 0; i < lines; i++ {
 		target := targets[i]
-		fmt.Printf("%s %v %s %v: %s\n", green("[+] Attacking target"), yellow(i+1), green("of"), yellow(lines), yellow(target))
+		printCustomBiColourMsg("green", "yellow", "[+] Attacking target", fmt.Sprint(i+1), "of", fmt.Sprint(lines), ":", target)
 		err := singleTarget(target, targetsBaseFilePath, true)
 		if err != nil {
-			printCustomBiColourMsg("red", "yellow", "[-] No open ports were found in host", target, ". Aborting the rest of scans for this host")
+			printCustomBiColourMsg("red", "yellow", "[-] No open ports were found in host '", target, "'. Aborting the rest of scans for this host")
 		}
 	}
 }

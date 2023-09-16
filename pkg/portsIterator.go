@@ -14,9 +14,11 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 	}
 
 	var (
-		msfArgs                                                                                                            []string
-		caseDir, filePath, message, nmapOutputFile, nmapNSEScripts                                                         string
-		visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP, visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
+		msfArgs, hydraArgs []string
+		caseDir, filePath, message, nmapOutputFile, 
+		nmapNSEScripts, hydraPath, msfPath string
+		visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP, 
+		visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
 	)
 
 	// DEV: Debugging purposes
@@ -37,28 +39,36 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 	for _, port := range openPortsSlice {
 		switch port {
 		case "20", "21":
-			if visitedFTP {
-				continue
-			}
+			if visitedFTP { continue }
 			visitedFTP = true
 
 			caseDir = protocolDetected("FTP", baseDir)
 			nmapOutputFile = caseDir + "ftp_scan"
 			nmapNSEScripts = "ftp-* and not brute"
 			callIndividualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
-			hydraBruteforcing(target, caseDir, "ftp")
+
+			// Hydra for FTP
+			if *optBrute {
+				hydraArgs = []string{"hydra","-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ftp", target)}
+				hydraPath = fmt.Sprintf("%shydra_ftp.out", caseDir)
+				callRunTool(hydraArgs, hydraPath)
+			}
 
 		case "22":
 			caseDir = protocolDetected("SSH", baseDir)
 			nmapOutputFile = caseDir + "ssh_scan"
 			nmapNSEScripts = "ssh-* and not brute"
 			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
-			hydraBruteforcing(target, caseDir, "ssh")
+
+			// Hydra for SSH
+			if *optBrute {
+				hydraArgs = []string{"hydra","-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ssh", target)}
+				hydraPath = fmt.Sprintf("%shydra_ssh.out", caseDir)
+				callRunTool(hydraArgs, hydraPath)
+			}
 
 		case "25", "465", "587":
-			if visitedSMTP {
-				continue
-			}
+			if visitedSMTP { continue }
 			visitedHTTP = true
 
 			caseDir = protocolDetected("SMTP", baseDir)
@@ -78,7 +88,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callIndividualPortScanner(target, port, nmapOutputFile)
 
 			msfArgs = []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", target)}
-			msfPath := fmt.Sprintf("%smsfconsole.out", caseDir)
+			msfPath = fmt.Sprintf("%smsfconsole.out", caseDir)
 			callRunTool(msfArgs, msfPath)
 
 		case "80", "443", "8080":
@@ -173,7 +183,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			wpEnumeration(fmt.Sprintf("https://%s:8080", target), caseDir, "8080")
 
 			// Tomcat
-			tomcatEnumeration(fmt.Sprintf(target, fmt.Sprintf("https://%s:8080/docs", target), caseDir, "8080"))
+			tomcatEnumeration(target, fmt.Sprintf("https://%s:8080/docs", target), caseDir, "8080")
 
 		case "88":
 			caseDir = protocolDetected("Kerberos", baseDir)
@@ -209,7 +219,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			ncPath := fmt.Sprintf("%sbanner_grab.out", caseDir)
 			callRunTool(ncArgs, ncPath)
 
-		case "111": //TODO: implement UDP scan to catch RPC
+		case "111": 
 			caseDir = protocolDetected("RPC", baseDir)
 			nmapOutputFile = caseDir + "rpc_scan"
 			callIndividualPortScanner(target, port, nmapOutputFile)
@@ -355,11 +365,11 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 			// Nmap
 			nmapNSEScripts = "ipmi*"
-			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+			callIndividualUDPPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 			// Metasploit
 			msfArgs = []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/ipmi/ipmi_dumphashes; set rhosts %s; set output_john_file %sipmi_hashes.john; run; exit", target, caseDir)}
-			msfPath := fmt.Sprintf("%snblookup.out", caseDir)
+			msfPath = fmt.Sprintf("%snblookup.out", caseDir)
 			callRunTool(msfArgs, msfPath)
 
 		case "873":
@@ -432,7 +442,12 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			nmapNSEScripts = "mysql*"
 			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
-			hydraBruteforcing(target, caseDir, "mysql")
+			// Hydra for MySQL
+			if *optBrute {
+				hydraArgs = []string{"hydra","-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "mysql", target)}
+				hydraPath = fmt.Sprintf("%shydra_mysql.out", caseDir)
+				callRunTool(hydraArgs, hydraPath)
+			}
 
 		case "3389":
 			caseDir = protocolDetected("RDP", baseDir)
@@ -440,7 +455,12 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			nmapNSEScripts = "rdp*"
 			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
-			hydraBruteforcing(target, caseDir, "rdp")
+			// Hydra for RDP
+			if *optBrute {
+				hydraArgs = []string{"hydra","-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "rdp", target)}
+				hydraPath = fmt.Sprintf("%shydra_rdp.out", caseDir)
+				callRunTool(hydraArgs, hydraPath)
+			}
 
 		case "5985", "5986":
 			if visitedWinRM {

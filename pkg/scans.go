@@ -9,7 +9,7 @@ import (
 	nmap "github.com/Ullaakut/nmap/v3"
 )
 
-func portSweep(target string) []nmap.Host {
+func tcpPortSweep(target string) []nmap.Host {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -126,6 +126,35 @@ func individualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 	}
 
 	fmt.Printf("Nmap done: %d hosts up scanned in %.2f seconds\n", len(result.Hosts), result.Stats.Finished.Elapsed)
+}
+
+func udpPortSweep(target string) []nmap.Host {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Equivalent to `/usr/local/bin/nmap -sU -p111,161,162,10161,10162,623 --min-rate=2000 --privileged <target>`,
+	// with a 5-minute timeout.
+	scanner, err := nmap.NewScanner(
+		ctx,
+		nmap.WithTargets(target),
+		nmap.WithUDPScan(),
+		nmap.WithPorts("111,161,162,10161,10162,623"),
+		nmap.WithMinRate(2000),
+		nmap.WithPrivileged(),
+	)
+	if err != nil {
+		log.Fatalf("unable to create nmap scanner: %v", err)
+	}
+
+	result, warnings, err := scanner.Run()
+	if len(*warnings) > 0 {
+		log.Printf("run finished with warnings: %s\n", *warnings) // Warnings are non-critical errors from nmap.
+	}
+	if err != nil {
+		log.Fatalf("unable to run nmap scan: %v", err)
+	}
+
+	return result.Hosts
 }
 
 func individualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string) {

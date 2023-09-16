@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -130,26 +131,7 @@ func checkToolExists(tool string) bool {
 
 	// Last resource, check with locate
 	if !updatedbRan {
-		updatedbRan = true
-		fmt.Printf("%s %s%s ", yellow("[!] Running"), cyan("updatedb"), yellow("..."))
-		updatedb := exec.Command("updatedb")
-		updatedbErr := updatedb.Start()
-		if updatedbErr != nil {
-			if *optDbg {
-				fmt.Println(debug("Debug - Updatedb error: ", updatedbErr))
-			}
-			os.Exit(42)
-		}
-
-		err := updatedb.Wait()
-		if err != nil {
-			if *optDbg {
-				fmt.Printf("%s%v\n", debug("Debug - Command finished with error: "), err)
-			}
-			os.Exit(44)
-		}
-
-		fmt.Println(green("Done!"))
+		updatedb()
 	}
 
 	// Run locate
@@ -169,6 +151,44 @@ func checkToolExists(tool string) bool {
 
 	fmt.Println(green("Done!"))
 	return true
+}
+
+// Function to handle calling updatedb
+func updatedb() {
+	// Ask whether user wants updatedb ran
+	printCustomBiColourMsg(
+		"yellow", "cyan", "[!] It has been noticed that running", "updatedb", "in", "WSL systems", 
+		"may take forever.\nDo you want to try locate packages without running", "updatedb", 
+		"?\n[Y] yes, don't run updatedb, I don't want to wait that much! | [any other key] no, please, run updatedb, I'm good with waiting:",
+	)
+	updatedbQuestion := bufio.NewScanner(os.Stdin)
+	updatedbQuestion.Scan()
+	userInput := strings.ToLower(updatedbQuestion.Text())
+
+	if userInput == "yes" || userInput == "y" {
+		return
+	}
+	
+	updatedbRan = true
+	fmt.Printf("%s %s%s ", yellow("[!] Running"), cyan("updatedb"), yellow("..."))
+	updatedb := exec.Command("updatedb")
+	updatedbErr := updatedb.Start()
+	if updatedbErr != nil {
+		if *optDbg {
+			fmt.Println(debug("Debug - Updatedb error: ", updatedbErr))
+		}
+		os.Exit(42)
+	}
+
+	err := updatedb.Wait()
+	if err != nil {
+		if *optDbg {
+			fmt.Printf("%s%v\n", debug("Debug - Command finished with error: "), err)
+		}
+		os.Exit(44)
+	}
+
+	fmt.Println(green("Done!"))
 }
 
 func isCompatibleDistro() error {

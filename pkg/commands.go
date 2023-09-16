@@ -244,7 +244,7 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string) {
 	
 	// Run Gobuster
 	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "u", fmt.Sprintf("%s:8080", target), "-w", dirListMedium}
-	gobusterPath := fmt.Sprintf("%stomcat_gobuster.out", caseDir, port)
+	gobusterPath := fmt.Sprintf("%stomcat_gobuster.out", caseDir)
 	callRunTool(gobusterArgs, gobusterPath)
 
 	// Run hydra
@@ -410,7 +410,7 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	}
 	defer file.Close()
 
-	confirmedFile := fmt.Sprintf("%seternalblue_confirmed.txt")
+	confirmedFile := fmt.Sprintf("%seternalblue_confirmed.txt", dir)
 	confirmed, err := os.Create(confirmedFile)
     if err != nil {
         fmt.Println(err)
