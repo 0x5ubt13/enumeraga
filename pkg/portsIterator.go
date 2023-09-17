@@ -69,7 +69,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 		case "25", "465", "587":
 			if visitedSMTP { continue }
-			visitedHTTP = true
+			visitedSMTP = true
 
 			caseDir = protocolDetected("SMTP", baseDir)
 			nmapOutputFile = caseDir + "smtp_scan"
@@ -107,7 +107,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			wpEnumeration(fmt.Sprintf("https://%s:80", target), caseDir, "80")
 
 			// Nikto on port 80
-			nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", target)}
+			nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", target),}
 			nikto80Path := fmt.Sprintf("%snikto_80.out", caseDir)
 			callRunTool(nikto80Args, nikto80Path)
 

@@ -57,7 +57,7 @@ Working as pentesters, or playing CTFs, or fiddling around with practice labs, w
 - Braa
 - CeWL
 - CrackMapExec
-- Enum4linux
+- Enum4linux-ng
 - Ffuf
 - Fping
 - Gobuster

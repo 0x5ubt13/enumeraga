@@ -302,42 +302,67 @@ func runCewlandFfufKeywords(target, caseDir, port string) {
 // Announce tool and run it
 func runTool(args []string, filePath string) {
 	tool := args[0]
-	command := strings.Join(args, ",")
-	printCustomBiColourMsg("yellow", "cyan", "[!] Running", tool, "and sending it to the background")
+	cmdArgs := args[1:]
+
+	// Handle messages for HTTP tools to avoid confusion
+	command := strings.Join(cmdArgs, " ")
+	if strings.Contains(command, "80") {
+		printCustomBiColourMsg("yellow", "cyan", "[!] Running '", fmt.Sprintf("%s on port 80", tool), "' and sending it to the background")
+	} else if strings.Contains(command, "443") {
+		printCustomBiColourMsg("yellow", "cyan", "[!] Running '", fmt.Sprintf("%s on port 443", tool), "' and sending it to the background")
+	} else {
+		printCustomBiColourMsg("yellow", "cyan", "[!] Running '", tool, "' and sending it to the background")
+	}
 
 	if *optDbg {
-		fmt.Printf("%s%s\n", debug("Debug - command to exec: "), command)
+		fmt.Printf("%s%s %s\n", debug("Debug - command to exec: "), tool, command)
 	}
 
-	cmd := exec.Command(command)
+	cmd := exec.Command(tool, cmdArgs...)
 
 	// Create a pipe to capture the command's output
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		fmt.Println("Error creating stdout pipe:", err)
-		os.Exit(1)
-	}
+    stdout, err := cmd.StdoutPipe()
+    if err != nil {
+        fmt.Println("Error creating stdout pipe:", err)
+        os.Exit(1)
+    }
 
-	// Start the command asynchronously in a goroutine
-	if err := cmd.Start(); err != nil {
-		fmt.Println("Error starting command:", err)
-		os.Exit(1)
-	}
+    // Create a file to write the output
+    file, err := os.Create(filePath)
+    if err != nil {
+        fmt.Println("Error creating output file:", err)
+        os.Exit(1)
+    }
+    defer file.Close()
 
-	// This goroutine will capture and print the command's output
-	go func() {
-		_, err := io.Copy(os.Stdout, stdout)
-		if err != nil {
-			fmt.Println("Error copying output:", err)
-		}
-	}()
+    // Start the command asynchronously in a goroutine
+    if err := cmd.Start(); err != nil {
+        fmt.Println("Error starting command:", err)
+        // os.Exit(1)
+    }
+
+    // This goroutine will capture and write the command's output to a file
+    go func() {
+        _, err := io.Copy(file, stdout)
+        if err != nil {
+            fmt.Println("Error copying output:", err)
+        }
+    }()
 
 	// Wait for the command to complete (optional)
 	if err := cmd.Wait(); err != nil {
-		fmt.Println("Command finished with error:", err)
-		os.Exit(1)
+		fmt.Println("Command", tool, "finished with error:", err)
+		// os.Exit(1)
 	} else {
-		printCustomBiColourMsg("green", "cyan", "[+]", tool, "finished successfully")
+		if strings.Contains(command, "80") {
+			printCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
+		} else if strings.Contains(command, "443") {
+			printCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 443", tool), "' finished successfully")
+		} else {
+			printCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
+		}
+
+		fmt.Println(yellow("\tShortcut: less -R"), cyan(filePath))
 	}
 }
 

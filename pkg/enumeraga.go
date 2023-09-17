@@ -90,6 +90,7 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 
 	// Perform ports sweep
 	if !multiTarget && !*optQuiet { printPhase(2) }
+	printCustomBiColourMsg("cyan", "yellow", "[*] Sweeping TCP and UDP ports on target '", target, "'...")
 	if *optDbg { fmt.Println(debug("Debug - Starting TCP ports sweep")) }
 	sweptHostTcp := tcpPortSweep(target)
 
@@ -142,7 +143,7 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 	openPorts := strings.Join(openPortsSlice, ",")
 
 	if len(openPorts) > 0 {
-		fmt.Printf("%s %s: %v\n", green("[+] Open ports for target"), yellow(target), green(openPorts))
+		printCustomBiColourMsg("green", "cyan", "[+] Open ports for target '", target, "' : ", openPorts)
 		writePortsToFile(targetPath, openPorts, target)
 
 		// Launch main aggressive nmap scan in parallel that covers all open ports found

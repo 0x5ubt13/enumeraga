@@ -275,28 +275,28 @@ func printConsentNotGiven(tool string) {
 
 func getWordlists() {
 	// Locate the "raft-medium-directories-lowercase" file
-	dirListMediumSlice, err := zglob.Glob("raft-medium-directories-lowercase")
+	dirListMediumSlice, err := zglob.Glob("/usr/share/seclists/Discovery/Web-Content/raft-medium-directories-lowercase.txt")
 	if err != nil {
-		log.Fatalf("Error locating 'raft-medium-directories-lowercase': %v\n", err)
+		log.Fatalf("Error locating 'raft-medium-directories-lowercase' with zglob: %v\n", err)
 	}
 	dirListMedium = dirListMediumSlice[0]
 
 	// Locate the "darkweb2017-top1000.txt" file
-	darkwebTop1000Slice, err := zglob.Glob("darkweb2017-top1000.txt")
+	darkwebTop1000Slice, err := zglob.Glob("/usr/share/seclists/Passwords/darkweb2017-top100.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'darkweb2017-top1000.txt': %v\n", err)
 	}
 	darkwebTop1000 = darkwebTop1000Slice[0]
 
 	// Locate the "web-extensions.txt" file
-	extensionsListSlice, err := zglob.Glob("web-extensions.txt")
+	extensionsListSlice, err := zglob.Glob("/usr/share/seclists/Discovery/Web-Content/web-extensions.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'web-extensions.txt': %v\n", err)
 	}
 	extensionsList = extensionsListSlice[0]
 
 	// Locate the "top-usernames-shortlist" file
-	usersListSlice, err := zglob.Glob("top-usernames-shortlist")
+	usersListSlice, err := zglob.Glob("/usr/share/seclists/Usernames/top-usernames-shortlist.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'top-usernames-shortlist': %v\n", err)
 	}
