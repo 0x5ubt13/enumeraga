@@ -140,7 +140,8 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 	}
 
 	// Join our string slice.
-	openPorts := strings.Join(openPortsSlice, ",")
+	openPorts := removeDuplicates(strings.Join(openPortsSlice, ","))
+
 
 	if len(openPorts) > 0 {
 		printCustomBiColourMsg("green", "cyan", "[+] Open ports for target '", target, "' : ", openPorts)

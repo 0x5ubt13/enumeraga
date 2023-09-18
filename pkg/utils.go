@@ -172,6 +172,22 @@ func finishLine(start time.Time) {
 
 }
 
+// Remove duplicate ports from the comma-separated ports string
+func removeDuplicates(s string) string {
+	parts := strings.Split(s, ",")
+	seen := make(map[string]bool)
+	result := []string{}
+
+	for _, part := range parts {
+		if !seen[part] {
+			seen[part] = true
+			result = append(result, part)
+		}
+	}
+
+	return strings.Join(result, ",")
+}
+
 func consent(tool string) rune {
 	// Ask for user consent
 	printCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be installed")
@@ -198,22 +214,21 @@ func consent(tool string) rune {
 
 func installMissingTools() {
 	keyTools := []string{
+		"cewl",
+		"enum4linux-ng",
+		"finger",
+		"fping",
+		"hydra",
+		"ident-user-enum",
 		"locate",
 		"nmap",
-		"hydra",
-		"finger",
-		"updatedb",
-		"locate",
 		"odat",
-		"ssh-audit",
+		"rusers",
 		"seclists",
-		"cewl",
-		"fping",
-		"ident-user-enum",
 		"smbclient",
-		"odat",
+		"ssh-audit",
+		"updatedb",
 		"wafw00f",
-		"enum4linux-ng",
 	}
 
 	// Loop through listed tool see which ones are missing

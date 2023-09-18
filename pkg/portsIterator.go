@@ -275,14 +275,14 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			smbMapPath := fmt.Sprintf("%ssmbmap.out", caseDir)
 			callRunTool(smbMapArgs, smbMapPath)
 
-			// NBLookup
-			nbLookupArgs := []string{"nblookup", "-A", target}
-			nbLookupPath := fmt.Sprintf("%snblookup.out", caseDir)
-			callRunTool(nbLookupArgs, nbLookupPath)
+			// NMBLookup
+			nmbLookupArgs := []string{"nmblookup", "-A", target}
+			nmbLookupPath := fmt.Sprintf("%snmblookup.out", caseDir)
+			callRunTool(nmbLookupArgs, nmbLookupPath)
 
 			// Enum4linux-ng
 			enum4linuxNgArgs := []string{"enum4linux-ng", "-A", "-C", target}
-			enum4linuxNgPath := fmt.Sprintf("%snblookup.out", caseDir)
+			enum4linuxNgPath := fmt.Sprintf("%senum4linux_ng.out", caseDir)
 			callRunTool(enum4linuxNgArgs, enum4linuxNgPath)
 
 		case "161", "162", "10161", "10162": // UDP
@@ -348,8 +348,8 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callRunTool(rwhoArgs, rwhoPath)
 
 			// Rusers
-			rusersArgs := []string{"rusers", "-al", target}
-			rusersPath := fmt.Sprintf("%snblookup.out", caseDir)
+			rusersArgs := []string{"rusers", "-la", target}
+			rusersPath := fmt.Sprintf("%srusers.out", caseDir)
 			callRunTool(rusersArgs, rusersPath)
 
 			filePath = caseDir + "next_step_tip.txt"
@@ -369,7 +369,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 			// Metasploit
 			msfArgs = []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/ipmi/ipmi_dumphashes; set rhosts %s; set output_john_file %sipmi_hashes.john; run; exit", target, caseDir)}
-			msfPath = fmt.Sprintf("%snblookup.out", caseDir)
+			msfPath = fmt.Sprintf("%smsf_scanner.out", caseDir)
 			callRunTool(msfArgs, msfPath)
 
 		case "873":

@@ -116,6 +116,14 @@ func checkToolExists(tool string) bool {
 		}
 	}
 
+	// Kali comes with rusers libraries for nmap which give false positive
+	if tool == "rusers" {
+		if *optDbg {
+			fmt.Println(debug("Debug - Error: locate could not find tool on the system"))
+		}
+		return false
+	}
+
 	// Check with zglob
 	_, zglobErr := zglob.Glob(tool)
 	if zglobErr == nil {
@@ -157,9 +165,9 @@ func checkToolExists(tool string) bool {
 func updatedb() {
 	// Ask whether user wants updatedb ran
 	printCustomBiColourMsg(
-		"yellow", "cyan", "[!] It has been noticed that running", "updatedb", "in", "WSL systems", 
-		"may take forever.\nDo you want to try locate packages without running", "updatedb", 
-		"?\n[Y] yes, don't run updatedb, I don't want to wait that much! | [any other key] no, please, run updatedb, I'm good with waiting:",
+		"yellow", "cyan", "[!] It has been noticed that running '", "updatedb", "' in ", "WSL systems", 
+		" may take forEVER.\nDo you want to try locate packages without running '", "updatedb", 
+		"' ?\n[Y] yes, don't run updatedb, I don't want to wait that much! | [any other key] no, please, run updatedb, I'm good with waiting:",
 	)
 	updatedbQuestion := bufio.NewScanner(os.Stdin)
 	updatedbQuestion.Scan()

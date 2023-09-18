@@ -345,13 +345,23 @@ func runTool(args []string, filePath string) {
     go func() {
         _, err := io.Copy(file, stdout)
         if err != nil {
-            fmt.Println("Error copying output:", err)
+            if *optDbg { fmt.Println("Error copying output for tool", tool, ":", err) }
         }
     }()
 
 	// Wait for the command to complete (optional)
 	if err := cmd.Wait(); err != nil {
-		fmt.Println("Command", tool, "finished with error:", err)
+		// _, err := io.Copy(file, stdout)
+		// if err != nil {
+		// 	fmt.Println("Error copying output for tool", tool, ":", err)
+		// }
+		if tool == "nikto" {
+			// Nikto doesn't have a clean exit
+			printCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
+			fmt.Println(yellow("\tShortcut: less -R"), cyan(filePath))
+		} else {
+			fmt.Println(red("Command"), tool, red("finished with error:"), red(err))
+		}
 		// os.Exit(1)
 	} else {
 		if strings.Contains(command, "80") {
@@ -483,7 +493,7 @@ func callRunTool(args []string, filePath string) {
 	go func(args []string, filePath string) {
 		defer wg.Done()
 
-		runTool(args, filePath)
+		go runTool(args, filePath)
 	}(args, filePath)
 }
 

@@ -6,7 +6,7 @@ Automatic enumeration tool written in Go that wraps Linux tools, ported from my 
 
 ## Usage
 
-Give it either a single IP address or a file containing a list of IPs, a name to use for the output files, sit back, and relax:
+Give it either a single IP address or a file containing a list of IPs, a name to use for the output files, sit back, and relax while it enumerates all open ports for you:
 
     ┌──(root㉿SubtleLabs)-[~]
     └─# enumeraga -h
@@ -35,6 +35,16 @@ Give it either a single IP address or a file containing a list of IPs, a name to
      -t, --target=value
                         Specify target single IP / List of IPs file.
      -V, --vv           Flood your terminal with plenty of verbosity!
+
+## Installation
+
+Simply grab the executable and launch it at your leisure! All the necessary tools to run that might be missing in your distro should be directly installed (if Enumeraga has your consent), otherwise it will prompt you to install it manually and exit.
+
+This program has been developed in a Kali distro on WSL, so for maximum compatibility I suggest it's also ran on a Kali VM. I haven't tested it in any other distro yet.
+
+## Disclaimer
+
+This tool has to run as `root`, and it's not a precisely subtle tool; on the contrary, it will create a ton of noise. Given its aggressive nature, please ensure you know what you're doing before launching it, and of course double-check you have absolute permission to enumerate your target(s). 
 
 ## The name
 
@@ -82,6 +92,12 @@ Working as pentesters, or playing CTFs, or fiddling around with practice labs, w
 - Xsltproc
 - WhatWeb
 - WafW00f
+
+Apart from the above 28 tools, there are many more included in GNU/Linux doing magic tricks behind the scenes!!
+
+## Tools yet to implement
+
+- Do you have any other suggestion? Send a PR or a message!
 
 ## To Do
 
