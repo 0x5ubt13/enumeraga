@@ -254,9 +254,10 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 			// Nmap
 			nmapOutputFile = caseDir + "nb_smb_scan"
+			nmapUDPOutputFile := caseDir + "nb_smb_UDP_scan"
 			nmapNSEScripts = "smb* and not brute"
 			callIndividualPortScannerWithNSEScripts(target, "137,139,445", nmapOutputFile, nmapNSEScripts) // TCP
-			callIndividualUDPPortScannerWithNSEScripts(target, "137", "nb_smb_UDP_scan", "nbstat.nse")     // UDP
+			callIndividualUDPPortScannerWithNSEScripts(target, "137", nmapUDPOutputFile, "nbstat.nse")     // UDP
 
 			// CME
 			cmeArgs := []string{"crackmapexec", "smb", "-u", "''", "-p", "''", target}
@@ -286,6 +287,8 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callRunTool(enum4linuxNgArgs, enum4linuxNgPath)
 
 		case "161", "162", "10161", "10162": // UDP
+			getWordlists()
+			
 			// TODO: (outstanding from AutoEnum)
 			// Hold on all SNMP enumeration until onesixtyone has finished bruteforcing community strings
 			// then launch the tools in a loop against all the found CS
@@ -306,7 +309,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callRunTool(snmpWalkArgs, snmpWalkPath)
 
 			// OneSixtyOne
-			oneSixtyOneArgs := []string{"onesixtyone", "-c", "$(locate SNMP/snmp.txt -l 1)", target}
+			oneSixtyOneArgs := []string{"onesixtyone", "-c", snmpList, target}
 			oneSixtyOnePath := fmt.Sprintf("%snblookup.out", caseDir)
 			callRunTool(oneSixtyOneArgs, oneSixtyOnePath)
 

@@ -225,3 +225,18 @@ func rmCmd(filePath string) {
 		return
 	}
 }
+
+func isStringInFile(s, filePath string) bool {
+	// Read the contents of the file
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		fmt.Printf("Error reading file: %v\n", err)
+		return false
+	}
+
+	// Convert the file content to a string
+	fileContent := string(content)
+
+	// Do the check and return bool value
+	return strings.Contains(fileContent, s)
+}

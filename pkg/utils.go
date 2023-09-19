@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"log"
-	"time"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	zglob "github.com/mattn/go-zglob"
@@ -24,24 +25,24 @@ var (
 	// Declare flags and have getopt return pointers to the values.
 	// DEV: initialising vars only once they have been implemented/ported in the code
 	// optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
-	optBrute = getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
+	optBrute	= getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
 	// var optDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
-	optDbg    = getopt.BoolLong("Debug", 'D', "Activate debug text")
-	optHelp   = getopt.BoolLong("help", 'h', "Display this help and exit.")
-	optOutput = getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
+	optDbg		= getopt.BoolLong("Debug", 'D', "Activate debug text")
+	optHelp		= getopt.BoolLong("help", 'h', "Display this help and exit.")
+	optInstall	= getopt.BoolLong("install", 'i', "Only try to install requisites and exit.")
+	optOutput	= getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
 	// optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
 	// DEV: For ^^^, use nmap.WithMostCommonPorts()
-	optQuiet    = getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
-	optRange    = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
-	optTarget   = getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
-	optVVervose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
+	optQuiet	= getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
+	optRange	= getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
+	optTarget	= getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
+	optVVervose	= getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 
 	// Declare wordlists global vars
-	dirListMedium, darkwebTop1000, extensionsList, usersList string
+	dirListMedium, darkwebTop1000, extensionsList, usersList, snmpList string
 
 	// Declare globals updated and updatedb, as these may consume a lot of time and aren't needed more than once
-	updated bool
-	updatedbRan bool
+	updated, wordlistsLocated bool
 )
 
 func printBanner() {
@@ -51,6 +52,38 @@ func printBanner() {
 	fmt.Printf("%s%s%s\n", yellow(" _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ "), cyan("/ /_/ / "), yellow("_  ___ |"))
 	fmt.Printf("%s%s%s\n", yellow(" /_____/  /_/ /_/\\__,_/ /_/ /_/ /_/\\___//_/    /_/  |_"), cyan("\\____/  "), yellow("/_/  |_|"))
 	fmt.Printf("%s\n\n", green("                            by 0x5ubt13"))
+}
+
+func printUsageExamples() {
+	e := color.WhiteString("enumeraga")
+
+	// Print "examples" in white
+	fmt.Printf("\nExamples:\n ")
+	printCustomBiColourMsg(
+		"cyan", "yellow",
+		e, " -i\n ", 
+		e, " -bq -t ", "10.10.11.230", "\n ",
+		e, " -V -r ", "10.129.121.0/24", " -t ", "10.129.121.60", "\n ",
+		e, " -t ", "targets_file.txt", " -r ", "10.10.8.0/24",
+	)
+	}
+
+// Check if OS is debian-like
+func isCompatibleDistro() error {
+	cat := exec.Command("cat", "/etc/os-release")
+	output, err := cat.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error reading /etc/os-release: %v\n", err)
+		os.Exit(5)
+	}
+
+	compatibleDistro := strings.Contains(strings.ToLower(string(output)), "debian")
+	if !compatibleDistro {
+		errorMsg("This system is not running a Debian-like distribution. Please install the tools manually.")
+		return fmt.Errorf("not compatible distro")
+	}
+
+	return nil
 }
 
 // Custom error message printed out to terminal
@@ -169,7 +202,6 @@ func finishLine(start time.Time) {
 	s := elapsed.Seconds()
 	output := fmt.Sprintf("%.2fs", s)
 	printCustomBiColourMsg("cyan", "green", "[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.\n")
-
 }
 
 // Remove duplicate ports from the comma-separated ports string
@@ -220,15 +252,15 @@ func installMissingTools() {
 		"fping",
 		"hydra",
 		"ident-user-enum",
-		"locate",
+		"nikto",
 		"nmap",
 		"odat",
 		"rusers",
 		"seclists",
 		"smbclient",
 		"ssh-audit",
-		"updatedb",
 		"wafw00f",
+		"whatweb",
 	}
 
 	// Loop through listed tool see which ones are missing
@@ -289,6 +321,9 @@ func printConsentNotGiven(tool string) {
 }
 
 func getWordlists() {
+	if wordlistsLocated { return } 
+	wordlistsLocated = true
+
 	// Locate the "raft-medium-directories-lowercase" file
 	dirListMediumSlice, err := zglob.Glob("/usr/share/seclists/Discovery/Web-Content/raft-medium-directories-lowercase.txt")
 	if err != nil {
@@ -317,12 +352,20 @@ func getWordlists() {
 	}
 	usersList = usersListSlice[0]
 
+	// Locate the "SNMP/snmp.txt" file
+	snmpListSlice, err := zglob.Glob("SNMP/snmp.txt")
+	if err != nil {
+		log.Fatalf("Error locating 'SNMP/snmp.txt': %v\n", err)
+	}
+	snmpList := snmpListSlice[0]
+
 	if *optDbg {
 		fmt.Println("Located Files:")
 		fmt.Printf("dir_list_medium: %v\n", dirListMedium)
 		fmt.Printf("darkweb_top1000: %v\n", darkwebTop1000)
 		fmt.Printf("extensions_list: %v\n", extensionsList)
 		fmt.Printf("users_list: %v\n", usersList)
+		fmt.Printf("snmp_list: %v\n", snmpList)
 	}
 }
 

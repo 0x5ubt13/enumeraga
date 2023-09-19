@@ -19,5 +19,4 @@
 
 # Go workspace file
 go.work
-nb_smb_UDP_scan.nmap
-enumeraga
+enumeraga diagram.drawio

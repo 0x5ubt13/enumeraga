@@ -8,8 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-
-	zglob "github.com/mattn/go-zglob"
 )
 
 func aptGetUpdateCmd() {
@@ -50,9 +48,9 @@ func installEnum4linuxNg() error {
 		return consentv2Err
 	}
 
-	fmt.Printf("%s %s%s ", yellow("[!] Installing"), cyan("enum4linux-ng"), yellow("..."))
+	fmt.Printf("%s %s%s\n", yellow("[!] Checking pre-requisites to install '"), cyan("enum4linux-ng"), yellow("'..."))
 
-	reqs := []string{"python3-ldap3", "python3-yaml", "python3-impacket"}
+	reqs := []string{"python3-ldap3", "python3-yaml", "python3-impacket", "pip"}
 	for _, tool := range reqs {
 		if !updated {
 			aptGetUpdateCmd()
@@ -177,6 +175,10 @@ func aptGetInstallCmd(tool string) {
 	printInstallingTool(tool)
 
 	if tool == "finger" {
+		tool = "nfs-common"
+	}
+
+	if tool == "seclists" {
 		tool = "nfs-common"
 	}
 
@@ -392,16 +394,9 @@ func runRangeTools(targetRange string) {
 		fmt.Println("[*] Debug: cidrDir -> ", cidrDir)
 	}
 	customMkdir(cidrDir)
-
-	// Locate the "SNMP/snmp.txt" file
-	snmpListSlice, err := zglob.Glob("SNMP/snmp.txt")
-	if err != nil {
-		log.Fatalf("Error locating 'SNMP/snmp.txt': %v\n", err)
-	}
-	snmpList := snmpListSlice[0]
-	if *optDbg {
-		fmt.Printf("snmp_list: %v\n", snmpList)
-	}
+	
+	// Get wordlists for the range
+	getWordlists()
 
 	// Run range tools
 

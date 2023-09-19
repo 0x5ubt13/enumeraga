@@ -310,6 +310,7 @@ func fullAggressiveScan(target, ports, outFile string) {
 
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
+	ports = ports + ",1337" // Adding 1 likely closed port for OS fingerprinting purposes
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -332,7 +333,7 @@ func fullAggressiveScan(target, ports, outFile string) {
 		log.Fatalf("unable to create nmap scanner fullAggressiveScan: %v", err)
 	}
 
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(2 * time.Minute)
 	done := make(chan bool)
 
 	go func() {

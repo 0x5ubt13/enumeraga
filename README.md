@@ -23,10 +23,11 @@ Give it either a single IP address or a file containing a list of IPs, a name to
     
     [*] Help flag detected. Aborting other checks and printing usage.
     
-    Usage: checks [-bDhqV] [-o value] [-r value] [-t value] [parameters ...]
+    Usage: checks [-bDhiqV] [-o value] [-r value] [-t value] [parameters ...]
      -b, --brute        Activate all fuzzing and bruteforcing in the script.
      -D, --Debug        Activate debug text
      -h, --help         Display this help and exit.
+     -i, --install      Only try to install requisites and exit.
      -o, --output=value
                         Select a different base folder for the output.
                         [/tmp/enumeraga_output]
@@ -35,16 +36,34 @@ Give it either a single IP address or a file containing a list of IPs, a name to
      -t, --target=value
                         Specify target single IP / List of IPs file.
      -V, --vv           Flood your terminal with plenty of verbosity!
+    
+    Examples:
+     enumeraga -i
+     enumeraga -bq -t 10.10.11.230
+     enumeraga -V -r 10.129.121.0/24 -t 10.129.121.60
+     enumeraga -t targets_file.txt -r 10.10.8.0/24
 
 ## Installation
 
+### Executable version
+
 Simply grab the executable and launch it at your leisure! All the necessary tools to run that might be missing in your distro should be directly installed (if Enumeraga has your consent), otherwise it will prompt you to install it manually and exit.
 
-This program has been developed in a Kali distro on WSL, so for maximum compatibility I suggest it's also ran on a Kali VM. I haven't tested it in any other distro yet.
+This program has been developed in a Kali distro on WSL, so for maximum compatibility I'd suggest it's also ran on a Kali VM (for now). I haven't tested it in any other distro yet.
+
+What? You'd like to have a fancy, no-brainer one-liner to try it quick? You've got it! This will download `enumeraga`, put it on `/opt/enumeraga`, make it executable, create a soft link on your path and finally call it with help flag:
+
+~~~sh
+mkdir /opt/enumeraga; curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.0-beta/enumeraga -o /opt/enumeraga/enumeraga; chmod +x /opt/enumeraga/enumeraga; ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
+~~~
+
+### Containerised version
+
+    Containerised version coming soon!!!
 
 ## Disclaimer
 
-This tool has to run as `root`, and it's not a precisely subtle tool; on the contrary, it will create a ton of noise. Given its aggressive nature, please ensure you know what you're doing before launching it, and of course double-check you have absolute permission to enumerate your target(s). 
+This tool has to run as `root`, and despite my nickname, it's not a precisely subtle tool; on the contrary, it will create a ton of noise. Given its aggressive nature, please ensure you know what you're doing before launching it, and of course double-check you have absolute permission to enumerate your target(s). 
 
 ## The name
 
