@@ -136,6 +136,8 @@ Enumeraga:
 
 - [x] Port all of this to Golang
 - [ ] Test thoroughly
+- [ ] Add a flag to pass vhosts and functionality to use them
+- [ ] Rewrite the enum4linux-ng installing function to avoid installing pip and dependencies as root
 - [ ] Link each wrapped tool on README to their official repos
 - [ ] Containerise
 - [ ] Improve the way output is presented to terminal

@@ -4,11 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
-
-var wg sync.WaitGroup
 
 // Main logic of enumeraga
 func main() {

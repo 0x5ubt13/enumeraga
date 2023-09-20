@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -43,6 +44,10 @@ var (
 
 	// Declare globals updated and updatedb, as these may consume a lot of time and aren't needed more than once
 	updated, wordlistsLocated bool
+	
+	// Sync: Define a mutex to synchronize access to standard output and a waitgroup to generate goroutines
+	outputMutex sync.Mutex
+	wg sync.WaitGroup
 )
 
 func printBanner() {
@@ -248,7 +253,9 @@ func installMissingTools() {
 	keyTools := []string{
 		"cewl",
 		"enum4linux-ng",
+		"dirsearch",
 		"finger",
+		"ffuf",
 		"fping",
 		"hydra",
 		"ident-user-enum",
@@ -352,8 +359,8 @@ func getWordlists() {
 	}
 	usersList = usersListSlice[0]
 
-	// Locate the "SNMP/snmp.txt" file
-	snmpListSlice, err := zglob.Glob("SNMP/snmp.txt")
+	// Locate the "snmp-onesixtyone" file
+	snmpListSlice, err := zglob.Glob("/usr/share/seclists/Discovery/SNMP/snmp-onesixtyone.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'SNMP/snmp.txt': %v\n", err)
 	}
@@ -369,8 +376,13 @@ func getWordlists() {
 	}
 }
 
-// // Loop over the necessary colours, printing one at a time
+// Loop over the necessary colours, printing one at a time
 func printCustomBiColourMsg(dominantColour, secondaryColour string, text ...string) {
+	// Lock the mutex to ensure exclusive access to standard output, 
+	// avoiding printing different lines of output to console
+	outputMutex.Lock()
+	defer outputMutex.Unlock()
+
 	for i, str := range text {
 		if i%2 == 0 || i == 0 {
 			switch dominantColour {

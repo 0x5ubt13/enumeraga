@@ -278,6 +278,7 @@ func runCewlandFfufKeywords(target, caseDir, port string) {
 			"-maxtime", "300",
 			"-maxtime-job", "300",
 		}
+		fmt.Println(debug("Debug: ffuf keywords command:", ffufArgs))
 		ffufPath := fmt.Sprintf("%sffuf_keywords_80.out", caseDir)
 		runTool(ffufArgs, ffufPath)
 		return

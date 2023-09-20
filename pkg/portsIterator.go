@@ -121,40 +121,16 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			whatWeb80Path := fmt.Sprintf("%swhatweb_80.out", caseDir)
 			callRunTool(whatWeb80Args, whatWeb80Path)
 
+			// Dirsearch - Light dirbusting on port 80
+			dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s", target) }
+			dirsearch80Path := fmt.Sprintf("%sdirsearch_80.out", caseDir)
+			callRunTool(dirsearch80Args, dirsearch80Path)
+
 			if *optBrute {
+				// TODO: check why ffuf doesn't work
 				// CeWL + Ffuf Keywords Bruteforcing
 				callRunCewlandFfufKeywords(target, caseDir, "80")
 				callRunCewlandFfufKeywords(target, caseDir, "443")
-
-				// Ffuf Dirbusting port 80
-				ffufDir80Args := []string{
-					"ffuf",
-					"-u", fmt.Sprintf("http://%s:80/FUZZ", target),
-					"-w", fmt.Sprintf("%s:FUZZ", dirListMedium),
-					"-v",
-					"-recursion", "-recursion-depth 1",
-					"-e", ".php,.asp,.aspx",
-					"-t 20",
-					"-maxtime", "300",
-					"-maxtime-job", "300",
-				}
-				ffufDir80Path := fmt.Sprintf("%sffuf_dir_80.out", caseDir)
-				callRunTool(ffufDir80Args, ffufDir80Path)
-
-				// Ffuf Dirbusting port 443
-				ffufDir443Args := []string{
-					"ffuf",
-					"-u", fmt.Sprintf("https://%s:443/FUZZ", target),
-					"-w", fmt.Sprintf("%s:FUZZ", dirListMedium),
-					"-v",
-					"-recursion", "-recursion-depth 1",
-					"-e", ".php,.asp,.aspx",
-					"-t 20",
-					"-maxtime", "300",
-					"-maxtime-job", "300",
-				}
-				ffufDir443Path := fmt.Sprintf("%sffuf_dir_443.out", caseDir)
-				callRunTool(ffufDir443Args, ffufDir443Path)
 			}
 
 			// Port 443:
@@ -176,6 +152,11 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			whatWeb443Args := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("http://%s:443", target)}
 			whatWeb443Path := fmt.Sprintf("%swhatweb_443.out", caseDir)
 			callRunTool(whatWeb443Args, whatWeb443Path)
+
+			// Dirsearch - Light dirbusting on port 80
+			dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s", target) }
+			dirsearch443Path := fmt.Sprintf("%sdirsearch_443.out", caseDir)
+			callRunTool(dirsearch443Args, dirsearch443Path)
 
 			// Port 8080
 
