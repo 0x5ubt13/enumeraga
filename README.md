@@ -54,7 +54,7 @@ This program has been developed in a Kali distro on WSL, so for maximum compatib
 What? You'd like to have a fancy, no-brainer one-liner to try it quick? You've got it! This will download `enumeraga`, put it on `/opt/enumeraga`, make it executable, create a soft link on your path and finally call it with help flag:
 
 ~~~sh
-mkdir /opt/enumeraga; curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.0-beta/enumeraga -o /opt/enumeraga/enumeraga; chmod +x /opt/enumeraga/enumeraga; ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
+mkdir /opt/enumeraga; curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.2-beta/enumeraga -o /opt/enumeraga/enumeraga; chmod +x /opt/enumeraga/enumeraga; ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
 ~~~
 
 ### Containerised version
