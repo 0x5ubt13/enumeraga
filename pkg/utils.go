@@ -42,9 +42,12 @@ var (
 	// Declare wordlists global vars
 	dirListMedium, darkwebTop1000, extensionsList, usersList, snmpList string
 
-	// Declare globals updated and updatedb, as these may consume a lot of time and aren't needed more than once
+	// Declare globals updated and wordlistsLocated, as these may consume a lot of time and aren't needed more than once
 	updated, wordlistsLocated bool
 	
+	// Interrupted global, to show user different info if single IP target was unsuccessful
+	interrupted bool
+
 	// Sync: Define a mutex to synchronize access to standard output and a waitgroup to generate goroutines
 	outputMutex sync.Mutex
 	wg sync.WaitGroup
@@ -191,21 +194,26 @@ func writePortsToFile(filePath string, ports string, host string) string {
 }
 
 // Finish the main flow with time tracker and a couple nice messages to the terminal
-func finishLine(start time.Time) {
-	printPhase(4)
+func finishLine(start time.Time, interrupted bool) {
 	elapsed := time.Since(start)
+	var output string
 
 	if elapsed.Seconds() < 1 {
 		// Convert duration to float of Milliseconds
 		ms := float64(elapsed.Nanoseconds()) / 1e6
-		output := fmt.Sprintf("%.2fms", ms)
-		printCustomBiColourMsg("cyan", "green", "[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.\n")
+		output = fmt.Sprintf("%.2fms", ms)
+	} else {	
+		// Convert duration to float of Seconds
+		s := elapsed.Seconds()
+		output = fmt.Sprintf("%.2fs", s)
+	}
+
+	if interrupted {
+		printCustomBiColourMsg("cyan", "green", "\n[*] Done! It only took '", output, "' to run ", "Enumeraga", "'s core functionality, although an error was detected.\n\tPlease check your arguments, program's output or connectivity and try again.\n")
 		return
 	}
 
-	// Convert duration to float of Seconds
-	s := elapsed.Seconds()
-	output := fmt.Sprintf("%.2fs", s)
+	printPhase(4)
 	printCustomBiColourMsg("cyan", "green", "[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.\n")
 }
 

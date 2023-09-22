@@ -9,7 +9,7 @@ import (
 
 // Main logic of enumeraga
 func main() {
-	// Timing the execution	
+	// Timing the execution
 	start := time.Now()
 
 	// DEV: Helpful strings for debugging purposes to check how goroutines work
@@ -38,7 +38,7 @@ func main() {
 	}
 
 	// Finish and show elapsed time
-	finishLine(start)
+	finishLine(start, interrupted)
 
 	// Wait for goroutines to finish to terminate the program
 	wg.Wait()
@@ -66,6 +66,7 @@ func targetInit(totalLines int) error {
 
 	err := singleTarget(*optTarget, *optOutput, false)
 	if err != nil {
+		interrupted = true
 		return err
 	}
 
