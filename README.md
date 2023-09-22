@@ -1,8 +1,17 @@
 # Enumeraga
 
-Automatic enumeration tool written in Go that wraps Linux tools, ported from my tool [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a rich tool that leverages the features of Go.
+Automatic enumeration tool written in Go that wraps Linux tools, ported from my tool [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a rich tool that leverages all the features of Go.
 
     demo gif coming soon!!
+
+## The motivation
+
+Working as pentesters, or playing CTFs, or fiddling around with practice labs, we come across the same initial phases of recon and enumeration over and over again. I thought it would be an amazing opportunity to practice my coding skills if I automated the initial tools that I always run. Then, after seeing the first results, I liked what I had done and kept adding on more features, until the Bash script grew up so much that I started thinking: "what if I actually use Go and compile this to a binary? Would I be able to pull it off...?" And, well, I'm a sucker for a good challenge if learning is a joyful side effect.
+
+## Flow chart
+
+![Enumeraga flow chart](./img/enumeraga_flow_chart.png)
+
 
 ## Usage
 
@@ -63,7 +72,15 @@ mkdir /opt/enumeraga; curl -L https://github.com/0x5ubt13/enumeraga/releases/dow
 
 ## Disclaimer
 
-This tool has to run as `root`, and despite my nickname, it's not a precisely subtle tool; on the contrary, it will create a ton of noise. Given its aggressive nature, please ensure you know what you're doing before launching it, and of course double-check you have absolute permission to enumerate your target(s). 
+This tool has to run as `root`, and despite my nickname, it's not precisely a subtle tool! Contrarily, it will create a ton of noise. Given its aggressive nature, please ensure you know what you're doing before launching it, and of course double-check you have absolute permission to enumerate your target(s). 
+
+## Similar tools out there
+
+I am aware other enumeration tools exist, but this one aims to be very fast and concise. So far by the current testing times, Enumeraga is able to run its core logic in about 20 to 60 seconds per host, depending on the number of ports open. 
+
+Enumeraga's bottleneck is clearly identified at the port sweeping phase. Once that's out the way the rest of logic gets triggered almost instantly, grouping up several ports in their respective protocols and targeting protocols for enumeration instead.
+
+If you have new ideas to implement in this tool or have any feedback please reach out!
 
 ## The name
 
@@ -76,10 +93,6 @@ The next name had to be some sort of third iteration. It was quite fun and creat
 This is my first serious tool developed in Go. At the time of creating this repo, I have been learning Golang for the best part of the last 2 years, and I have been using it to develop solutions for the [Advent of Code](https://adventofcode.com/).
 
 Although I will try my best to adhere to coding conventions, I am still learning as I code, and any kind of contribution towards quality will always be welcome.
-
-## The motivation
-
-Working as pentesters, or playing CTFs, or fiddling around with practice labs, we come across the same initial phases of recon and enumeration over and over again. I thought it would be an amazing opportunity to practice my coding skills if I automated the initial tools that I always run. Then, after seeing the first results, I liked what I had done and kept adding on more features, until the Bash script grew up so much that I started thinking: "what if I actually use Go and compile this to a binary? Would I be able to pull it off?"... And, well, I am a sucker for a good challenge if learning is a joyful side effect.
 
 ## Wrapped tools currently present
 
@@ -112,7 +125,7 @@ Working as pentesters, or playing CTFs, or fiddling around with practice labs, w
 - WhatWeb
 - WafW00f
 
-Apart from the above 28 tools, there are many more included in GNU/Linux doing magic tricks behind the scenes!!
+Besides from the above 29 tools, there are many more included in GNU/Linux doing magic tricks behind the scenes!! (And now Golang's own logic too!)
 
 ## Tools yet to implement
 
@@ -135,12 +148,12 @@ AutoEnum:
 Enumeraga:
 
 - [x] Port all of this to Golang
-- [ ] Test thoroughly
+- [ ] Test thoroughly and release v1.0
+- [ ] Improve the way output is presented to terminal
 - [ ] Add a flag to pass vhosts and functionality to use them
 - [ ] Rewrite the enum4linux-ng installing function to avoid installing pip and dependencies as root
 - [ ] Link each wrapped tool on README to their official repos
 - [ ] Containerise
-- [ ] Improve the way output is presented to terminal
 - [ ] Improve README.md to show all protocols the script enumerates
 - [ ] Add MOAR enum tools
 - [ ] Enumerate all things (legally!)

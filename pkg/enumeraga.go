@@ -9,7 +9,7 @@ import (
 
 // Main logic of enumeraga
 func main() {
-	// Timing the execution
+	// Timing the execution	
 	start := time.Now()
 
 	// DEV: Helpful strings for debugging purposes to check how goroutines work
