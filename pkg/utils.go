@@ -111,29 +111,6 @@ func readTargetsFile(filename string) ([]string, int) {
 	return lines, len(lines) - 1
 }
 
-func printPhase(phase int) {
-	if !*optQuiet {
-		fmt.Printf("\n%s%s ", cyan("[*] ---------- "), "Starting Phase")
-		switch phase {
-		case 0:
-			fmt.Printf("%s%s", yellow("0"), ": running initial checks ")
-		case 1:
-			fmt.Printf("%s%s", yellow("1"), ": parsing the CIDR range ")
-		case 2:
-			fmt.Printf("%s%s", yellow("2"), ": sweeping target's ports ")
-		case 22:
-			fmt.Printf("%s%s", yellow("3"), ": running multi-target mode. Looping through the list, one target at a time ")
-		case 3:
-			fmt.Printf("%s%s", yellow("3"), ": parsing found ports ")
-		case 4:
-			fmt.Printf("%s%s", yellow("4"), ": background tools working ")
-		default:
-			errorMsg("Development error. There are currently 5 phases in the script ")
-		}
-		fmt.Printf("%s\n\n", cyan("----------"))
-	}
-}
-
 func customMkdir(name string) {
 	err := os.Mkdir(name, os.ModePerm)
 	if err != nil {
@@ -213,8 +190,11 @@ func finishLine(start time.Time, interrupted bool) {
 		return
 	}
 
-	printPhase(4)
-	printCustomBiColourMsg("cyan", "green", "[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.\n")
+	printCustomBiColourMsg("cyan", "green", "\n[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.")
+	if !*optQuiet { 
+		fmt.Printf("%s%s%s\n\n", cyan("[*] ---------- "), green("Enumeration phase complete"), cyan(" ----------"))
+		fmt.Printf("%s%s%s\n", cyan("[*] ---------- "), green("Program complete. Awaiting tools to finish"), cyan(" ----------")) 
+	}
 }
 
 // Remove duplicate ports from the comma-separated ports string
@@ -267,9 +247,12 @@ func installMissingTools() {
 		"fping",
 		"hydra",
 		"ident-user-enum",
+		"msfconsole",
+		"nbtscan-unixwiz",
 		"nikto",
 		"nmap",
 		"odat",
+		"responder-RunFinger",
 		"rusers",
 		"seclists",
 		"smbclient",

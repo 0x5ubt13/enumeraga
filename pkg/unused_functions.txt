@@ -240,3 +240,26 @@ func isStringInFile(s, filePath string) bool {
 	// Do the check and return bool value
 	return strings.Contains(fileContent, s)
 }
+
+func printPhase(phase int) {
+	if !*optQuiet {
+		fmt.Printf("\n%s%s ", cyan("[*] ---------- "), "Starting Phase")
+		switch phase {
+		case 0:
+			fmt.Printf("%s%s", yellow("0"), ": running initial checks ")
+		case 1:
+			fmt.Printf("%s%s", yellow("1"), ": parsing the CIDR range ")
+		case 2:
+			fmt.Printf("%s%s", yellow("2"), ": sweeping target's ports ")
+		case 22:
+			fmt.Printf("%s%s", yellow("3"), ": running multi-target mode. Looping through the list, one target at a time ")
+		case 3:
+			fmt.Printf("%s%s", yellow("3"), ": parsing found ports ")
+		case 4:
+			fmt.Printf("%s%s", yellow("4"), ": background tools working ")
+		default:
+			errorMsg("Development error. There are currently 5 phases in the script ")
+		}
+		fmt.Printf("%s\n\n", cyan("----------"))
+	}
+}

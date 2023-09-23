@@ -182,6 +182,14 @@ func aptGetInstallCmd(tool string) {
 		tool = "nfs-common"
 	}
 
+	if tool == "msfconsole" {
+		tool = "metasploit-framework"
+	}
+
+	if tool == "responder-RunFinger" {
+		tool = "responder"
+	}
+
 	aptGetInstall := exec.Command("apt", "install", "-y", tool)
 
 	aptGetInstallErr := aptGetInstall.Run()
@@ -358,8 +366,8 @@ func runTool(args []string, filePath string) {
 		// if err != nil {
 		// 	fmt.Println("Error copying output for tool", tool, ":", err)
 		// }
-		if tool == "nikto" {
-			// Nikto doesn't have a clean exit
+		if tool == "nikto" || tool == "fping" {
+			// Nikto and fping don't have a clean exit
 			printCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
 			fmt.Println(yellow("\tShortcut: less -R"), cyan(filePath))
 		} else {
@@ -379,12 +387,14 @@ func runTool(args []string, filePath string) {
 	}
 }
 
+// func 
+
 // Enumerate a whole CIDR range using specific range tools
 func runRangeTools(targetRange string) {
 	// Prep
 
 	// Print Flag detected
-	printCustomBiColourMsg("yellow", "cyan", "[*]", "CIDR Range ", " flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
+	printCustomBiColourMsg("cyan", "yellow", "[*] ", "-r", " flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
 	if *optDbg {
 		fmt.Println("[*] Debug: target CIDR range string -> ", targetRange)
 	}
@@ -424,7 +434,7 @@ func runRangeTools(targetRange string) {
 	// Metasploit scan module for EternalBlue
 	msfEternalBlueArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use scanner/smb/smb_ms17_010;set rhosts %s;set threads 10;run;exit", targetRange)}
 	msfEternalBluePath := fmt.Sprintf("%seternalblue_sweep.txt", cidrDir)
-	eternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, targetRange)
+	callEternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, cidrDir)
 }
 
 // Wee fun module to detect quite low hanging fruit
@@ -469,6 +479,17 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	}
 	
 	printCustomBiColourMsg("green", "cyan", "[+] Positive Match! IPs vulnerable to ", "EternalBlue", " !\n\tShortcut: '", fmt.Sprintf("less -R %s", confirmedFile), "'")
+}
+
+// Goroutine for eternalBlueSweepCheck()
+func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
+	wg.Add(1)
+
+	go func(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
+		defer wg.Done()
+
+		eternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, dir)
+	}(msfEternalBlueArgs, msfEternalBluePath, dir)
 }
 
 // Goroutine for runCewlandFfufKeywords()

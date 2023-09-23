@@ -30,8 +30,13 @@ func main() {
 		printCustomBiColourMsg("yellow", "red", "[!] CIDR range ", "NOT ", "detected. Aborting CIDR enumeration for this run")
 		printCustomBiColourMsg("cyan", "yellow", "[*] Remember you can also pass a range in ", "CIDR notation ", "to use ", "enum tools ", "that scan a wide range with '", "-r", "'")
 	}
-
+	
 	// Main flow:
+	if !*optQuiet { 
+		fmt.Printf("%s%s%s\n\n", cyan("[*] ---------- "), green("Checks phase complete"), cyan(" ----------"))
+		fmt.Printf("%s%s%s\n", cyan("[*] ---------- "), green("Starting enumeration phase"), cyan(" ----------")) 
+	}
+	
 	flowErr := targetInit(totalLines)
 	if flowErr != nil {
 		errorMsg(fmt.Sprintf("%s", flowErr))
@@ -46,13 +51,11 @@ func main() {
 
 // Check whether a target CIDR range has been passed to Enumeraga
 func cidrInit() error {
-	printPhase(1)
 	if *optRange != "" {
-		// Run CIDR range tools
 		runRangeTools(*optRange)
 		return nil
 	}
-
+	
 	return fmt.Errorf("CIDR range target not passed to Enumeraga")
 }
 
@@ -87,7 +90,6 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 	customMkdir(targetPath)
 
 	// Perform ports sweep
-	if !multiTarget && !*optQuiet { printPhase(2) }
 	printCustomBiColourMsg("cyan", "yellow", "[*] Sweeping TCP and UDP ports on target '", target, "'...")
 	if *optDbg { fmt.Println(debug("Debug - Starting TCP ports sweep")) }
 	sweptHostTcp := tcpPortSweep(target)
@@ -153,7 +155,6 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 	}
 
 	// Run ports iterator with the open ports found
-	if !multiTarget && !*optQuiet { printPhase(3) }
 	portsIterator(target, targetPath, openPortsSlice)
 
 	return nil

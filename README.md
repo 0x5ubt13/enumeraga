@@ -110,6 +110,7 @@ Although I will try my best to adhere to coding conventions, I am still learning
 - Nikto
 - Nmap
 - Nmblookup
+- Nbtscan-unixwiz
 - Ldapsearch
 - ODAT
 - Onesixtyone
@@ -125,7 +126,7 @@ Although I will try my best to adhere to coding conventions, I am still learning
 - WhatWeb
 - WafW00f
 
-Besides from the above 29 tools, there are many more included in GNU/Linux doing magic tricks behind the scenes!! (And now Golang's own logic too!)
+Besides from the above 30 tools, there are many more included in GNU/Linux doing magic tricks behind the scenes!! (And now Golang's own logic too!)
 
 ## Tools yet to implement
 

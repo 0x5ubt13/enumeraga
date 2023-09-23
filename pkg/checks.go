@@ -19,7 +19,8 @@ func checks() int {
 	if !*optQuiet {
 		printBanner()
 	}
-	printPhase(0)
+
+	if !*optQuiet { fmt.Printf("\n%s%s%s\n", cyan("[*] ---------- "), green("Starting checks phase"), cyan(" ----------")) }
 
 	if len(os.Args) == 1 {
 		errorMsg("No arguments were provided.")
