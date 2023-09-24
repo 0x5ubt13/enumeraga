@@ -2,7 +2,7 @@
 
 Automatic enumeration tool written in Go that wraps Linux tools, ported from my tool [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a rich tool that leverages all the features of Go.
 
-    demo gif coming soon!!
+![Enumeraga demo gif](./img/enumeraga_demo_gif_v0.1.4-beta.gif)
 
 ## The motivation
 
