@@ -221,7 +221,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			nmapOutputFile = caseDir + "msrpc_scan"
 			callIndividualPortScanner(target, port, nmapOutputFile)
 
-			rpcDumpArgs := []string{"rpcdump", port}
+			rpcDumpArgs := []string{"impacket-rpcdump", port}
 			rpcDumpPath := fmt.Sprintf("%srpcdump.out", caseDir)
 			callRunTool(rpcDumpArgs, rpcDumpPath)
 

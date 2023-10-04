@@ -190,6 +190,10 @@ func aptGetInstallCmd(tool string) {
 		tool = "responder"
 	}
 
+	if tool == "impacket-rpcdump" {
+		tool = "python3-impacket"
+	}
+
 	aptGetInstall := exec.Command("apt", "install", "-y", tool)
 
 	aptGetInstallErr := aptGetInstall.Run()
