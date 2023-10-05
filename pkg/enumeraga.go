@@ -12,12 +12,6 @@ func main() {
 	// Timing the execution
 	start := time.Now()
 
-	// DEV: Helpful strings for debugging purposes to check how goroutines work
-	if *optDbg {
-		fmt.Println(debug("Debug Start of main function"))
-		defer fmt.Println(debug("Debug End of main function"))
-	}
-
 	// Perform pre-flight checks and get number of lines.
 	totalLines := checks()
 	if *optDbg {
@@ -31,16 +25,14 @@ func main() {
 		printCustomBiColourMsg("cyan", "yellow", "[*] Remember you can also pass a range in ", "CIDR notation ", "to use ", "enum tools ", "that scan a wide range with '", "-r", "'")
 	}
 	
-	// Main flow:
 	if !*optQuiet { 
 		fmt.Printf("%s%s%s\n\n", cyan("[*] ---------- "), green("Checks phase complete"), cyan(" ----------"))
 		fmt.Printf("%s%s%s\n", cyan("[*] ---------- "), green("Starting enumeration phase"), cyan(" ----------")) 
 	}
 	
+	// Main flow
 	flowErr := targetInit(totalLines)
-	if flowErr != nil {
-		errorMsg(fmt.Sprintf("%s", flowErr))
-	}
+	if flowErr != nil { errorMsg(fmt.Sprintf("%s", flowErr)) }
 
 	// Finish and show elapsed time
 	finishLine(start, interrupted)
@@ -65,8 +57,13 @@ func targetInit(totalLines int) error {
 	// If bruteforce flag was passed, initialise the wordlists
 	if *optBrute { getWordlists() }
 
-	if totalLines != 0 { multiTarget(optTarget) }
+	// If not single target, initialise multi target flow
+	if totalLines != 0 { 
+		multiTarget(optTarget) 
+		return nil
+	}
 
+	// If made it this far, run single target scan
 	err := singleTarget(*optTarget, *optOutput, false)
 	if err != nil {
 		interrupted = true
@@ -141,7 +138,6 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 
 	// Join our string slice.
 	openPorts := removeDuplicates(strings.Join(openPortsSlice, ","))
-
 
 	if len(openPorts) > 0 {
 		printCustomBiColourMsg("green", "cyan", "[+] Open ports for target '", target, "' : ", openPorts)

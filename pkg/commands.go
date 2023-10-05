@@ -319,15 +319,16 @@ func runTool(args []string, filePath string) {
 	command := strings.Join(cmdArgs, " ")
 	if strings.Contains(command, "80") {
 		printCustomBiColourMsg("yellow", "cyan", "[!] Running '", fmt.Sprintf("%s on port 80", tool), "' and sending it to the background")
-	} else if strings.Contains(command, "443") {
+	
+	if strings.Contains(command, "443") {
 		printCustomBiColourMsg("yellow", "cyan", "[!] Running '", fmt.Sprintf("%s on port 443", tool), "' and sending it to the background")
-	} else {
+	} 
+	
+	if !string.Contains(command, "80") && !strings.Contains(command, "443"){
 		printCustomBiColourMsg("yellow", "cyan", "[!] Running '", tool, "' and sending it to the background")
 	}
 
-	if *optDbg {
-		fmt.Printf("%s%s %s\n", debug("Debug - command to exec: "), tool, command)
-	}
+	if *optDbg { fmt.Printf("%s%s %s\n", debug("Debug - command to exec: "), tool, command) }
 
 	cmd := exec.Command(tool, cmdArgs...)
 
@@ -347,10 +348,7 @@ func runTool(args []string, filePath string) {
     defer file.Close()
 
     // Start the command asynchronously in a goroutine
-    if err := cmd.Start(); err != nil {
-        fmt.Println("Error starting command:", err)
-        // os.Exit(1)
-    }
+    if err := cmd.Start(); err != nil { fmt.Printf("%s%s\n", "Error starting command:", err) }
 
     // This goroutine will capture and write the command's output to a file
     go func() {
@@ -359,13 +357,9 @@ func runTool(args []string, filePath string) {
             if *optDbg { fmt.Println("Error copying output for tool", tool, ":", err) }
         }
     }()
-
+	
 	// Wait for the command to complete (optional)
 	if err := cmd.Wait(); err != nil {
-		// _, err := io.Copy(file, stdout)
-		// if err != nil {
-		// 	fmt.Println("Error copying output for tool", tool, ":", err)
-		// }
 		if tool == "nikto" || tool == "fping" {
 			// Nikto and fping don't have a clean exit
 			printCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
@@ -373,26 +367,26 @@ func runTool(args []string, filePath string) {
 		} else {
 			fmt.Println(red("Command"), tool, red("finished with error:"), red(err))
 		}
-		// os.Exit(1)
-	} else {
-		if strings.Contains(command, "80") {
-			printCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
-		} else if strings.Contains(command, "443") {
-			printCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 443", tool), "' finished successfully")
-		} else {
-			printCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
-		}
-
-		fmt.Println(yellow("\tShortcut: less -R"), cyan(filePath))
 	}
+	
+	if strings.Contains(command, "80") {
+		printCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
+		fmt.Println(yellow("\tShortcut: less -R"), cyan(filePath))
+		return
+	}
+	
+	if strings.Contains(command, "443") {
+		printCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 443", tool), "' finished successfully")
+		fmt.Println(yellow("\tShortcut: less -R"), cyan(filePath))
+		return
+	}
+	
+	printCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
+	fmt.Println(yellow("\tShortcut: less -R"), cyan(filePath))
 }
-
-// func 
 
 // Enumerate a whole CIDR range using specific range tools
 func runRangeTools(targetRange string) {
-	// Prep
-
 	// Print Flag detected
 	printCustomBiColourMsg("cyan", "yellow", "[*] ", "-r", " flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
 	if *optDbg {
@@ -409,29 +403,27 @@ func runRangeTools(targetRange string) {
 	// Get wordlists for the range
 	getWordlists()
 
-	// Run range tools
-
-	// nbtscan-unixwiz
+	// run nbtscan-unixwiz
 	nbtscanArgs := []string{"nbtscan-unixwiz", "-f", targetRange}
 	nbtscanPath := fmt.Sprintf("%snbtscan-unixwiz.out", cidrDir)
 	callRunTool(nbtscanArgs, nbtscanPath)
 
-	// Responder-RunFinger
+	// run Responder-RunFinger
 	responderArgs := []string{"responder-RunFinger", "-i", targetRange}
 	responderPath := fmt.Sprintf("%srunfinger.out", cidrDir)
 	callRunTool(responderArgs, responderPath)
 
-	// OneSixtyOne
+	// run OneSixtyOne
 	oneSixtyOneArgs := []string{"onesixtyone", "-c", usersList, targetRange, "-w", "100"}
 	oneSixtyOnePath := fmt.Sprintf("%sonesixtyone.out", cidrDir)
 	callRunTool(oneSixtyOneArgs, oneSixtyOnePath)
 
-	// fping
+	// run fping
 	fpingArgs := []string{"fping", "-asgq", targetRange}
 	fpingPath := fmt.Sprintf("%sfping.out", cidrDir)
 	callRunTool(fpingArgs, fpingPath)
 
-	// Metasploit scan module for EternalBlue
+	// run Metasploit scan module for EternalBlue
 	msfEternalBlueArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use scanner/smb/smb_ms17_010;set rhosts %s;set threads 10;run;exit", targetRange)}
 	msfEternalBluePath := fmt.Sprintf("%seternalblue_sweep.txt", cidrDir)
 	callEternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, cidrDir)

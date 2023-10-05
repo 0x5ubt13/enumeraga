@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 
-	// zglob "github.com/mattn/go-zglob"
 	getopt "github.com/pborman/getopt/v2"
 )
 
@@ -30,17 +29,13 @@ func checks() int {
 	}
 
 	// Check 1: optional arguments passed fine?
-	// Get the remaining positional parameters
-	// args := getopt.Args()
 	if *optDbg {
 		fmt.Println(debug("--- Debug ---"))
-		// fmt.Printf("Again: %t\n", *optAgain)
 		fmt.Printf("%s%t\n", debug("Brute: "), *optBrute)
-		// fmt.Printf("DNS: %s\n", *optDNS)
 		fmt.Printf("%s%t\n", debug("Help: "), *optHelp)
 		fmt.Printf("%s%t\n", debug("Install: "), *optInstall)
 		fmt.Printf("%s%s\n", debug("Output: "), *optOutput)
-		// fmt.Printf("Top ports: %s\n", *optTopPorts)
+		// fmt.Printf("Top ports: %s\n", *optTopPorts) // TODO
 		fmt.Printf("%s%t\n", debug("Quiet: "), *optQuiet)
 		fmt.Printf("%s%s\n", debug("Range:"), *optRange)
 		fmt.Printf("%s%s\n", debug("Target: "), *optTarget)
@@ -84,40 +79,31 @@ func checks() int {
 	}
 
 	// Check 7: Determine whether it is a single target or multi-target
-	var totalLines int
 	targetInput := net.ParseIP(*optTarget)
 	if *optDbg {
 		fmt.Printf("%s%s\n", debug("Debug: targetInput = "), targetInput.To4())
 	}
+
 	if targetInput.To4() == nil {
 		// Multi-target
 		// Check file exists and get lines
-		_, totalLines = readTargetsFile(*optTarget)
-	} else {
-		totalLines = 0
+		_, totalLines := readTargetsFile(*optTarget)
+		return totalLines
 	}
-
+	
 	// End of checks
-	return totalLines
+	return 0
 }
 
+// Check tool exists with exec.LookPath (equivalent to `which <tool>`)
 func checkToolExists(tool string) bool {
-	// Add more tool checks as required
-
-	// Check with exec.LookPath
 	_, lookPatherr := exec.LookPath(tool)
-	if lookPatherr == nil {
-		if *optDbg {
-			fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed"))
-		}
-		return true
-	} else {
-		if *optDbg {
-			fmt.Println(debug("Debug - Error: ", lookPatherr.Error()))
-		}
+	if lookPatherr != nil {
+		if *optDbg { fmt.Println(debug("Debug - Error: ", lookPatherr.Error())) }
+		return false 
 	}
+	
+	if *optDbg { fmt.Printf("%s%s%s\n", green("Debug - '"), green(tool), green("' is installed")) }
 
-	return false
+	return true
 }
-
-
