@@ -247,6 +247,7 @@ func installMissingTools() {
 		"fping",
 		"hydra",
 		"ident-user-enum",
+		"impacket-rpcdump",
 		"msfconsole",
 		"nbtscan-unixwiz",
 		"nikto",
