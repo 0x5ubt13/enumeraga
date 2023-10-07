@@ -1,6 +1,6 @@
 # Enumeraga
 
-Automatic enumeration tool written in Go that wraps Linux tools, ported from my tool [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a rich tool that leverages all the features of Go.
+Automatic enumeration Golang tool that wraps Linux pentesting tools, ported from [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a richer tool that leverages the nice features Go has to offer. Executable binary only 3MB in size! :eyes: 
 
 ![Enumeraga demo gif](./img/enumeraga_demo_gif_v0.1.4-beta.gif)
 
@@ -12,10 +12,9 @@ Working as pentesters, or playing CTFs, or fiddling around with practice labs, w
 
 ![Enumeraga flow chart](./img/enumeraga_flow_chart.png)
 
-
 ## Usage
 
-Give it either a single IP address or a file containing a list of IPs, a name to use for the output files, sit back, and relax while it enumerates all open ports for you:
+Give Enumeraga either a single IP address or a file containing a list of IPs. Sit back, relax, and laugh maniacally while it handles all enumeration for you, going through every open port on your target on your behalf:
 
     ┌──(root㉿SubtleLabs)-[~]
     └─# enumeraga -h
@@ -63,7 +62,7 @@ This program has been developed in a Kali distro on WSL, so for maximum compatib
 What? You'd like to have a fancy, no-brainer one-liner to try it quick? You've got it! This will download `enumeraga`, put it on `/opt/enumeraga`, make it executable, create a soft link on your path and finally call it with help flag:
 
 ~~~sh
-sudo mkdir /opt/enumeraga; sudo curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.4-beta/enumeraga_v0.1.4-beta -o /opt/enumeraga/enumeraga; sudo chmod +x /opt/enumeraga/enumeraga; sudo ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
+sudo mkdir /opt/enumeraga; sudo curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.5-beta/enumeraga_v0.1.4-beta -o /opt/enumeraga/enumeraga; sudo chmod +x /opt/enumeraga/enumeraga; sudo ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
 ~~~
 
 ### Containerised version

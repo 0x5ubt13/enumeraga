@@ -323,12 +323,13 @@ func runTool(args []string, filePath string) {
 	command := strings.Join(cmdArgs, " ")
 	if strings.Contains(command, "80") {
 		printCustomBiColourMsg("yellow", "cyan", "[!] Running '", fmt.Sprintf("%s on port 80", tool), "' and sending it to the background")
-	
+	}
+
 	if strings.Contains(command, "443") {
 		printCustomBiColourMsg("yellow", "cyan", "[!] Running '", fmt.Sprintf("%s on port 443", tool), "' and sending it to the background")
 	} 
 	
-	if !string.Contains(command, "80") && !strings.Contains(command, "443"){
+	if !strings.Contains(command, "80") && !strings.Contains(command, "443"){
 		printCustomBiColourMsg("yellow", "cyan", "[!] Running '", tool, "' and sending it to the background")
 	}
 
