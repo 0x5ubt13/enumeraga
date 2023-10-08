@@ -1,4 +1,4 @@
-module github.com/0x5ubt13/enumeraga
+module github.com/enumeraga
 
 go 1.21.1
 

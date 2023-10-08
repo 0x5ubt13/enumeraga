@@ -1,17 +1,18 @@
-package main
+package scans
 
 import (
 	"context"
 	"fmt"
 	"log"
-	// "os"
 	"time"
 
+	"github.com/0x5ubt13/enumeraga/internal/flags"
+	"github.com/0x5ubt13/enumeraga/internal/utils"
 	nmap "github.com/Ullaakut/nmap/v3"
 )
 
 // Run a quick port sweep on TCP
-func tcpPortSweep(target string) []nmap.Host {
+func TcpPortSweep(target string) []nmap.Host {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
@@ -30,7 +31,9 @@ func tcpPortSweep(target string) []nmap.Host {
 
 	result, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *optDbg { fmt.Printf("run finished with warnings: %s\n", *warnings) } // Warnings are non-critical errors from nmap.
+		if *flags.OptDbg {
+			fmt.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
 	}
 	if err != nil {
 		log.Fatalf("unable to run nmap scan: %v", err)
@@ -40,7 +43,7 @@ func tcpPortSweep(target string) []nmap.Host {
 }
 
 // Run a quick port sweep on UDP
-func udpPortSweep(target string) []nmap.Host {
+func UdpPortSweep(target string) []nmap.Host {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
@@ -60,7 +63,9 @@ func udpPortSweep(target string) []nmap.Host {
 
 	result, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *optDbg { log.Printf("run finished with warnings: %s\n", *warnings) } // Warnings are non-critical errors from nmap.
+		if *flags.OptDbg {
+			log.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
 	}
 	if err != nil {
 		log.Fatalf("unable to run nmap scan udpPortSweep: %v", err)
@@ -69,9 +74,9 @@ func udpPortSweep(target string) []nmap.Host {
 	return result.Hosts
 }
 
-// Scan used in portsIterator.go for each open port identified
-func individualPortScannerWithNSEScripts(target, port, outFile, scripts string) {
-	printCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
+// Run an Nmap scan with NSE scripts
+func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) {
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
 
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
@@ -105,8 +110,10 @@ func individualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 		for {
 			select {
 			case t := <-ticker.C:
-				printCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan with NSE Scripts still running against port(s) '", port, "' on target '", target, "'. Please wait...")
-				if *optDbg { fmt.Println(debug(t)) }
+				utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan with NSE Scripts still running against port(s) '", port, "' on target '", target, "'. Please wait...")
+				if *flags.OptDbg {
+					fmt.Println(utils.Debug(t))
+				}
 			case <-done:
 				return
 			}
@@ -115,7 +122,9 @@ func individualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 
 	_, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *optDbg { log.Printf("run finished with warnings: %s\n", *warnings) } // Warnings are non-critical errors from nmap.
+		if *flags.OptDbg {
+			log.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
 	}
 	if err != nil {
 		log.Printf("unable to run nmap scan individualPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err)
@@ -124,13 +133,14 @@ func individualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 	ticker.Stop()
 	done <- true
 
-	printCustomBiColourMsg("green", "cyan", "[+] Done! nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(yellow("\tShortcut: less -R"), cyan(oN))
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
+	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(oN))
 }
 
-func individualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string) {
-	printCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
-	
+// Run an Nmap scan with NSE scripts and NSE script arguments 
+func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string) {
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
+
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
 
@@ -164,8 +174,10 @@ func individualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 		for {
 			select {
 			case t := <-ticker.C:
-				printCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan with NSE scripts and args still running against port(s) '", port, "' on target '", target, "'. Please wait...")
-				if *optDbg { fmt.Println(debug(t)) }
+				utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan with NSE scripts and args still running against port(s) '", port, "' on target '", target, "'. Please wait...")
+				if *flags.OptDbg {
+					fmt.Println(utils.Debug(t))
+				}
 			case <-done:
 				return
 			}
@@ -174,7 +186,9 @@ func individualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 
 	_, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *optDbg { log.Printf("run finished with warnings: %s\n", *warnings) } // Warnings are non-critical errors from nmap.
+		if *flags.OptDbg {
+			log.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
 	}
 	if err != nil {
 		log.Printf("unable to run nmap scan individualPortScannerWithNSEScriptsAndScriptArgs: %s %s %s %v", target, port, outFile, err)
@@ -183,12 +197,13 @@ func individualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 	ticker.Stop()
 	done <- true
 
-	printCustomBiColourMsg("green", "cyan", "[+] Done! nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(yellow("\tShortcut: less -R"), cyan(oN))
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
+	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(oN))
 }
 
-func individualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string) {
-	printCustomBiColourMsg("yellow", "cyan", "[!] Starting UDP scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
+// Run an UDP Nmap scan with NSE scripts
+func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string) {
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting UDP scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
 
@@ -222,8 +237,10 @@ func individualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 		for {
 			select {
 			case t := <-ticker.C:
-				printCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan on UDP with NSE scripts still running against port(s) '", port, "' on target '", target, "'. Please wait...")
-				if *optDbg { fmt.Println(debug(t)) }
+				utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan on UDP with NSE scripts still running against port(s) '", port, "' on target '", target, "'. Please wait...")
+				if *flags.OptDbg {
+					fmt.Println(utils.Debug(t))
+				}
 			case <-done:
 				return
 			}
@@ -232,7 +249,9 @@ func individualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 
 	_, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *optDbg { log.Printf("run finished with warnings: %s\n", *warnings) } // Warnings are non-critical errors from nmap.
+		if *flags.OptDbg {
+			log.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
 	}
 	if err != nil {
 		log.Printf("unable to run nmap scan individualUDPPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err)
@@ -241,12 +260,13 @@ func individualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 	ticker.Stop()
 	done <- true
 
-	printCustomBiColourMsg("green", "cyan", "[+] Done! UDP scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(yellow("\tShortcut: less"), cyan(oN))
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! UDP scan against port(s) '", port, "' on target '", target, "' finished successfully")
+	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(oN))
 }
 
-func individualPortScanner(target, port, outFile string) {
-	printCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
+// Run a simple Nmap scan
+func IndividualPortScanner(target, port, outFile string) {
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
 
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
@@ -271,16 +291,25 @@ func individualPortScanner(target, port, outFile string) {
 	if err != nil {
 		log.Fatalf("unable to create nmap scanner individualPortScanner: %s %s %s %v", target, port, outFile, err)
 	}
-	
-	ticker := time.NewTicker(2 * time.Minute)
+
+	lapsed := 0
+	ticker := time.NewTicker(1 * time.Minute)
 	done := make(chan bool)
 
 	go func() {
 		for {
 			select {
 			case t := <-ticker.C:
-				printCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan still running against port(s) '", port, "' on target '", target, "'. Please wait...")
-				if *optDbg { fmt.Println(debug(t)) }
+				lapsed++
+				utils.PrintCustomBiColourMsg(
+					"cyan", "yellow", 
+					"[*] Individual protocol nmap scan still running against port(s) '", port, 
+					"' on target '", target, 
+					"'. Time lapsed: '", string(lapsed), "' minutes. Please wait...")
+
+				if *flags.OptDbg {
+					fmt.Println(utils.Debug(t))
+				}
 			case <-done:
 				return
 			}
@@ -289,24 +318,24 @@ func individualPortScanner(target, port, outFile string) {
 
 	_, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *optDbg { log.Printf("run finished with warnings: %s\n", *warnings) } // Warnings are non-critical errors from nmap.
+		if *flags.OptDbg {
+			log.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
 	}
 	if err != nil {
 		log.Printf("unable to run nmap scan individualPortScanner: %s %s %s %v", target, port, outFile, err)
 	}
-	
+
 	ticker.Stop()
 	done <- true
 
-	printCustomBiColourMsg("green", "cyan", "[+] Done! Nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(yellow("\tShortcut: less"), cyan(oN))
-
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! Nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
+	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(oN))
 }
 
-// Run main aggressive scan for the target
-// Since this scan might be massive, 
-func fullAggressiveScan(target, ports, outFile string) {
-	printCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against '", target, "' and sending it to the background")
+// Run main aggressive scan for all open ports on the target
+func FullAggressiveScan(target, ports, outFile string) {
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against '", target, "' and sending it to the background")
 
 	oN := outFile + ".nmap"
 	oG := outFile + ".grep"
@@ -333,15 +362,21 @@ func fullAggressiveScan(target, ports, outFile string) {
 		log.Fatalf("unable to create nmap scanner fullAggressiveScan: %v", err)
 	}
 
-	ticker := time.NewTicker(2 * time.Minute)
+	lapsed := 0
+	ticker := time.NewTicker(1 * time.Minute)
 	done := make(chan bool)
 
 	go func() {
 		for {
 			select {
 			case t := <-ticker.C:
-				printCustomBiColourMsg("cyan", "yellow", "[*] Main nmap scan still running against all open ports on target '", target, "'")
-				if *optDbg { fmt.Println(debug(t)) }
+				lapsed++
+				utils.PrintCustomBiColourMsg(
+					"cyan", "yellow", 
+					"[*] Main nmap scan still running against all open ports on target '", target, 
+					"'. Time lapsed: '", string(lapsed), "' minutes. Please wait...")
+
+				if *flags.OptDbg { fmt.Println(utils.Debug(t)) }
 			case <-done:
 				return
 			}
@@ -350,7 +385,9 @@ func fullAggressiveScan(target, ports, outFile string) {
 
 	_, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *optDbg { log.Printf("run finished with warnings: %s\n", *warnings) } // Warnings are non-critical errors from nmap.
+		if *flags.OptDbg {
+			log.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
 	}
 
 	if err != nil {
@@ -360,6 +397,6 @@ func fullAggressiveScan(target, ports, outFile string) {
 	ticker.Stop()
 	done <- true
 
-	printCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggresive nmap", " against target '", target, "' finished successfully")
-	fmt.Println(yellow("\tShortcut: less"), cyan(oN))
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggresive nmap", " against target '", target, "' finished successfully")
+	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(oN))
 }

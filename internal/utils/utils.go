@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"bufio"
@@ -10,71 +10,66 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0x5ubt13/enumeraga/internal/flags"
 	"github.com/fatih/color"
 	zglob "github.com/mattn/go-zglob"
-	getopt "github.com/pborman/getopt/v2"
 )
 
+// Declare global variables available throughout Enumeraga
 var (
-	// Declare colour vars
-	yellow = color.New(color.FgYellow).SprintFunc()
-	red    = color.New(color.FgRed).SprintFunc()
-	green  = color.New(color.FgHiGreen).SprintFunc()
-	cyan   = color.New(color.FgCyan).SprintFunc()
-	debug  = color.New(color.FgMagenta).SprintFunc()
+	// Print a message in yellow colour
+	Yellow = color.New(color.FgYellow).SprintFunc()
 
-	// Declare flags and have getopt return pointers to the values.
-	// DEV: initialising vars only once they have been implemented/ported in the code
-	// optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
-	optBrute	= getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
-	// var optDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
-	optDbg		= getopt.BoolLong("Debug", 'D', "Activate debug text")
-	optHelp		= getopt.BoolLong("help", 'h', "Display this help and exit.")
-	optInstall	= getopt.BoolLong("install", 'i', "Only try to install requisites and exit.")
-	optOutput	= getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
-	// optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
-	// DEV: For ^^^, use nmap.WithMostCommonPorts()
-	optQuiet	= getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
-	optRange	= getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets")
-	optTarget	= getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
-	optVVervose	= getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
+	// Print a message in red colour
+	Red = color.New(color.FgRed).SprintFunc()
+
+	// Print a message in green colour
+	Green = color.New(color.FgHiGreen).SprintFunc()
+
+	// Print a message in cyan colour
+	Cyan = color.New(color.FgCyan).SprintFunc()
+
+	// Print a message in magenta colour
+	Debug = color.New(color.FgMagenta).SprintFunc()
 
 	// Declare wordlists global vars
 	dirListMedium, darkwebTop1000, extensionsList, usersList, snmpList string
 
 	// Declare globals updated and wordlistsLocated, as these may consume a lot of time and aren't needed more than once
 	updated, wordlistsLocated bool
-	
-	// Interrupted global, to show user different info if single IP target was unsuccessful
-	interrupted bool
 
-	// Sync: Define a mutex to synchronize access to standard output and a waitgroup to generate goroutines
+	// Interrupted global, to show user different info if single IP target was unsuccessful
+	Interrupted bool
+
+	// Sync: Define a mutex to synchronize access to standard output
 	outputMutex sync.Mutex
-	wg sync.WaitGroup
+
+	// Sync: Define a waitgroup to generate goroutines
+	Wg          sync.WaitGroup
 )
 
-func printBanner() {
-	fmt.Printf("\n%s%s%s\n", yellow(" __________                                    ________"), cyan("________"), yellow("______ "))
-	fmt.Printf("%s%s%s\n", yellow(" ___  ____/__________  ________ __________________    |"), cyan("_  ____/"), yellow("__    |"))
-	fmt.Printf("%s%s%s\n", yellow(" __  __/  __  __ \\  / / /_  __ `__ \\  _ \\_  ___/_  /| |"), cyan("  / __ "), yellow("__  /| |"))
-	fmt.Printf("%s%s%s\n", yellow(" _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ "), cyan("/ /_/ / "), yellow("_  ___ |"))
-	fmt.Printf("%s%s%s\n", yellow(" /_____/  /_/ /_/\\__,_/ /_/ /_/ /_/\\___//_/    /_/  |_"), cyan("\\____/  "), yellow("/_/  |_|"))
-	fmt.Printf("%s\n\n", green("                            by 0x5ubt13"))
+func PrintBanner() {
+	fmt.Printf("\n%s%s%s\n", Yellow(" __________                                    ________"), Cyan("________"), Yellow("______ "))
+	fmt.Printf("%s%s%s\n", Yellow(" ___  ____/__________  ________ __________________    |"), Cyan("_  ____/"), Yellow("__    |"))
+	fmt.Printf("%s%s%s\n", Yellow(" __  __/  __  __ \\  / / /_  __ `__ \\  _ \\_  ___/_  /| |"), Cyan("  / __ "), Yellow("__  /| |"))
+	fmt.Printf("%s%s%s\n", Yellow(" _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ "), Cyan("/ /_/ / "), Yellow("_  ___ |"))
+	fmt.Printf("%s%s%s\n", Yellow(" /_____/  /_/ /_/\\__,_/ /_/ /_/ /_/\\___//_/    /_/  |_"), Cyan("\\____/  "), Yellow("/_/  |_|"))
+	fmt.Printf("%s\n\n", Green("                            by 0x5ubt13"))
 }
 
-func printUsageExamples() {
+func PrintUsageExamples() {
 	e := color.WhiteString("enumeraga")
 
 	// Print "examples" in white
 	fmt.Printf("\nExamples:\n ")
-	printCustomBiColourMsg(
+	PrintCustomBiColourMsg(
 		"cyan", "yellow",
-		e, " -i\n ", 
+		e, " -i\n ",
 		e, " -bq -t ", "10.10.11.230", "\n ",
 		e, " -V -r ", "10.129.121.0/24", " -t ", "10.129.121.60", "\n ",
 		e, " -t ", "targets_file.txt", " -r ", "10.10.8.0/24",
 	)
-	}
+}
 
 // Check if OS is debian-like
 func isCompatibleDistro() error {
@@ -87,7 +82,7 @@ func isCompatibleDistro() error {
 
 	compatibleDistro := strings.Contains(strings.ToLower(string(output)), "debian")
 	if !compatibleDistro {
-		errorMsg("This system is not running a Debian-like distribution. Please install the tools manually.")
+		ErrorMsg("This system is not running a Debian-like distribution. Please install the tools manually.")
 		return fmt.Errorf("not compatible distro")
 	}
 
@@ -95,13 +90,13 @@ func isCompatibleDistro() error {
 }
 
 // Custom error message printed out to terminal
-func errorMsg(errMsg string) {
-	fmt.Printf("%s %s\n", red("[-] Error detected:"), errMsg)
+func ErrorMsg(errMsg string) {
+	fmt.Printf("%s %s\n", Red("[-] Error detected:"), errMsg)
 }
 
-func readTargetsFile(filename string) ([]string, int) {
+func ReadTargetsFile(filename string) ([]string, int) {
 	// fetching the file
-	data, err := os.ReadFile(*optTarget)
+	data, err := os.ReadFile(*flags.OptTarget)
 	if err != nil {
 		panic(err)
 	}
@@ -111,29 +106,29 @@ func readTargetsFile(filename string) ([]string, int) {
 	return lines, len(lines) - 1
 }
 
-func customMkdir(name string) {
+func CustomMkdir(name string) {
 	err := os.Mkdir(name, os.ModePerm)
 	if err != nil {
-		if *optVVervose {
-			fmt.Println(red("[-] Error:"), red(err))
+		if *flags.OptVVervose {
+			fmt.Println(Red("[-] Error:"), Red(err))
 		}
 	} else {
-		if *optVVervose {
-			printCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
+		if *flags.OptVVervose {
+			PrintCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
 		}
 	}
 }
 
 // Announce protocol, create base dir and return its name
 func protocolDetected(protocol, baseDir string) string {
-	if !*optQuiet {
-		printCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
+	if !*flags.OptQuiet {
+		PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
 	}
 	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
-	if *optDbg {
-		fmt.Printf("%s\n", cyan("[*] Debug: protocolDir ->", protocolDir))
+	if *flags.OptDbg {
+		fmt.Printf("%s\n", Cyan("[*] Debug: protocolDir ->", protocolDir))
 	}
-	customMkdir(protocolDir)
+	CustomMkdir(protocolDir)
 	return protocolDir
 }
 
@@ -152,7 +147,7 @@ func writeTextToFile(filePath string, message string) {
 }
 
 // Write bytes output to file
-func writePortsToFile(filePath string, ports string, host string) string {
+func WritePortsToFile(filePath string, ports string, host string) string {
 	// Open file
 	fileName := fmt.Sprintf("%sopen_ports.txt", filePath)
 	f, err := os.Create(fileName)
@@ -165,13 +160,13 @@ func writePortsToFile(filePath string, ports string, host string) string {
 	if err2 != nil {
 		log.Fatal(err2)
 	}
-	printCustomBiColourMsg("green", "yellow", "[+] Successfully written open ports for host '", host, "' to file '", fileName, "'")
+	PrintCustomBiColourMsg("green", "yellow", "[+] Successfully written open ports for host '", host, "' to file '", fileName, "'")
 
 	return ports
 }
 
 // Finish the main flow with time tracker and a couple nice messages to the terminal
-func finishLine(start time.Time, interrupted bool) {
+func FinishLine(start time.Time, interrupted bool) {
 	elapsed := time.Since(start)
 	var output string
 
@@ -179,26 +174,26 @@ func finishLine(start time.Time, interrupted bool) {
 		// Convert duration to float of Milliseconds
 		ms := float64(elapsed.Nanoseconds()) / 1e6
 		output = fmt.Sprintf("%.2fms", ms)
-	} else {	
+	} else {
 		// Convert duration to float of Seconds
 		s := elapsed.Seconds()
 		output = fmt.Sprintf("%.2fs", s)
 	}
 
 	if interrupted {
-		printCustomBiColourMsg("cyan", "green", "\n[*] Done! It only took '", output, "' to run ", "Enumeraga", "'s core functionality, although an error was detected.\n\tPlease check your arguments, program's output or connectivity and try again.\n")
+		PrintCustomBiColourMsg("cyan", "green", "\n[*] Done! It only took '", output, "' to run ", "Enumeraga", "'s core functionality, although an error was detected.\n\tPlease check your arguments, program's output or connectivity and try again.\n")
 		return
 	}
 
-	printCustomBiColourMsg("cyan", "green", "\n[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.")
-	if !*optQuiet { 
-		fmt.Printf("%s%s%s\n\n", cyan("[*] ---------- "), green("Enumeration phase complete"), cyan(" ----------"))
-		fmt.Printf("%s%s%s\n", cyan("[*] ---------- "), green("Program complete. Awaiting tools to finish"), cyan(" ----------")) 
+	PrintCustomBiColourMsg("cyan", "green", "\n[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.")
+	if !*flags.OptQuiet {
+		fmt.Printf("%s%s%s\n\n", Cyan("[*] ---------- "), Green("Enumeration phase complete"), Cyan(" ----------"))
+		fmt.Printf("%s%s%s\n", Cyan("[*] ---------- "), Green("Program complete. Awaiting tools to finish"), Cyan(" ----------"))
 	}
 }
 
 // Remove duplicate ports from the comma-separated ports string
-func removeDuplicates(s string) string {
+func RemoveDuplicates(s string) string {
 	parts := strings.Split(s, ",")
 	seen := make(map[string]bool)
 	result := []string{}
@@ -215,9 +210,9 @@ func removeDuplicates(s string) string {
 
 func consent(tool string) rune {
 	// Ask for user consent
-	printCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be installed")
+	PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be installed")
 
-	printCustomBiColourMsg("yellow", "cyan", "Do you want to install '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
+	PrintCustomBiColourMsg("yellow", "cyan", "Do you want to install '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
 
 	consent := bufio.NewScanner(os.Stdin)
 	consent.Scan()
@@ -237,7 +232,7 @@ func consent(tool string) rune {
 	return 'n'
 }
 
-func installMissingTools() {
+func InstallMissingTools() {
 	keyTools := []string{
 		"cewl",
 		"enum4linux-ng",
@@ -306,21 +301,23 @@ func installMissingTools() {
 }
 
 func printInstallingTool(tool string) {
-	fmt.Printf("%s %s%s ", yellow("[!] Installing"), cyan(tool), yellow("..."))
+	fmt.Printf("%s %s%s ", Yellow("[!] Installing"), Cyan(tool), Yellow("..."))
 }
 
 func printConsentNotGiven(tool string) {
 	fmt.Printf(
 		"%s\n%s %s %s\n",
-		red("[-] Consent not given."),
-		red("[-] Please install"),
-		cyan(tool),
-		red("manually. Aborting..."),
+		Red("[-] Consent not given."),
+		Red("[-] Please install"),
+		Cyan(tool),
+		Red("manually. Aborting..."),
 	)
 }
 
-func getWordlists() {
-	if wordlistsLocated { return } 
+func GetWordlists() {
+	if wordlistsLocated {
+		return
+	}
 	wordlistsLocated = true
 
 	// Locate the "raft-medium-directories-lowercase" file
@@ -358,7 +355,7 @@ func getWordlists() {
 	}
 	snmpList := snmpListSlice[0]
 
-	if *optDbg {
+	if *flags.OptDbg {
 		fmt.Println("Located Files:")
 		fmt.Printf("dir_list_medium: %v\n", dirListMedium)
 		fmt.Printf("darkweb_top1000: %v\n", darkwebTop1000)
@@ -369,8 +366,8 @@ func getWordlists() {
 }
 
 // Loop over the necessary colours, printing one at a time
-func printCustomBiColourMsg(dominantColour, secondaryColour string, text ...string) {
-	// Lock the mutex to ensure exclusive access to standard output, 
+func PrintCustomBiColourMsg(dominantColour, secondaryColour string, text ...string) {
+	// Lock the mutex to ensure exclusive access to standard output,
 	// avoiding printing different lines of output to console
 	outputMutex.Lock()
 	defer outputMutex.Unlock()
@@ -379,26 +376,26 @@ func printCustomBiColourMsg(dominantColour, secondaryColour string, text ...stri
 		if i%2 == 0 || i == 0 {
 			switch dominantColour {
 			case "green":
-				fmt.Printf("%s", green(str))
+				fmt.Printf("%s", Green(str))
 			case "yellow":
-				fmt.Printf("%s", yellow(str))
+				fmt.Printf("%s", Yellow(str))
 			case "red":
-				fmt.Printf("%s", red(str))
+				fmt.Printf("%s", Red(str))
 			case "cyan":
-				fmt.Printf("%s", cyan(str))
+				fmt.Printf("%s", Cyan(str))
 			}
 			continue
 		}
 
 		switch secondaryColour {
 		case "green":
-			fmt.Printf("%s", green(str))
+			fmt.Printf("%s", Green(str))
 		case "yellow":
-			fmt.Printf("%s", yellow(str))
+			fmt.Printf("%s", Yellow(str))
 		case "red":
-			fmt.Printf("%s", red(str))
+			fmt.Printf("%s", Red(str))
 		case "cyan":
-			fmt.Printf("%s", cyan(str))
+			fmt.Printf("%s", Cyan(str))
 		}
 	}
 

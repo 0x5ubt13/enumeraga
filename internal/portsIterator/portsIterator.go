@@ -1,37 +1,40 @@
-package main
+package portsIterator
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/0x5ubt13/enumeraga/internal/flags"
+	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
 // Core functionality of the script
 // Iterate through each port and automate launching tools
-func portsIterator(target string, baseDir string, openPortsSlice []string) {
-	if *optDbg {
-		fmt.Println(debug("Debug Start of portsIterator function"))
-		defer fmt.Println(debug("Debug End of portsIterator function"))
+func Run(target string, baseDir string, openPortsSlice []string) {
+	if *flags.OptDbg {
+		fmt.Println(utils.Debug("Debug Start of portsIterator function"))
+		defer fmt.Println(utils.Debug("Debug End of portsIterator function"))
 	}
 
 	var (
 		msfArgs, hydraArgs []string
-		caseDir, filePath, message, nmapOutputFile, 
+		caseDir, filePath, message, nmapOutputFile,
 		nmapNSEScripts, hydraPath, msfPath string
-		visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP, 
+		visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP,
 		visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
 	)
 
 	// DEV: Debugging purposes
-	if *optDbg {
-		fmt.Printf("%s %s\n", debug("Debug: baseDir: "), baseDir)
+	if *flags.OptDbg {
+		fmt.Printf("%s %s\n", utils.Debug("Debug: baseDir: "), baseDir)
 	}
 
 	// Bruteforce flag?
-	if *optBrute {
-		if !*optQuiet {
+	if *flags.OptBrute {
+		if !*flags.OptQuiet {
 			fmt.Printf("%s\n",
-				cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforcing tools where applicable."))
-			getWordlists()
+				utils.Cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforcing tools where applicable."))
+			utils.GetWordlists()
 		}
 	}
 
@@ -39,7 +42,9 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 	for _, port := range openPortsSlice {
 		switch port {
 		case "20", "21":
-			if visitedFTP { continue }
+			if visitedFTP {
+				continue
+			}
 			visitedFTP = true
 
 			caseDir = protocolDetected("FTP", baseDir)
@@ -48,8 +53,8 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callIndividualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
 
 			// Hydra for FTP
-			if *optBrute {
-				hydraArgs = []string{"hydra","-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ftp", target)}
+			if *flags.OptBrute {
+				hydraArgs = []string{"hydra", "-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ftp", target)}
 				hydraPath = fmt.Sprintf("%shydra_ftp.out", caseDir)
 				callRunTool(hydraArgs, hydraPath)
 			}
@@ -61,14 +66,16 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 			// Hydra for SSH
-			if *optBrute {
-				hydraArgs = []string{"hydra","-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ssh", target)}
+			if *flags.OptBrute {
+				hydraArgs = []string{"hydra", "-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ssh", target)}
 				hydraPath = fmt.Sprintf("%shydra_ssh.out", caseDir)
 				callRunTool(hydraArgs, hydraPath)
 			}
 
 		case "25", "465", "587":
-			if visitedSMTP { continue }
+			if visitedSMTP {
+				continue
+			}
 			visitedSMTP = true
 
 			caseDir = protocolDetected("SMTP", baseDir)
@@ -85,7 +92,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 		case "79":
 			caseDir = protocolDetected("Finger", baseDir)
 			nmapOutputFile = caseDir + "finger_scan"
-			callIndividualPortScanner(target, port, nmapOutputFile)
+			callscans.IndividualPortScanner(target, port, nmapOutputFile)
 
 			msfArgs = []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", target)}
 			msfPath = fmt.Sprintf("%smsfconsole.out", caseDir)
@@ -99,15 +106,15 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 			caseDir = protocolDetected("HTTP", baseDir)
 			nmapOutputFile = caseDir + "http_scan"
-			callIndividualPortScanner(target, "80,443,8080", nmapOutputFile)
+			callscans.IndividualPortScanner(target, "80,443,8080", nmapOutputFile)
 
 			// Port 80:
 
 			// WordPress on port 80
-			wpEnumeration(fmt.Sprintf("https://%s:80", target), caseDir, "80")
+			commands.WPEnumeration(fmt.Sprintf("https://%s:80", target), caseDir, "80")
 
 			// Nikto on port 80
-			nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", target),}
+			nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", target)}
 			nikto80Path := fmt.Sprintf("%snikto_80.out", caseDir)
 			callRunTool(nikto80Args, nikto80Path)
 
@@ -122,11 +129,11 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callRunTool(whatWeb80Args, whatWeb80Path)
 
 			// Dirsearch - Light dirbusting on port 80
-			dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s", target) }
+			dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s", target)}
 			dirsearch80Path := fmt.Sprintf("%sdirsearch_80.out", caseDir)
 			callRunTool(dirsearch80Args, dirsearch80Path)
 
-			if *optBrute {
+			if *flags.OptBrute {
 				// TODO: check why ffuf doesn't work
 				// CeWL + Ffuf Keywords Bruteforcing
 				callRunCewlandFfufKeywords(target, caseDir, "80")
@@ -136,7 +143,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			// Port 443:
 
 			// WordPress on port 443
-			wpEnumeration(fmt.Sprintf("https://%s:443", target), caseDir, "443")
+			commands.WPEnumeration(fmt.Sprintf("https://%s:443", target), caseDir, "443")
 
 			// Nikto on port 443
 			nikto443Args := []string{"nikto", "-host", fmt.Sprintf("https://%s:443", target)}
@@ -154,22 +161,22 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callRunTool(whatWeb443Args, whatWeb443Path)
 
 			// Dirsearch - Light dirbusting on port 80
-			dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s", target) }
+			dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s", target)}
 			dirsearch443Path := fmt.Sprintf("%sdirsearch_443.out", caseDir)
 			callRunTool(dirsearch443Args, dirsearch443Path)
 
 			// Port 8080
 
 			// WordPress on port 8080
-			wpEnumeration(fmt.Sprintf("https://%s:8080", target), caseDir, "8080")
+			commands.WPEnumeration(fmt.Sprintf("https://%s:8080", target), caseDir, "8080")
 
 			// Tomcat
-			tomcatEnumeration(target, fmt.Sprintf("https://%s:8080/docs", target), caseDir, "8080")
+			commands.TomcatEnumeration(target, fmt.Sprintf("https://%s:8080/docs", target), caseDir, "8080")
 
 		case "88":
 			caseDir = protocolDetected("Kerberos", baseDir)
 			nmapOutputFile = caseDir + "kerberos_scan"
-			callIndividualPortScanner(target, port, nmapOutputFile)
+			callscans.IndividualPortScanner(target, port, nmapOutputFile)
 
 			filePath = caseDir + "potential_DC_commands.txt"
 			message = `
@@ -188,7 +195,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 			caseDir = protocolDetected("IMAP-POP3", baseDir)
 			nmapOutputFile = caseDir + "imap_pop3_scan"
-			callIndividualPortScanner(target, "110,143,993,995", nmapOutputFile)
+			callscans.IndividualPortScanner(target, "110,143,993,995", nmapOutputFile)
 
 			// Openssl
 			openSSLArgs := []string{"openssl", "s_client", "-connect", fmt.Sprintf("%s:imaps", target)}
@@ -200,15 +207,15 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			ncPath := fmt.Sprintf("%sbanner_grab.out", caseDir)
 			callRunTool(ncArgs, ncPath)
 
-		case "111": 
+		case "111":
 			caseDir = protocolDetected("RPC", baseDir)
 			nmapOutputFile = caseDir + "rpc_scan"
-			callIndividualPortScanner(target, port, nmapOutputFile)
+			callscans.IndividualPortScanner(target, port, nmapOutputFile)
 
 		case "113":
 			caseDir = protocolDetected("Ident", baseDir)
 			nmapOutputFile = caseDir + "ident_scan"
-			callIndividualPortScanner(target, port, nmapOutputFile)
+			callscans.IndividualPortScanner(target, port, nmapOutputFile)
 
 			// ident-user-enum
 			spacedPorts := strings.Join(openPortsSlice, " ")
@@ -219,7 +226,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 		case "135":
 			caseDir = protocolDetected("MSRPC", baseDir)
 			nmapOutputFile = caseDir + "msrpc_scan"
-			callIndividualPortScanner(target, port, nmapOutputFile)
+			callscans.IndividualPortScanner(target, port, nmapOutputFile)
 
 			rpcDumpArgs := []string{"impacket-rpcdump", port}
 			rpcDumpPath := fmt.Sprintf("%srpcdump.out", caseDir)
@@ -245,7 +252,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			cmePath := fmt.Sprintf("%scme_anon.out", caseDir)
 			callRunTool(cmeArgs, cmePath)
 
-			if *optBrute {
+			if *flags.OptBrute {
 				// CME BruteForcing
 				cmeBfArgs := []string{"crackmapexec", "smb", "-u", usersList, "-p", darkwebTop1000, "--shares", "--sessions", "--disks", "--loggedon-users", "--users", "--groups", "--computers", "--local-groups", "--pass-pol", "--rid-brute", target}
 				cmeBfPath := fmt.Sprintf("%scme_bf.out", caseDir)
@@ -268,8 +275,8 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callRunTool(enum4linuxNgArgs, enum4linuxNgPath)
 
 		case "161", "162", "10161", "10162": // UDP
-			getWordlists()
-			
+			utils.GetWordlists()
+
 			// TODO: (outstanding from AutoEnum)
 			// Hold on all SNMP enumeration until onesixtyone has finished bruteforcing community strings
 			// then launch the tools in a loop against all the found CS
@@ -324,7 +331,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			caseDir = protocolDetected("RServices", baseDir)
 
 			// Nmap
-			callIndividualPortScanner(target, "512,513,514", nmapOutputFile)
+			callscans.IndividualPortScanner(target, "512,513,514", nmapOutputFile)
 
 			// Rwho
 			rwhoArgs := []string{"rwho", "-a", target}
@@ -359,7 +366,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 		case "873":
 			caseDir = protocolDetected("Rsync", baseDir)
 			nmapOutputFile = caseDir + "rsync_scan"
-			callIndividualPortScanner(target, port, nmapOutputFile)
+			callscans.IndividualPortScanner(target, port, nmapOutputFile)
 
 			// Netcat
 			ncArgs := []string{"nc", "-nv", target, port}
@@ -383,7 +390,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			}
 			callIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs)
 
-			if *optBrute {
+			if *flags.OptBrute {
 				bruteCMEArgs := []string{"crackmapexec", "mssql", target, "-u", usersList, "-p", darkwebTop1000}
 				bruteCMEPath := fmt.Sprintf("%scme_brute.out", caseDir)
 				callRunTool(bruteCMEArgs, bruteCMEPath)
@@ -398,7 +405,7 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			// TODO: Check executing this: odat all -s "${1}" >> "${tns_dir}odat.out" &&
 			startSentence := "[!] Run this manually: '"
 			midSentence := fmt.Sprintf("odat all --output-file %sodat.out -s %s", caseDir, target)
-			printCustomBiColourMsg("yellow", "cyan", startSentence, midSentence, "'")
+			utils.PrintCustomBiColourMsg("yellow", "cyan", startSentence, midSentence, "'")
 
 		case "2049":
 			caseDir = protocolDetected("NFS", baseDir)
@@ -427,8 +434,8 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 			// Hydra for MySQL
-			if *optBrute {
-				hydraArgs = []string{"hydra","-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "mysql", target)}
+			if *flags.OptBrute {
+				hydraArgs = []string{"hydra", "-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "mysql", target)}
 				hydraPath = fmt.Sprintf("%shydra_mysql.out", caseDir)
 				callRunTool(hydraArgs, hydraPath)
 			}
@@ -440,8 +447,8 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 			// Hydra for RDP
-			if *optBrute {
-				hydraArgs = []string{"hydra","-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "rdp", target)}
+			if *flags.OptBrute {
+				hydraArgs = []string{"hydra", "-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "rdp", target)}
 				hydraPath = fmt.Sprintf("%shydra_rdp.out", caseDir)
 				callRunTool(hydraArgs, hydraPath)
 			}
@@ -454,21 +461,21 @@ func portsIterator(target string, baseDir string, openPortsSlice []string) {
 
 			caseDir = protocolDetected("WinRM", baseDir)
 			nmapOutputFile = caseDir + "winrm_scan"
-			callIndividualPortScanner(target, "5985,5986", nmapOutputFile)
+			callscans.IndividualPortScanner(target, "5985,5986", nmapOutputFile)
 
 		case "10000":
 			// TODO: if not webmin, enum ndmp.
 			caseDir = protocolDetected("webmin", baseDir)
 			nmapOutputFile = caseDir + "webmin_scan"
-			callIndividualPortScanner(target, port, nmapOutputFile)
+			callscans.IndividualPortScanner(target, port, nmapOutputFile)
 
 		default:
-			if *optVVervose {
-				fmt.Printf("%s %s %s %s %s\n", red("[-] Port"), yellow(port), red("detected, but I don't know how to handle it yet. Please check the"), cyan("main Nmap"), red("scan"))
+			if *flags.OptVVervose {
+				fmt.Printf("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
 			}
 		}
 	}
 
-	printCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", target, "' were successfully parsed.")
+	utils.PrintCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", target, "' were successfully parsed.")
 
 }

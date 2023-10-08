@@ -32,13 +32,13 @@ func installWithKaliSourceRepo(tools []string) {
   aptGetUpdateCmd()
   
   // Now re-try the install function
-  installMissingTools(tools)
+  utils.InstallMissingTools(tools)
   
   // Clean everything up
   rmCmd("/tmp/kali-archive-keyring_2022.1_all.deb")
   deleteLineFromFile(sourcesListPath, lineToAdd)
   
-  if *optDbg {fmt.Println(cyan("Debug source line added successfully.")}
+  if *flags.OptDbg {fmt.Println(utils.Cyan("Debug source line added successfully.")}
 }
 
 func deleteLineFromFile(filePath, lineToDelete string) {
@@ -87,8 +87,8 @@ func deleteLineFromFile(filePath, lineToDelete string) {
 		return
 	}
 
-	if *optDbg {
-		fmt.Println(cyan("Debug - Line deleted successfully."))
+	if *flags.OptDbg {
+		fmt.Println(utils.Cyan("Debug - Line deleted successfully."))
 	}
 }
 
@@ -104,7 +104,7 @@ func aptGetInstallCmd(tool string) {
 	aptGetInstallErr := aptGetInstall.Run()
 	if aptGetInstallErr != nil {
 		// if !strings.Contains(string(aptGetInstall.Stdout), "Unable to locate package") {
-		if *optDbg {
+		if *flags.OptDbg {
 			fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
 		}
 
@@ -112,14 +112,14 @@ func aptGetInstallCmd(tool string) {
 		if tool == "enum4linux-ng" {
 			installErr := installEnum4linuxNg()
 			if installErr != nil {
-				errorMsg(installErr.Error())
-				printCustomBiColourMsg("red", "cyan", "[-] Error. ", "enum4linux-ng", " needs to be manually installed.\nPlease see: ", "https://github.com/cddmp/enum4linux-ng/blob/master/README.md#kali-linuxdebianubuntulinux-mint")
+				utils.ErrorMsg(installErr.Error())
+				utils.PrintCustomBiColourMsg("red", "cyan", "[-] Error. ", "enum4linux-ng", " needs to be manually installed.\nPlease see: ", "https://github.com/cddmp/enum4linux-ng/blob/master/README.md#kali-linuxdebianubuntulinux-mint")
 				os.Exit(2)
 			}
 			return
 		}
 
-		printCustomBiColourMsg("red", "cyan", "[-] Error. Please install the following package manually: '", tool, "'\n[-] Aborting...")
+		utils.PrintCustomBiColourMsg("red", "cyan", "[-] Error. Please install the following package manually: '", tool, "'\n[-] Aborting...")
 		os.Exit(2)
 	}
 
@@ -127,11 +127,11 @@ func aptGetInstallCmd(tool string) {
 	// 	deleteLineFromFile("/etc/apt/sources.list", "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware")
 	// 	fmt.Printf(
 	// 		"%s\n%s %s %s %s",
-	// 		red("[-] It looks like apt-get is unable to locate some of the tools with your current sources."),
-	// 		yellow("[!] Do you want to try"),
-	// 		cyan("Kali's packaging repository source"),
-	// 		yellow("(cleanup will be performed afterwards)?"),
-	// 		yellow("[Y] yes / [N] no): "),
+	// 		utils.Red("[-] It looks like apt-get is unable to locate some of the tools with your current sources."),
+	// 		utils.Yellow("[!] Do you want to try"),
+	// 		utils.Cyan("Kali's packaging repository source"),
+	// 		utils.Yellow("(cleanup will be performed afterwards)?"),
+	// 		utils.Yellow("[Y] yes / [N] no): "),
 	// 	)
 	// 	consent := bufio.NewScanner(os.Stdin)
 	// 	consent.Scan()
@@ -144,13 +144,13 @@ func aptGetInstallCmd(tool string) {
 	// 	}
 	// 	installWithKaliSourceRepo(tools)
 
-	fmt.Printf("%s\n", green("Done!"))
+	fmt.Printf("%s\n", utils.Green("Done!"))
 }
 
 func wgetCmd(outputFile string, url string) {
 	wget := exec.Command("wget", "--no-check-certificate", "-O", outputFile, url)
 
-	if *optDbg {
+	if *flags.OptDbg {
 		// Redirect the command's output to the standard output in terminal
 		wget.Stdout = os.Stdout
 		wget.Stderr = os.Stderr
@@ -159,9 +159,9 @@ func wgetCmd(outputFile string, url string) {
 	// Run the command
 	wgetErr := wget.Run()
 	if wgetErr != nil {
-		if *optDbg {
-			fmt.Printf("%s%v\n", cyan("Debug - Error running wget: "), wgetErr)
-			fmt.Println(cyan("Debug - Trying curl"))
+		if *flags.OptDbg {
+			fmt.Printf("%s%v\n", utils.Cyan("Debug - Error running wget: "), wgetErr)
+			fmt.Println(utils.Cyan("Debug - Trying curl"))
 		}
 		curlCmd(outputFile, url)
 		return
@@ -171,7 +171,7 @@ func wgetCmd(outputFile string, url string) {
 func curlCmd(outputFile string, url string) {
 	curl := exec.Command("curl", "-o", outputFile, url, "-L")
 
-	if *optDbg {
+	if *flags.OptDbg {
 		// Redirect the command's output to the standard output in terminal
 		curl.Stdout = os.Stdout
 		curl.Stderr = os.Stderr
@@ -180,8 +180,8 @@ func curlCmd(outputFile string, url string) {
 	// Run the command
 	curlErr := curl.Run()
 	if curlErr != nil {
-		if *optDbg {
-			fmt.Printf("%s%v\n", cyan("Debug - Error running curl: "), curlErr)
+		if *flags.OptDbg {
+			fmt.Printf("%s%v\n", utils.Cyan("Debug - Error running curl: "), curlErr)
 		}
 
 		return
@@ -191,7 +191,7 @@ func curlCmd(outputFile string, url string) {
 func dpkgCmd(debPkgPath string) {
 	dpkg := exec.Command("sudo", "dpkg", "-i", debPkgPath)
 
-	if *optDbg {
+	if *flags.OptDbg {
 		// Redirect the command's output to the standard output in terminal
 		dpkg.Stdout = os.Stdout
 		dpkg.Stderr = os.Stderr
@@ -200,7 +200,7 @@ func dpkgCmd(debPkgPath string) {
 	// Run the command
 	dpkgErr := dpkg.Run()
 	if dpkgErr != nil {
-		if *optDbg {
+		if *flags.OptDbg {
 			fmt.Printf("Debug - Error running wget: %v\n", dpkgErr)
 		}
 		return
@@ -210,7 +210,7 @@ func dpkgCmd(debPkgPath string) {
 func rmCmd(filePath string) {
 	rm := exec.Command("rm", "-f", filePath)
 
-	if *optDbg {
+	if *flags.OptDbg {
 		// Redirect the command's output to the standard output in terminal
 		rm.Stdout = os.Stdout
 		rm.Stderr = os.Stderr
@@ -219,7 +219,7 @@ func rmCmd(filePath string) {
 	// Run the command
 	rmErr := rm.Run()
 	if rmErr != nil {
-		if *optDbg {
+		if *flags.OptDbg {
 			fmt.Printf("Debug - Error running apt-get update: %v\n", rmErr)
 		}
 		return
@@ -242,24 +242,24 @@ func isStringInFile(s, filePath string) bool {
 }
 
 func printPhase(phase int) {
-	if !*optQuiet {
-		fmt.Printf("\n%s%s ", cyan("[*] ---------- "), "Starting Phase")
+	if !*flags.OptQuiet {
+		fmt.Printf("\n%s%s ", utils.Cyan("[*] ---------- "), "Starting Phase")
 		switch phase {
 		case 0:
-			fmt.Printf("%s%s", yellow("0"), ": running initial checks ")
+			fmt.Printf("%s%s", utils.Yellow("0"), ": running initial checks ")
 		case 1:
-			fmt.Printf("%s%s", yellow("1"), ": parsing the CIDR range ")
+			fmt.Printf("%s%s", utils.Yellow("1"), ": parsing the CIDR range ")
 		case 2:
-			fmt.Printf("%s%s", yellow("2"), ": sweeping target's ports ")
+			fmt.Printf("%s%s", utils.Yellow("2"), ": sweeping target's ports ")
 		case 22:
-			fmt.Printf("%s%s", yellow("3"), ": running multi-target mode. Looping through the list, one target at a time ")
+			fmt.Printf("%s%s", utils.Yellow("3"), ": running multi-target mode. Looping through the list, one target at a time ")
 		case 3:
-			fmt.Printf("%s%s", yellow("3"), ": parsing found ports ")
+			fmt.Printf("%s%s", utils.Yellow("3"), ": parsing found ports ")
 		case 4:
-			fmt.Printf("%s%s", yellow("4"), ": background tools working ")
+			fmt.Printf("%s%s", utils.Yellow("4"), ": background tools working ")
 		default:
-			errorMsg("Development error. There are currently 5 phases in the script ")
+			utils.ErrorMsg("Development error. There are currently 5 phases in the script ")
 		}
-		fmt.Printf("%s\n\n", cyan("----------"))
+		fmt.Printf("%s\n\n", utils.Cyan("----------"))
 	}
 }
