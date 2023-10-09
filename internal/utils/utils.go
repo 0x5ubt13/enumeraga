@@ -33,10 +33,10 @@ var (
 	Debug = color.New(color.FgMagenta).SprintFunc()
 
 	// Declare wordlists global vars
-	dirListMedium, darkwebTop1000, extensionsList, usersList, snmpList string
+	DirListMedium, DarkwebTop1000, ExtensionsList, UsersList, SnmpList string
 
 	// Declare globals updated and wordlistsLocated, as these may consume a lot of time and aren't needed more than once
-	updated, wordlistsLocated bool
+	Updated, wordlistsLocated bool
 
 	// Interrupted global, to show user different info if single IP target was unsuccessful
 	Interrupted bool
@@ -94,8 +94,10 @@ func ErrorMsg(errMsg string) {
 	fmt.Printf("%s %s\n", Red("[-] Error detected:"), errMsg)
 }
 
+// Read a targets file from the argument path passed to -t
+// Return number of targets, one per line
 func ReadTargetsFile(filename string) ([]string, int) {
-	// fetching the file
+	// Fetch the file
 	data, err := os.ReadFile(*flags.OptTarget)
 	if err != nil {
 		panic(err)
@@ -106,11 +108,12 @@ func ReadTargetsFile(filename string) ([]string, int) {
 	return lines, len(lines) - 1
 }
 
+// Check first if it is possible to create new dir, and send custom msg if not.
 func CustomMkdir(name string) {
 	err := os.Mkdir(name, os.ModePerm)
 	if err != nil {
 		if *flags.OptVVervose {
-			fmt.Println(Red("[-] Error:"), Red(err))
+			fmt.Println(Red("[-] Error creating new dir:", err))
 		}
 	} else {
 		if *flags.OptVVervose {
@@ -121,18 +124,18 @@ func CustomMkdir(name string) {
 
 // Announce protocol, create base dir and return its name
 func protocolDetected(protocol, baseDir string) string {
-	if !*flags.OptQuiet {
-		PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
-	}
+	if !*flags.OptQuiet { PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected") }
+
 	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
-	if *flags.OptDbg {
-		fmt.Printf("%s\n", Cyan("[*] Debug: protocolDir ->", protocolDir))
-	}
+	if *flags.OptDbg { fmt.Printf("%s\n", Cyan("[*] Debug: protocolDir ->", protocolDir)) }
+	
 	CustomMkdir(protocolDir)
+	
 	return protocolDir
 }
 
-func writeTextToFile(filePath string, message string) {
+// Write text to a file
+func WriteTextToFile(filePath string, message string) {
 	// Open file
 	f, err := os.Create(filePath)
 	if err != nil {
@@ -140,6 +143,7 @@ func writeTextToFile(filePath string, message string) {
 	}
 	defer f.Close()
 
+	// Write to it
 	_, err2 := fmt.Fprintln(f, message)
 	if err2 != nil {
 		log.Fatal(err2)
@@ -156,6 +160,7 @@ func WritePortsToFile(filePath string, ports string, host string) string {
 	}
 	defer f.Close()
 
+	// Write to it
 	_, err2 := fmt.Fprintln(f, ports)
 	if err2 != nil {
 		log.Fatal(err2)
@@ -208,10 +213,10 @@ func RemoveDuplicates(s string) string {
 	return strings.Join(result, ",")
 }
 
-func consent(tool string) rune {
-	// Ask for user consent
-	PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be installed")
 
+// Ask for user consent
+func Consent(tool string) rune {
+	PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be installed")
 	PrintCustomBiColourMsg("yellow", "cyan", "Do you want to install '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
 
 	consent := bufio.NewScanner(os.Stdin)
@@ -228,10 +233,23 @@ func consent(tool string) rune {
 
 	// If flow made it to down here, consent wasn't given
 	printConsentNotGiven(tool)
-	os.Exit(1)
 	return 'n'
 }
 
+// Check tool exists with exec.LookPath (equivalent to `which <tool>`)
+func checkToolExists(tool string) bool {
+	_, lookPatherr := exec.LookPath(tool)
+	if lookPatherr != nil {
+		if *flags.OptDbg { fmt.Println(Debug("Debug - Error: ", lookPatherr.Error())) }
+		return false
+	}
+
+	if *flags.OptDbg { fmt.Printf("%s%s%s\n", Green("Debug - '"), Green(tool), Green("' is installed")) }
+
+	return true
+}
+
+// Instruct the program to try and install tools that are absent from the pentesting distro
 func InstallMissingTools() {
 	keyTools := []string{
 		"cewl",
@@ -272,7 +290,7 @@ func InstallMissingTools() {
 		}
 
 		// Ask user
-		userConsent := consent(tool)
+		userConsent := Consent(tool)
 
 		if userConsent == 'a' {
 			fullConsent = true
@@ -300,7 +318,7 @@ func InstallMissingTools() {
 	}
 }
 
-func printInstallingTool(tool string) {
+func PrintInstallingTool(tool string) {
 	fmt.Printf("%s %s%s ", Yellow("[!] Installing"), Cyan(tool), Yellow("..."))
 }
 

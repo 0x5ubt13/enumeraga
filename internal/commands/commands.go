@@ -42,23 +42,26 @@ func aptGetUpdateCmd() {
 
 func installEnum4linuxNg() error {
 	// Ask for consent first of all
-	utils.PrintCustomBiColourMsg("yellow", "cyan", "Do you want for ", "Enumeraga ", "to try and handle the installation of '", "enum4linux-ng", "'? \nIt might be the case you have it in your machine but not in your $PATH.\nBear in mind that this will call '", "pip", "' as root (", "[Y] ", "'yes, install it for me' / ", "[N] ", "'no, I want to install it myself': ")
-	consentv2 := bufio.NewScanner(os.Stdin)
-	consentv2.Scan()
-	userInputv2 := strings.ToLower(consentv2.Text())
-
-	if userInputv2 != "yes" && userInputv2 != "y" {
-		consentv2Err := fmt.Errorf("%s", "Error. Consent not given")
-		return consentv2Err
+	utils.PrintCustomBiColourMsg(
+		"yellow", "cyan", 
+		"Do you want for ", "Enumeraga ", 
+		"to try and handle the installation of '", "enum4linux-ng", 
+		"'?\nIt might be the case you have it in your machine but not in your $PATH.\nBear in mind that this will call '", "pip", "' as root",
+	)
+	
+	userInput := utils.Consent("enum4linux-ng using pip as root")
+	if userInput == 'n' {
+		consentErr := fmt.Errorf("%s", "Error. Consent not given")
+		return consentErr
 	}
 
 	fmt.Printf("%s %s%s\n", utils.Yellow("[!] Checking pre-requisites to install '"), utils.Cyan("enum4linux-ng"), utils.Yellow("'..."))
 
 	reqs := []string{"python3-ldap3", "python3-yaml", "python3-impacket", "pip"}
 	for _, tool := range reqs {
-		if !updated {
+		if !utils.Updated {
 			aptGetUpdateCmd()
-			updated = true
+			utils.Updated = true
 		}
 		aptGetInstallCmd(tool)
 	}
@@ -176,7 +179,7 @@ func installEnum4linuxNg() error {
 }
 
 func aptGetInstallCmd(tool string) {
-	printInstallingTool(tool)
+	 utils.PrintInstallingTool(tool)
 
 	if tool == "finger" {
 		tool = "nfs-common"
@@ -257,22 +260,22 @@ func TomcatEnumeration(target, targetUrl, caseDir, port string) {
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "Tomcat detected. Running", "WPScan", "...")
 
 	// Run Gobuster
-	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "u", fmt.Sprintf("%s:8080", target), "-w", dirListMedium}
+	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "u", fmt.Sprintf("%s:8080", target), "-w", utils.DirListMedium}
 	gobusterPath := fmt.Sprintf("%stomcat_gobuster.out", caseDir)
-	callRunTool(gobusterArgs, gobusterPath)
+	CallRunTool(gobusterArgs, gobusterPath)
 
 	// Run hydra
 	if !*flags.OptBrute { return }
 
 	hydraArgs := []string{
 		"hydra",
-		"-L", usersList,
-		"-P", darkwebTop1000,
+		"-L", utils.UsersList,
+		"-P", utils.DarkwebTop1000,
 		"-f", target,
 		"http-get", "/manager/html",
 	}
 	hydraPath := fmt.Sprintf("%stomcat_hydra.out", caseDir)
-	callRunTool(hydraArgs, hydraPath)
+	CallRunTool(hydraArgs, hydraPath)
 }
 
 func runCewlandFfufKeywords(target, caseDir, port string) {
@@ -285,7 +288,7 @@ func runCewlandFfufKeywords(target, caseDir, port string) {
 
 		ffufArgs := []string{
 			"ffuf",
-			"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", dirListMedium, keywordsList, extensionsList),
+			"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", utils.DirListMedium, keywordsList, utils.ExtensionsList),
 			"-u", fmt.Sprintf("http://%s/FOLDERS/KEYWORDSEXTENSIONS", target),
 			"-v",
 			"-maxtime", "300",
@@ -305,7 +308,7 @@ func runCewlandFfufKeywords(target, caseDir, port string) {
 
 	ffufArgs := []string{
 		"ffuf",
-		"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", dirListMedium, keywordsList, extensionsList),
+		"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", utils.DirListMedium, keywordsList, utils.ExtensionsList),
 		"-u", fmt.Sprintf("http://%s/FOLDERS/KEYWORDSEXTENSIONS", target),
 		"-v",
 		"-maxtime", "300",
@@ -418,22 +421,22 @@ func RunRangeTools(targetRange string) {
 	// run nbtscan-unixwiz
 	nbtscanArgs := []string{"nbtscan-unixwiz", "-f", targetRange}
 	nbtscanPath := fmt.Sprintf("%snbtscan-unixwiz.out", cidrDir)
-	callRunTool(nbtscanArgs, nbtscanPath)
+	CallRunTool(nbtscanArgs, nbtscanPath)
 
 	// run Responder-RunFinger
 	responderArgs := []string{"responder-RunFinger", "-i", targetRange}
 	responderPath := fmt.Sprintf("%srunfinger.out", cidrDir)
-	callRunTool(responderArgs, responderPath)
+	CallRunTool(responderArgs, responderPath)
 
 	// run OneSixtyOne
-	oneSixtyOneArgs := []string{"onesixtyone", "-c", usersList, targetRange, "-w", "100"}
+	oneSixtyOneArgs := []string{"onesixtyone", "-c", utils.UsersList, targetRange, "-w", "100"}
 	oneSixtyOnePath := fmt.Sprintf("%sonesixtyone.out", cidrDir)
-	callRunTool(oneSixtyOneArgs, oneSixtyOnePath)
+	CallRunTool(oneSixtyOneArgs, oneSixtyOnePath)
 
 	// run fping
 	fpingArgs := []string{"fping", "-asgq", targetRange}
 	fpingPath := fmt.Sprintf("%sfping.out", cidrDir)
-	callRunTool(fpingArgs, fpingPath)
+	CallRunTool(fpingArgs, fpingPath)
 
 	// run Metasploit scan module for EternalBlue
 	msfEternalBlueArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use scanner/smb/smb_ms17_010;set rhosts %s;set threads 10;run;exit", targetRange)}
@@ -497,7 +500,7 @@ func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, 
 }
 
 // Goroutine for runCewlandFfufKeywords()
-func callRunCewlandFfufKeywords(target, caseDir, port string) {
+func CallRunCewlandFfufKeywords(target, caseDir, port string) {
 	utils.Wg.Add(1)
 
 	go func(target, caseDir, port string) {
@@ -508,7 +511,7 @@ func callRunCewlandFfufKeywords(target, caseDir, port string) {
 }
 
 // Goroutine for runTool()
-func callRunTool(args []string, filePath string) {
+func CallRunTool(args []string, filePath string) {
 	utils.Wg.Add(1)
 
 	go func(args []string, filePath string) {
@@ -519,18 +522,18 @@ func callRunTool(args []string, filePath string) {
 }
 
 // Goroutine for individualPortScannerWithNSEScripts()
-func callIndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) {
+func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) {
 	utils.Wg.Add(1)
 
 	go func(target, port, outFile, scripts string) {
 		defer utils.Wg.Done()
 
-		individualPortScannerWithNSEScripts(target, port, outFile, scripts)
+		scans.IndividualPortScannerWithNSEScripts(target, port, outFile, scripts)
 	}(target, port, outFile, scripts)
 }
 
 // Goroutine for scans.IndividualPortScannerWithNSEScriptsAndScriptArgs()
-func callIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string) {
+func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string) {
 	utils.Wg.Add(1)
 
 	go func(target, port, outFile, scripts string, scriptArgs map[string]string) {
@@ -552,7 +555,7 @@ func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts s
 }
 
 // Goroutine for scans.IndividualPortScanner()
-func callscans.IndividualPortScanner(target, port, outFile string) {
+func CallIndividualPortScanner(target, port, outFile string) {
 	utils.Wg.Add(1)
 
 	go func(target, port, outFile string) {

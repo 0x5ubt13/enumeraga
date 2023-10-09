@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 
 	"github.com/0x5ubt13/enumeraga/internal/flags"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
@@ -105,21 +104,4 @@ func Run() int {
 
 	// End of checks
 	return 0
-}
-
-// Check tool exists with exec.LookPath (equivalent to `which <tool>`)
-func checkToolExists(tool string) bool {
-	_, lookPatherr := exec.LookPath(tool)
-	if lookPatherr != nil {
-		if *flags.OptDbg {
-			fmt.Println(utils.Debug("Debug - Error: ", lookPatherr.Error()))
-		}
-		return false
-	}
-
-	if *flags.OptDbg {
-		fmt.Printf("%s%s%s\n", utils.Green("Debug - '"), utils.Green(tool), utils.Green("' is installed"))
-	}
-
-	return true
 }

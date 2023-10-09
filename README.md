@@ -148,7 +148,7 @@ AutoEnum:
 Enumeraga:
 
 - [x] Port all of this to Golang
-- [ ] Test thoroughly and release v1.0
+- [ ] Test thoroughly, rewrite in modules and release v1.0
 - [ ] Improve the way output is presented to terminal
 - [ ] Add a flag to pass vhosts and functionality to use them
 - [ ] Rewrite the enum4linux-ng installing function to avoid installing pip and dependencies as root

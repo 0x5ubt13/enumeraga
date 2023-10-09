@@ -50,26 +50,26 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			caseDir = protocolDetected("FTP", baseDir)
 			nmapOutputFile = caseDir + "ftp_scan"
 			nmapNSEScripts = "ftp-* and not brute"
-			callIndividualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
+			commands.callIndividualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
 
 			// Hydra for FTP
 			if *flags.OptBrute {
 				hydraArgs = []string{"hydra", "-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ftp", target)}
 				hydraPath = fmt.Sprintf("%shydra_ftp.out", caseDir)
-				callRunTool(hydraArgs, hydraPath)
+				commands.CallRunTool(hydraArgs, hydraPath)
 			}
 
 		case "22":
 			caseDir = protocolDetected("SSH", baseDir)
 			nmapOutputFile = caseDir + "ssh_scan"
 			nmapNSEScripts = "ssh-* and not brute"
-			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+			commands.callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 			// Hydra for SSH
 			if *flags.OptBrute {
 				hydraArgs = []string{"hydra", "-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ssh", target)}
 				hydraPath = fmt.Sprintf("%shydra_ssh.out", caseDir)
-				callRunTool(hydraArgs, hydraPath)
+				commands.CallRunTool(hydraArgs, hydraPath)
 			}
 
 		case "25", "465", "587":
@@ -81,22 +81,22 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			caseDir = protocolDetected("SMTP", baseDir)
 			nmapOutputFile = caseDir + "smtp_scan"
 			nmapNSEScripts = "smtp-commands,smtp-enum-users,smtp-open-relay"
-			callIndividualPortScannerWithNSEScripts(target, "25,465,587", nmapOutputFile, nmapNSEScripts)
+			commands.callIndividualPortScannerWithNSEScripts(target, "25,465,587", nmapOutputFile, nmapNSEScripts)
 
 		case "53":
 			caseDir = protocolDetected("DNS", baseDir)
 			nmapOutputFile = caseDir + "dns_scan"
 			nmapNSEScripts = "*dns*"
-			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+			commands.callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 		case "79":
 			caseDir = protocolDetected("Finger", baseDir)
 			nmapOutputFile = caseDir + "finger_scan"
-			callscans.IndividualPortScanner(target, port, nmapOutputFile)
+			commands.CallIndividualPortScanner(target, port, nmapOutputFile)
 
 			msfArgs = []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", target)}
 			msfPath = fmt.Sprintf("%smsfconsole.out", caseDir)
-			callRunTool(msfArgs, msfPath)
+			commands.CallRunTool(msfArgs, msfPath)
 
 		case "80", "443", "8080":
 			if visitedHTTP {
@@ -106,7 +106,7 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 
 			caseDir = protocolDetected("HTTP", baseDir)
 			nmapOutputFile = caseDir + "http_scan"
-			callscans.IndividualPortScanner(target, "80,443,8080", nmapOutputFile)
+			commands.CallIndividualPortScanner(target, "80,443,8080", nmapOutputFile)
 
 			// Port 80:
 
@@ -116,28 +116,28 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			// Nikto on port 80
 			nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", target)}
 			nikto80Path := fmt.Sprintf("%snikto_80.out", caseDir)
-			callRunTool(nikto80Args, nikto80Path)
+			commands.CallRunTool(nikto80Args, nikto80Path)
 
 			// Wafw00f on port 80
 			wafw00f80Args := []string{"wafw00f", "-v", fmt.Sprintf("http://%s:80", target)}
 			wafw00f80Path := fmt.Sprintf("%swafw00f_80.out", caseDir)
-			callRunTool(wafw00f80Args, wafw00f80Path)
+			commands.CallRunTool(wafw00f80Args, wafw00f80Path)
 
 			// WhatWeb on port 80
 			whatWeb80Args := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("http://%s:80", target)}
 			whatWeb80Path := fmt.Sprintf("%swhatweb_80.out", caseDir)
-			callRunTool(whatWeb80Args, whatWeb80Path)
+			commands.CallRunTool(whatWeb80Args, whatWeb80Path)
 
 			// Dirsearch - Light dirbusting on port 80
 			dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s", target)}
 			dirsearch80Path := fmt.Sprintf("%sdirsearch_80.out", caseDir)
-			callRunTool(dirsearch80Args, dirsearch80Path)
+			commands.CallRunTool(dirsearch80Args, dirsearch80Path)
 
 			if *flags.OptBrute {
 				// TODO: check why ffuf doesn't work
 				// CeWL + Ffuf Keywords Bruteforcing
-				callRunCewlandFfufKeywords(target, caseDir, "80")
-				callRunCewlandFfufKeywords(target, caseDir, "443")
+				commands.CallRunCewlandFfufKeywords(target, caseDir, "80")
+				commands.CallRunCewlandFfufKeywords(target, caseDir, "443")
 			}
 
 			// Port 443:
@@ -148,22 +148,22 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			// Nikto on port 443
 			nikto443Args := []string{"nikto", "-host", fmt.Sprintf("https://%s:443", target)}
 			nikto443Path := fmt.Sprintf("%snikto_443.out", caseDir)
-			callRunTool(nikto443Args, nikto443Path)
+			commands.CallRunTool(nikto443Args, nikto443Path)
 
 			// Wafw00f on port 443
 			wafw00f443Args := []string{"wafw00f", "-v", fmt.Sprintf("http://%s:443", target)}
 			wafw00f443Path := fmt.Sprintf("%swafw00f_443.out", caseDir)
-			callRunTool(wafw00f443Args, wafw00f443Path)
+			commands.CallRunTool(wafw00f443Args, wafw00f443Path)
 
 			// WhatWeb on port 443
 			whatWeb443Args := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("http://%s:443", target)}
 			whatWeb443Path := fmt.Sprintf("%swhatweb_443.out", caseDir)
-			callRunTool(whatWeb443Args, whatWeb443Path)
+			commands.CallRunTool(whatWeb443Args, whatWeb443Path)
 
 			// Dirsearch - Light dirbusting on port 80
 			dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s", target)}
 			dirsearch443Path := fmt.Sprintf("%sdirsearch_443.out", caseDir)
-			callRunTool(dirsearch443Args, dirsearch443Path)
+			commands.CallRunTool(dirsearch443Args, dirsearch443Path)
 
 			// Port 8080
 
@@ -176,7 +176,7 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 		case "88":
 			caseDir = protocolDetected("Kerberos", baseDir)
 			nmapOutputFile = caseDir + "kerberos_scan"
-			callscans.IndividualPortScanner(target, port, nmapOutputFile)
+			commands.CallIndividualPortScanner(target, port, nmapOutputFile)
 
 			filePath = caseDir + "potential_DC_commands.txt"
 			message = `
@@ -185,7 +185,7 @@ func Run(target string, baseDir string, openPortsSlice []string) {
             nmap -p 88 \ 
             --script=krb5-enum-users \
             --script-args krb5-enum-users.realm=\"{Domain_Name}\" \\\n,userdb={Big_Userlist} \\\n{IP}"`
-			writeTextToFile(filePath, message)
+			utils.WriteTextToFile(filePath, message)
 
 		case "110", "143", "993", "995":
 			if visitedIMAP {
@@ -195,42 +195,42 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 
 			caseDir = protocolDetected("IMAP-POP3", baseDir)
 			nmapOutputFile = caseDir + "imap_pop3_scan"
-			callscans.IndividualPortScanner(target, "110,143,993,995", nmapOutputFile)
+			commands.CallIndividualPortScanner(target, "110,143,993,995", nmapOutputFile)
 
 			// Openssl
 			openSSLArgs := []string{"openssl", "s_client", "-connect", fmt.Sprintf("%s:imaps", target)}
 			openSSLPath := fmt.Sprintf("%sopenssl_imap.out", caseDir)
-			callRunTool(openSSLArgs, openSSLPath)
+			commands.CallRunTool(openSSLArgs, openSSLPath)
 
 			// NC banner grabbing
 			ncArgs := []string{"nc", "-nv", target, port}
 			ncPath := fmt.Sprintf("%sbanner_grab.out", caseDir)
-			callRunTool(ncArgs, ncPath)
+			commands.CallRunTool(ncArgs, ncPath)
 
 		case "111":
 			caseDir = protocolDetected("RPC", baseDir)
 			nmapOutputFile = caseDir + "rpc_scan"
-			callscans.IndividualPortScanner(target, port, nmapOutputFile)
+			commands.CallIndividualPortScanner(target, port, nmapOutputFile)
 
 		case "113":
 			caseDir = protocolDetected("Ident", baseDir)
 			nmapOutputFile = caseDir + "ident_scan"
-			callscans.IndividualPortScanner(target, port, nmapOutputFile)
+			commands.CallIndividualPortScanner(target, port, nmapOutputFile)
 
 			// ident-user-enum
 			spacedPorts := strings.Join(openPortsSlice, " ")
 			identUserEnumArgs := []string{"ident-user-enum", target, spacedPorts}
 			identUserEnumPath := fmt.Sprintf("%sident-user-enum.out", caseDir)
-			callRunTool(identUserEnumArgs, identUserEnumPath)
+			commands.CallRunTool(identUserEnumArgs, identUserEnumPath)
 
 		case "135":
 			caseDir = protocolDetected("MSRPC", baseDir)
 			nmapOutputFile = caseDir + "msrpc_scan"
-			callscans.IndividualPortScanner(target, port, nmapOutputFile)
+			commands.CallIndividualPortScanner(target, port, nmapOutputFile)
 
 			rpcDumpArgs := []string{"impacket-rpcdump", port}
 			rpcDumpPath := fmt.Sprintf("%srpcdump.out", caseDir)
-			callRunTool(rpcDumpArgs, rpcDumpPath)
+			commands.CallRunTool(rpcDumpArgs, rpcDumpPath)
 
 		case "137", "138", "139", "445":
 			// Run only once
@@ -244,35 +244,35 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			nmapOutputFile = caseDir + "nb_smb_scan"
 			nmapUDPOutputFile := caseDir + "nb_smb_UDP_scan"
 			nmapNSEScripts = "smb* and not brute"
-			callIndividualPortScannerWithNSEScripts(target, "137,139,445", nmapOutputFile, nmapNSEScripts) // TCP
-			callIndividualUDPPortScannerWithNSEScripts(target, "137", nmapUDPOutputFile, "nbstat.nse")     // UDP
+			commands.callIndividualPortScannerWithNSEScripts(target, "137,139,445", nmapOutputFile, nmapNSEScripts) // TCP
+			callIndividualUDPPortScannerWithNSEScripts(target, "137", nmapUDPOutputFile, "nbstat.nse")              // UDP
 
 			// CME
 			cmeArgs := []string{"crackmapexec", "smb", "-u", "''", "-p", "''", target}
 			cmePath := fmt.Sprintf("%scme_anon.out", caseDir)
-			callRunTool(cmeArgs, cmePath)
+			commands.CallRunTool(cmeArgs, cmePath)
 
 			if *flags.OptBrute {
 				// CME BruteForcing
 				cmeBfArgs := []string{"crackmapexec", "smb", "-u", usersList, "-p", darkwebTop1000, "--shares", "--sessions", "--disks", "--loggedon-users", "--users", "--groups", "--computers", "--local-groups", "--pass-pol", "--rid-brute", target}
 				cmeBfPath := fmt.Sprintf("%scme_bf.out", caseDir)
-				callRunTool(cmeBfArgs, cmeBfPath)
+				commands.CallRunTool(cmeBfArgs, cmeBfPath)
 			}
 
 			// SMBMap
 			smbMapArgs := []string{"smbmap", "-H", target}
 			smbMapPath := fmt.Sprintf("%ssmbmap.out", caseDir)
-			callRunTool(smbMapArgs, smbMapPath)
+			commands.CallRunTool(smbMapArgs, smbMapPath)
 
 			// NMBLookup
 			nmbLookupArgs := []string{"nmblookup", "-A", target}
 			nmbLookupPath := fmt.Sprintf("%snmblookup.out", caseDir)
-			callRunTool(nmbLookupArgs, nmbLookupPath)
+			commands.CallRunTool(nmbLookupArgs, nmbLookupPath)
 
 			// Enum4linux-ng
 			enum4linuxNgArgs := []string{"enum4linux-ng", "-A", "-C", target}
 			enum4linuxNgPath := fmt.Sprintf("%senum4linux_ng.out", caseDir)
-			callRunTool(enum4linuxNgArgs, enum4linuxNgPath)
+			commands.CallRunTool(enum4linuxNgArgs, enum4linuxNgPath)
 
 		case "161", "162", "10161", "10162": // UDP
 			utils.GetWordlists()
@@ -294,18 +294,18 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			// SNMPWalk
 			snmpWalkArgs := []string{"snmpwalk", "-v2c", "-c", "public", target}
 			snmpWalkPath := fmt.Sprintf("%ssnmpwalk_v2c_public.out", caseDir)
-			callRunTool(snmpWalkArgs, snmpWalkPath)
+			commands.CallRunTool(snmpWalkArgs, snmpWalkPath)
 
 			// OneSixtyOne
 			oneSixtyOneArgs := []string{"onesixtyone", "-c", snmpList, target}
 			oneSixtyOnePath := fmt.Sprintf("%snblookup.out", caseDir)
-			callRunTool(oneSixtyOneArgs, oneSixtyOnePath)
+			commands.CallRunTool(oneSixtyOneArgs, oneSixtyOnePath)
 
 			// Braa
 			// automate bf other CS than public
 			braaArgs := []string{"braa", fmt.Sprintf("public@%s:.1.3.6.*", target)}
 			braaPath := fmt.Sprintf("%sbraa_public.out", caseDir)
-			callRunTool(braaArgs, braaPath)
+			commands.CallRunTool(braaArgs, braaPath)
 
 		case "389", "636", "3268", "3269":
 			if visitedLDAP {
@@ -316,12 +316,12 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 
 			// Nmap
 			nmapNSEScripts = "ldap* and not brute"
-			callIndividualPortScannerWithNSEScripts(target, "389,636,3268,3269", nmapOutputFile, nmapNSEScripts)
+			commands.callIndividualPortScannerWithNSEScripts(target, "389,636,3268,3269", nmapOutputFile, nmapNSEScripts)
 
 			// LDAPSearch
 			ldapSearchArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("ldap://%s", target), "-D", "''", "-w", "''", "-b", "DC=<1_SUBDOMAIN>,DC=<TLD>"}
 			ldapSearchPath := fmt.Sprintf("%sldapsearch.out", caseDir)
-			callRunTool(ldapSearchArgs, ldapSearchPath)
+			commands.CallRunTool(ldapSearchArgs, ldapSearchPath)
 
 		case "512", "513", "514":
 			if visitedRsvc {
@@ -331,24 +331,24 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			caseDir = protocolDetected("RServices", baseDir)
 
 			// Nmap
-			callscans.IndividualPortScanner(target, "512,513,514", nmapOutputFile)
+			commands.CallIndividualPortScanner(target, "512,513,514", nmapOutputFile)
 
 			// Rwho
 			rwhoArgs := []string{"rwho", "-a", target}
 			rwhoPath := fmt.Sprintf("%srwho.out", caseDir)
-			callRunTool(rwhoArgs, rwhoPath)
+			commands.CallRunTool(rwhoArgs, rwhoPath)
 
 			// Rusers
 			rusersArgs := []string{"rusers", "-la", target}
 			rusersPath := fmt.Sprintf("%srusers.out", caseDir)
-			callRunTool(rusersArgs, rusersPath)
+			commands.CallRunTool(rusersArgs, rusersPath)
 
 			filePath = caseDir + "next_step_tip.txt"
 			message = `
             Tip: Enumerate NFS, etc on the target server for /home/user/.rhosts and /etc/hosts.equiv files to use with rlogin, rsh and rexec.
             If found, use the following command:
             rlogin "target" -l "found_user"`
-			writeTextToFile(filePath, message)
+			utils.WriteTextToFile(filePath, message)
 
 		case "623":
 			caseDir = protocolDetected("IPMI", baseDir)
@@ -361,22 +361,22 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			// Metasploit
 			msfArgs = []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/ipmi/ipmi_dumphashes; set rhosts %s; set output_john_file %sipmi_hashes.john; run; exit", target, caseDir)}
 			msfPath = fmt.Sprintf("%smsf_scanner.out", caseDir)
-			callRunTool(msfArgs, msfPath)
+			commands.CallRunTool(msfArgs, msfPath)
 
 		case "873":
 			caseDir = protocolDetected("Rsync", baseDir)
 			nmapOutputFile = caseDir + "rsync_scan"
-			callscans.IndividualPortScanner(target, port, nmapOutputFile)
+			commands.CallIndividualPortScanner(target, port, nmapOutputFile)
 
 			// Netcat
 			ncArgs := []string{"nc", "-nv", target, port}
 			ncPath := fmt.Sprintf("%sbanner_grab.out", caseDir)
-			callRunTool(ncArgs, ncPath)
+			commands.CallRunTool(ncArgs, ncPath)
 
 			filePath = caseDir + "next_steps_tip.txt"
 			message = `Tip: If nc's output has a drive in it after enumerating the version, for example 'dev', your natural following step should be:
             "rsync -av --list-only rsync://${target}/dev"`
-			writeTextToFile(filePath, message)
+			utils.WriteTextToFile(filePath, message)
 
 		case "1433":
 			caseDir = protocolDetected("MSSQL", baseDir)
@@ -388,19 +388,19 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 				"mssql.password":      "",
 				"mssql.instance-name": "MSSQLSERVER",
 			}
-			callIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs)
+			commands.CallIndividualPortScannerWithNSEScriptsAndScriptArgstarget, port, nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs)
 
 			if *flags.OptBrute {
 				bruteCMEArgs := []string{"crackmapexec", "mssql", target, "-u", usersList, "-p", darkwebTop1000}
 				bruteCMEPath := fmt.Sprintf("%scme_brute.out", caseDir)
-				callRunTool(bruteCMEArgs, bruteCMEPath)
+				commands.CallRunTool(bruteCMEArgs, bruteCMEPath)
 			}
 
 		case "1521":
 			caseDir = protocolDetected("TNS", baseDir)
 			nmapOutputFile = caseDir + "tns_scan"
 			nmapNSEScripts = "oracle-sid-brute"
-			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+			commands.callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 			// TODO: Check executing this: odat all -s "${1}" >> "${tns_dir}odat.out" &&
 			startSentence := "[!] Run this manually: '"
@@ -411,7 +411,7 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			caseDir = protocolDetected("NFS", baseDir)
 			nmapOutputFile = caseDir + "nfs_scan"
 			nmapNSEScripts = "nfs-ls,nfs-showmount,nfs-statfs"
-			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+			commands.callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 			// TODO: port code for showmount + mount:
 			// running_tool "Showmount + mount"
@@ -431,26 +431,26 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 			caseDir = protocolDetected("MYSQL", baseDir)
 			nmapOutputFile = caseDir + "mysql_scan"
 			nmapNSEScripts = "mysql*"
-			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+			commands.callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 			// Hydra for MySQL
 			if *flags.OptBrute {
 				hydraArgs = []string{"hydra", "-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "mysql", target)}
 				hydraPath = fmt.Sprintf("%shydra_mysql.out", caseDir)
-				callRunTool(hydraArgs, hydraPath)
+				commands.CallRunTool(hydraArgs, hydraPath)
 			}
 
 		case "3389":
 			caseDir = protocolDetected("RDP", baseDir)
 			nmapOutputFile = caseDir + "rdp_scan"
 			nmapNSEScripts = "rdp*"
-			callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
+			commands.callIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
 
 			// Hydra for RDP
 			if *flags.OptBrute {
 				hydraArgs = []string{"hydra", "-L", usersList, "-P", darkwebTop1000, "-f", fmt.Sprintf("%s://%s", "rdp", target)}
 				hydraPath = fmt.Sprintf("%shydra_rdp.out", caseDir)
-				callRunTool(hydraArgs, hydraPath)
+				commands.CallRunTool(hydraArgs, hydraPath)
 			}
 
 		case "5985", "5986":
@@ -461,13 +461,13 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 
 			caseDir = protocolDetected("WinRM", baseDir)
 			nmapOutputFile = caseDir + "winrm_scan"
-			callscans.IndividualPortScanner(target, "5985,5986", nmapOutputFile)
+			commands.CallIndividualPortScanner(target, "5985,5986", nmapOutputFile)
 
 		case "10000":
 			// TODO: if not webmin, enum ndmp.
 			caseDir = protocolDetected("webmin", baseDir)
 			nmapOutputFile = caseDir + "webmin_scan"
-			callscans.IndividualPortScanner(target, port, nmapOutputFile)
+			commands.CallIndividualPortScanner(target, port, nmapOutputFile)
 
 		default:
 			if *flags.OptVVervose {
