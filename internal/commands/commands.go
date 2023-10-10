@@ -9,224 +9,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/0x5ubt13/enumeraga/internal/flags"
 	"github.com/0x5ubt13/enumeraga/internal/scans"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
-
-func aptGetUpdateCmd() {
-	// Run the apt-get update command
-	fmt.Printf("%s %s%s ", utils.Yellow("[!] Running"), utils.Cyan("apt-get update"), utils.Yellow("..."))
-	update := exec.Command("apt-get", "update")
-
-	// Redirect the command's error output to the standard output in terminal
-	update.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	if *flags.OptDbg {
-		fmt.Println(utils.Cyan("[*] Debug -> printing apt-get update's output ------"))
-		update.Stdout = os.Stdout
-	}
-
-	// Run the command
-	updateErr := update.Run()
-	if updateErr != nil {
-		if *flags.OptDbg {
-			fmt.Printf("Debug - Error running apt-get update: %v\n", updateErr)
-		}
-		return
-	}
-
-	fmt.Println(utils.Green("Done!"))
-}
-
-func installEnum4linuxNg() error {
-	// Ask for consent first of all
-	utils.PrintCustomBiColourMsg(
-		"yellow", "cyan", 
-		"Do you want for ", "Enumeraga ", 
-		"to try and handle the installation of '", "enum4linux-ng", 
-		"'?\nIt might be the case you have it in your machine but not in your $PATH.\nBear in mind that this will call '", "pip", "' as root",
-	)
-	
-	userInput := utils.Consent("enum4linux-ng using pip as root")
-	if userInput == 'n' {
-		consentErr := fmt.Errorf("%s", "Error. Consent not given")
-		return consentErr
-	}
-
-	fmt.Printf("%s %s%s\n", utils.Yellow("[!] Checking pre-requisites to install '"), utils.Cyan("enum4linux-ng"), utils.Yellow("'..."))
-
-	reqs := []string{"python3-ldap3", "python3-yaml", "python3-impacket", "pip"}
-	for _, tool := range reqs {
-		if !utils.Updated {
-			aptGetUpdateCmd()
-			utils.Updated = true
-		}
-		aptGetInstallCmd(tool)
-	}
-
-	// Run git clone "https://github.com/cddmp/enum4linux-ng"
-	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Installing '", "enum4linux-ng", "' ...")
-
-	// Git clone
-	gitClone := exec.Command("git", "clone", "https://github.com/cddmp/enum4linux-ng", "/usr/share/enum4linux-ng")
-
-	// Redirect the command's error output to the standard output in terminal
-	gitClone.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	if *flags.OptDbg {
-		fmt.Println(utils.Cyan("[*] Debug -> printing git clone's output ------"))
-		gitClone.Stdout = os.Stdout
-	}
-
-	// Run the command
-	gitCloneErr := gitClone.Run()
-	if gitCloneErr != nil {
-		if *flags.OptDbg {
-			fmt.Printf("Debug - Error running git clone: %v\n", gitCloneErr)
-		}
-		return gitCloneErr
-	}
-
-	// Run Pip install wheel
-	pipInstallWheel := exec.Command("pip", "install", "wheel", "clone")
-
-	// Redirect the command's error output to the standard output in terminal
-	pipInstallWheel.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	if *flags.OptDbg {
-		fmt.Println(utils.Cyan("[*] Debug -> printing pip install wheel's output ------"))
-		pipInstallWheel.Stdout = os.Stdout
-	}
-
-	// Run the command
-	pipInstallWheelErr := pipInstallWheel.Run()
-	if gitCloneErr != nil {
-		if *flags.OptDbg {
-			fmt.Printf("Debug - Error running pip install wheel: %v\n", pipInstallWheelErr)
-		}
-		return pipInstallWheelErr
-	}
-
-	// Run Pip install -r requirements.txt
-	pipInstallRequirements := exec.Command("pip", "install", "-r", "/usr/share/enum4linux-ng/requirements.txt")
-
-	// Redirect the command's error output to the standard output in terminal
-	pipInstallRequirements.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	if *flags.OptDbg {
-		fmt.Println(utils.Cyan("[*] Debug -> printing pip install wheel's output ------"))
-		pipInstallRequirements.Stdout = os.Stdout
-	}
-
-	// Run the command
-	pipInstallRequirementsErr := pipInstallRequirements.Run()
-	if pipInstallRequirementsErr != nil {
-		if *flags.OptDbg {
-			fmt.Printf("Debug - Error running pip install -r requirements.txt: %v\n", pipInstallRequirementsErr)
-		}
-		return pipInstallRequirementsErr
-	}
-
-	// Make executable
-	chmod := exec.Command("chmod", "+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
-
-	// Redirect the command's error output to the standard output in terminal
-	chmod.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	if *flags.OptDbg {
-		fmt.Println(utils.Cyan("[*] Debug -> printing chmod's output ------"))
-		chmod.Stdout = os.Stdout
-	}
-
-	// Run chmod
-	chmodErr := chmod.Run()
-	if chmodErr != nil {
-		if *flags.OptDbg {
-			fmt.Printf("Debug - Error running chmod: %v\n", chmodErr)
-		}
-		return chmodErr
-	}
-
-	// Create symbolic link
-	ln := exec.Command("ln", "-s", "/usr/share/enum4linux-ng/enum4linux-ng.py", "/usr/bin/enum4linux-ng")
-
-	// Redirect the command's error output to the standard output in terminal
-	ln.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	if *flags.OptDbg {
-		fmt.Println(utils.Cyan("[*] Debug -> printing git clone's output ------"))
-		ln.Stdout = os.Stdout
-	}
-
-	// Run the command
-	lnErr := ln.Run()
-	if lnErr != nil {
-		if *flags.OptDbg {
-			fmt.Printf("Debug - Error running git clone: %v\n", lnErr)
-		}
-		return lnErr
-	}
-
-	fmt.Println(utils.Green("Done!"))
-	return nil
-}
-
-func aptGetInstallCmd(tool string) {
-	 utils.PrintInstallingTool(tool)
-
-	if tool == "finger" {
-		tool = "nfs-common"
-	}
-
-	if tool == "seclists" {
-		tool = "nfs-common"
-	}
-
-	if tool == "msfconsole" {
-		tool = "metasploit-framework"
-	}
-
-	if tool == "responder-RunFinger" {
-		tool = "responder"
-	}
-
-	if tool == "impacket-rpcdump" {
-		tool = "python3-impacket"
-	}
-
-	aptGetInstall := exec.Command("apt", "install", "-y", tool)
-
-	aptGetInstallErr := aptGetInstall.Run()
-	if aptGetInstallErr != nil {
-		// if !strings.Contains(string(aptGetInstall.Stdout), "Unable to locate package") {
-		if *flags.OptDbg {
-			fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
-		}
-
-		// Notify of enum4linux-ng as it's not currently in the official kali repo
-		if tool == "enum4linux-ng" {
-			installErr := installEnum4linuxNg()
-			if installErr != nil {
-				utils.ErrorMsg(installErr.Error())
-				utils.PrintCustomBiColourMsg("red", "cyan", "[-] Error. ", "enum4linux-ng", " needs to be manually installed.\nPlease see: ", "https://github.com/cddmp/enum4linux-ng/blob/master/README.md#kali-linuxdebianubuntulinux-mint")
-				os.Exit(2)
-			}
-			return
-		}
-
-		utils.PrintCustomBiColourMsg("red", "cyan", "[-] Error. Please install the following package manually: '", tool, "'\n[-] Aborting...")
-		os.Exit(2)
-	}
-
-	fmt.Printf("%s\n", utils.Green("Done!"))
-}
 
 // Enumeration for WordPress
 func WPEnumeration(targetUrl, caseDir, port string) {
@@ -236,7 +21,9 @@ func WPEnumeration(targetUrl, caseDir, port string) {
 
 	// grep 'wp-content'
 	if !strings.Contains(string(curlOutput), "wp-content") {
-		if *flags.OptDbg { fmt.Println(utils.Debug("Debug Error: wordpress not detected")) }
+		if *utils.OptDbg {
+			fmt.Println(utils.Debug("Debug Error: wordpress not detected"))
+		}
 		return
 	}
 
@@ -253,7 +40,9 @@ func TomcatEnumeration(target, targetUrl, caseDir, port string) {
 
 	// grep 'wp-content'
 	if !strings.Contains(strings.ToLower(string(curlOutput)), "tomcat") {
-		if *flags.OptDbg { fmt.Println(utils.Debug("Debug Error: tomcat not detected")) }
+		if *utils.OptDbg {
+			fmt.Println(utils.Debug("Debug Error: tomcat not detected"))
+		}
 		return
 	}
 
@@ -265,7 +54,9 @@ func TomcatEnumeration(target, targetUrl, caseDir, port string) {
 	CallRunTool(gobusterArgs, gobusterPath)
 
 	// Run hydra
-	if !*flags.OptBrute { return }
+	if !*utils.OptBrute {
+		return
+	}
 
 	hydraArgs := []string{
 		"hydra",
@@ -337,7 +128,7 @@ func runTool(args []string, filePath string) {
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Running '", tool, "' and sending it to the background")
 	}
 
-	if *flags.OptDbg {
+	if *utils.OptDbg {
 		fmt.Printf("%s%s %s\n", utils.Debug("Debug - command to exec: "), tool, command)
 	}
 
@@ -367,7 +158,7 @@ func runTool(args []string, filePath string) {
 	go func() {
 		_, err := io.Copy(file, stdout)
 		if err != nil {
-			if *flags.OptDbg {
+			if *utils.OptDbg {
 				fmt.Println("Error copying output for tool", tool, ":", err)
 			}
 		}
@@ -404,13 +195,13 @@ func runTool(args []string, filePath string) {
 func RunRangeTools(targetRange string) {
 	// Print Flag detected
 	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] ", "-r", " flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
-	if *flags.OptDbg {
+	if *utils.OptDbg {
 		fmt.Println("[*] Debug: target CIDR range string -> ", targetRange)
 	}
 
 	// Make CIDR dir
-	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *flags.OptOutput, strings.Replace(targetRange, "/", "_", 1))
-	if *flags.OptDbg {
+	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *utils.OptOutput, strings.Replace(targetRange, "/", "_", 1))
+	if *utils.OptDbg {
 		fmt.Println("[*] Debug: cidrDir -> ", cidrDir)
 	}
 	utils.CustomMkdir(cidrDir)

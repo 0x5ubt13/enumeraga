@@ -1,6 +1,6 @@
 # Enumeraga
 
-Automatic enumeration Golang tool that wraps Linux pentesting tools, ported from [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a richer tool that leverages the nice features Go has to offer. Executable binary only 3MB in size! :eyes: 
+Automatic enumeration Golang tool that wraps Linux pentesting tools, ported from [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a richer tool that leverages the nice features Go has to offer. Executable binary only 3MB in size! :eyes:
 
 ![Enumeraga demo gif](./img/enumeraga_demo_gif_v0.1.4-beta.gif)
 
@@ -148,14 +148,16 @@ AutoEnum:
 Enumeraga:
 
 - [x] Port all of this to Golang
-- [ ] Test thoroughly, rewrite in modules and release v1.0
+- [x] Rewrite in modules to enable `go get`
+- [ ] Test thoroughly
+- [ ] Release v1.0
+- [ ] Containerise
 - [ ] Improve the way output is presented to terminal
 - [ ] Add a flag to pass vhosts and functionality to use them
 - [ ] Rewrite the enum4linux-ng installing function to avoid installing pip and dependencies as root
 - [ ] Link each wrapped tool on README to their official repos
-- [ ] Containerise
 - [ ] Improve README.md to show all protocols the script enumerates
 - [ ] Add MOAR enum tools
-- [ ] Enumerate all things (legally!)
+- [ ] Enumerate all things (legally, please!)
 
 Happy enumeration!

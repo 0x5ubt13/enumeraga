@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0x5ubt13/enumeraga/internal/flags"
 	"github.com/fatih/color"
 	zglob "github.com/mattn/go-zglob"
+	getopt "github.com/pborman/getopt/v2"
 )
 
 // Declare global variables available throughout Enumeraga
@@ -45,7 +45,47 @@ var (
 	outputMutex sync.Mutex
 
 	// Sync: Define a waitgroup to generate goroutines
-	Wg          sync.WaitGroup
+	Wg sync.WaitGroup
+
+	// Declare global flags and have getopt return pointers to the values.
+	// DEV: initialising vars only once they have been implemented/ported in the code
+	// optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
+
+	// Activate all fuzzing and bruteforcing in the script
+	OptBrute = getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
+
+	// Specify custom DNS servers.
+	// Default option: -n
+	// OptDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
+
+	// Activate debug text
+	OptDbg = getopt.BoolLong("Debug", 'D', "Activate debug text")
+
+	// Display help dialogue and exit
+	OptHelp = getopt.BoolLong("help", 'h', "Display this help and exit.")
+
+	// Only try to install pre-requisite tools and exit
+	OptInstall = getopt.BoolLong("install", 'i', "Only try to install pre-requisite tools and exit.")
+
+	// Select a different base folder for the output
+	// Default option: "/tmp/enumeraga_output"
+	OptOutput = getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
+
+	// Run port sweep with nmap and the flag --top-ports=<your input>
+	// optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
+	// DEV/TODO: For ^^^, use nmap.WithMostCommonPorts()
+
+	// Don't print the banner and decrease overall verbosity
+	OptQuiet = getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
+
+	// Specify a CIDR range to use tools for whole subnets
+	OptRange = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets.")
+
+	// Specify target single IP / List of IPs file.
+	OptTarget = getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
+
+	// Flood your terminal with plenty of verbosity!
+	OptVVervose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 )
 
 func PrintBanner() {
@@ -98,7 +138,7 @@ func ErrorMsg(errMsg string) {
 // Return number of targets, one per line
 func ReadTargetsFile(filename string) ([]string, int) {
 	// Fetch the file
-	data, err := os.ReadFile(*flags.OptTarget)
+	data, err := os.ReadFile(*OptTarget)
 	if err != nil {
 		panic(err)
 	}
@@ -112,25 +152,29 @@ func ReadTargetsFile(filename string) ([]string, int) {
 func CustomMkdir(name string) {
 	err := os.Mkdir(name, os.ModePerm)
 	if err != nil {
-		if *flags.OptVVervose {
+		if *OptVVervose {
 			fmt.Println(Red("[-] Error creating new dir:", err))
 		}
 	} else {
-		if *flags.OptVVervose {
+		if *OptVVervose {
 			PrintCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
 		}
 	}
 }
 
 // Announce protocol, create base dir and return its name
-func protocolDetected(protocol, baseDir string) string {
-	if !*flags.OptQuiet { PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected") }
+func ProtocolDetected(protocol, baseDir string) string {
+	if !*OptQuiet {
+		PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
+	}
 
 	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
-	if *flags.OptDbg { fmt.Printf("%s\n", Cyan("[*] Debug: protocolDir ->", protocolDir)) }
-	
+	if *OptDbg {
+		fmt.Printf("%s\n", Cyan("[*] Debug: protocolDir ->", protocolDir))
+	}
+
 	CustomMkdir(protocolDir)
-	
+
 	return protocolDir
 }
 
@@ -191,7 +235,7 @@ func FinishLine(start time.Time, interrupted bool) {
 	}
 
 	PrintCustomBiColourMsg("cyan", "green", "\n[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.")
-	if !*flags.OptQuiet {
+	if !*OptQuiet {
 		fmt.Printf("%s%s%s\n\n", Cyan("[*] ---------- "), Green("Enumeration phase complete"), Cyan(" ----------"))
 		fmt.Printf("%s%s%s\n", Cyan("[*] ---------- "), Green("Program complete. Awaiting tools to finish"), Cyan(" ----------"))
 	}
@@ -212,7 +256,6 @@ func RemoveDuplicates(s string) string {
 
 	return strings.Join(result, ",")
 }
-
 
 // Ask for user consent
 func Consent(tool string) rune {
@@ -240,11 +283,15 @@ func Consent(tool string) rune {
 func checkToolExists(tool string) bool {
 	_, lookPatherr := exec.LookPath(tool)
 	if lookPatherr != nil {
-		if *flags.OptDbg { fmt.Println(Debug("Debug - Error: ", lookPatherr.Error())) }
+		if *OptDbg {
+			fmt.Println(Debug("Debug - Error: ", lookPatherr.Error()))
+		}
 		return false
 	}
 
-	if *flags.OptDbg { fmt.Printf("%s%s%s\n", Green("Debug - '"), Green(tool), Green("' is installed")) }
+	if *OptDbg {
+		fmt.Printf("%s%s%s\n", Green("Debug - '"), Green(tool), Green("' is installed"))
+	}
 
 	return true
 }
@@ -310,11 +357,11 @@ func InstallMissingTools() {
 	}
 
 	for _, tool := range missingTools {
-		if !updated {
-			aptGetUpdateCmd()
-			updated = true
+		if !Updated {
+			AptGetUpdateCmd()
+			Updated = true
 		}
-		aptGetInstallCmd(tool)
+		AptGetInstallCmd(tool)
 	}
 }
 
@@ -332,6 +379,223 @@ func printConsentNotGiven(tool string) {
 	)
 }
 
+// Run the apt-get update command
+func AptGetUpdateCmd() {
+	fmt.Printf("%s %s%s ", Yellow("[!] Running"), Cyan("apt-get update"), Yellow("..."))
+	update := exec.Command("apt-get", "update")
+
+	// Redirect the command's error output to the standard output in terminal
+	update.Stderr = os.Stderr
+
+	// Only print to stdout if debugging
+	if *OptDbg {
+		fmt.Println(Cyan("[*] Debug -> printing apt-get update's output ------"))
+		update.Stdout = os.Stdout
+	}
+
+	// Run the command
+	updateErr := update.Run()
+	if updateErr != nil {
+		if *OptDbg {
+			fmt.Printf("Debug - Error running apt-get update: %v\n", updateErr)
+		}
+		return
+	}
+
+	fmt.Println(Green("Done!"))
+}
+
+// Run the apt-get install <tool> command
+func AptGetInstallCmd(tool string) {
+	// Moving to go due to import cycle
+	PrintInstallingTool(tool)
+
+	if tool == "finger" {
+		tool = "nfs-common"
+	}
+
+	if tool == "seclists" {
+		tool = "nfs-common"
+	}
+
+	if tool == "msfconsole" {
+		tool = "metasploit-framework"
+	}
+
+	if tool == "responder-RunFinger" {
+		tool = "responder"
+	}
+
+	if tool == "impacket-rpcdump" {
+		tool = "python3-impacket"
+	}
+
+	aptGetInstall := exec.Command("apt", "install", "-y", tool)
+
+	aptGetInstallErr := aptGetInstall.Run()
+	if aptGetInstallErr != nil {
+		// if !strings.Contains(string(aptGetInstall.Stdout), "Unable to locate package") {
+		if *OptDbg {
+			fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
+		}
+
+		// Notify of enum4linux-ng as it's not currently in the official kali repo
+		if tool == "enum4linux-ng" {
+			installErr := installEnum4linuxNg()
+			if installErr != nil {
+				ErrorMsg(installErr.Error())
+				PrintCustomBiColourMsg("red", "cyan", "[-] Error. ", "enum4linux-ng", " needs to be manually installed.\nPlease see: ", "https://github.com/cddmp/enum4linux-ng/blob/master/README.md#kali-linuxdebianubuntulinux-mint")
+				os.Exit(2)
+			}
+			return
+		}
+
+		PrintCustomBiColourMsg("red", "cyan", "[-] Error. Please install the following package manually: '", tool, "'\n[-] Aborting...")
+		os.Exit(2)
+	}
+
+	fmt.Printf("%s\n", Green("Done!"))
+}
+
+// Try and install Enum4linux-ng on behalf of the user
+func installEnum4linuxNg() error {
+	// Ask for consent first of all
+	PrintCustomBiColourMsg(
+		"yellow", "cyan",
+		"Do you want for ", "Enumeraga ",
+		"to try and handle the installation of '", "enum4linux-ng",
+		"'?\nIt might be the case you have it in your machine but not in your $PATH.\nBear in mind that this will call '", "pip", "' as root",
+	)
+
+	userInput := Consent("enum4linux-ng using pip as root")
+	if userInput == 'n' {
+		consentErr := fmt.Errorf("%s", "Error. Consent not given")
+		return consentErr
+	}
+
+	fmt.Printf("%s %s%s\n", Yellow("[!] Checking pre-requisites to install '"), Cyan("enum4linux-ng"), Yellow("'..."))
+
+	reqs := []string{"python3-ldap3", "python3-yaml", "python3-impacket", "pip"}
+	for _, tool := range reqs {
+		if !Updated {
+			AptGetUpdateCmd()
+			Updated = true
+		}
+		AptGetInstallCmd(tool)
+	}
+
+	// Run git clone "https://github.com/cddmp/enum4linux-ng"
+	PrintCustomBiColourMsg("yellow", "cyan", "[!] Installing '", "enum4linux-ng", "' ...")
+
+	// Git clone
+	gitClone := exec.Command("git", "clone", "https://github.com/cddmp/enum4linux-ng", "/usr/share/enum4linux-ng")
+
+	// Redirect the command's error output to the standard output in terminal
+	gitClone.Stderr = os.Stderr
+
+	// Only print to stdout if debugging
+	if *OptDbg {
+		fmt.Println(Cyan("[*] Debug -> printing git clone's output ------"))
+		gitClone.Stdout = os.Stdout
+	}
+
+	// Run the command
+	gitCloneErr := gitClone.Run()
+	if gitCloneErr != nil {
+		if *OptDbg {
+			fmt.Printf("Debug - Error running git clone: %v\n", gitCloneErr)
+		}
+		return gitCloneErr
+	}
+
+	// Run Pip install wheel
+	pipInstallWheel := exec.Command("pip", "install", "wheel", "clone")
+
+	// Redirect the command's error output to the standard output in terminal
+	pipInstallWheel.Stderr = os.Stderr
+
+	// Only print to stdout if debugging
+	if *OptDbg {
+		fmt.Println(Cyan("[*] Debug -> printing pip install wheel's output ------"))
+		pipInstallWheel.Stdout = os.Stdout
+	}
+
+	// Run the command
+	pipInstallWheelErr := pipInstallWheel.Run()
+	if gitCloneErr != nil {
+		if *OptDbg {
+			fmt.Printf("Debug - Error running pip install wheel: %v\n", pipInstallWheelErr)
+		}
+		return pipInstallWheelErr
+	}
+
+	// Run Pip install -r requirements.txt
+	pipInstallRequirements := exec.Command("pip", "install", "-r", "/usr/share/enum4linux-ng/requirements.txt")
+
+	// Redirect the command's error output to the standard output in terminal
+	pipInstallRequirements.Stderr = os.Stderr
+
+	// Only print to stdout if debugging
+	if *OptDbg {
+		fmt.Println(Cyan("[*] Debug -> printing pip install wheel's output ------"))
+		pipInstallRequirements.Stdout = os.Stdout
+	}
+
+	// Run the command
+	pipInstallRequirementsErr := pipInstallRequirements.Run()
+	if pipInstallRequirementsErr != nil {
+		if *OptDbg {
+			fmt.Printf("Debug - Error running pip install -r requirements.txt: %v\n", pipInstallRequirementsErr)
+		}
+		return pipInstallRequirementsErr
+	}
+
+	// Make executable
+	chmod := exec.Command("chmod", "+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
+
+	// Redirect the command's error output to the standard output in terminal
+	chmod.Stderr = os.Stderr
+
+	// Only print to stdout if debugging
+	if *OptDbg {
+		fmt.Println(Cyan("[*] Debug -> printing chmod's output ------"))
+		chmod.Stdout = os.Stdout
+	}
+
+	// Run chmod
+	chmodErr := chmod.Run()
+	if chmodErr != nil {
+		if *OptDbg {
+			fmt.Printf("Debug - Error running chmod: %v\n", chmodErr)
+		}
+		return chmodErr
+	}
+
+	// Create symbolic link
+	ln := exec.Command("ln", "-s", "/usr/share/enum4linux-ng/enum4linux-ng.py", "/usr/bin/enum4linux-ng")
+
+	// Redirect the command's error output to the standard output in terminal
+	ln.Stderr = os.Stderr
+
+	// Only print to stdout if debugging
+	if *OptDbg {
+		fmt.Println(Cyan("[*] Debug -> printing git clone's output ------"))
+		ln.Stdout = os.Stdout
+	}
+
+	// Run the command
+	lnErr := ln.Run()
+	if lnErr != nil {
+		if *OptDbg {
+			fmt.Printf("Debug - Error running git clone: %v\n", lnErr)
+		}
+		return lnErr
+	}
+
+	fmt.Println(Green("Done!"))
+	return nil
+}
+
 func GetWordlists() {
 	if wordlistsLocated {
 		return
@@ -343,43 +607,43 @@ func GetWordlists() {
 	if err != nil {
 		log.Fatalf("Error locating 'raft-medium-directories-lowercase' with zglob: %v\n", err)
 	}
-	dirListMedium = dirListMediumSlice[0]
+	DirListMedium = dirListMediumSlice[0]
 
 	// Locate the "darkweb2017-top1000.txt" file
-	darkwebTop1000Slice, err := zglob.Glob("/usr/share/seclists/Passwords/darkweb2017-top100.txt")
+	DarkwebTop1000Slice, err := zglob.Glob("/usr/share/seclists/Passwords/darkweb2017-top100.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'darkweb2017-top1000.txt': %v\n", err)
 	}
-	darkwebTop1000 = darkwebTop1000Slice[0]
+	DarkwebTop1000 = DarkwebTop1000Slice[0]
 
 	// Locate the "web-extensions.txt" file
-	extensionsListSlice, err := zglob.Glob("/usr/share/seclists/Discovery/Web-Content/web-extensions.txt")
+	ExtensionsListSlice, err := zglob.Glob("/usr/share/seclists/Discovery/Web-Content/web-extensions.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'web-extensions.txt': %v\n", err)
 	}
-	extensionsList = extensionsListSlice[0]
+	ExtensionsList = ExtensionsListSlice[0]
 
 	// Locate the "top-usernames-shortlist" file
-	usersListSlice, err := zglob.Glob("/usr/share/seclists/Usernames/top-usernames-shortlist.txt")
+	UsersListSlice, err := zglob.Glob("/usr/share/seclists/Usernames/top-usernames-shortlist.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'top-usernames-shortlist': %v\n", err)
 	}
-	usersList = usersListSlice[0]
+	UsersList = UsersListSlice[0]
 
 	// Locate the "snmp-onesixtyone" file
 	snmpListSlice, err := zglob.Glob("/usr/share/seclists/Discovery/SNMP/snmp-onesixtyone.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'SNMP/snmp.txt': %v\n", err)
 	}
-	snmpList := snmpListSlice[0]
+	SnmpList := snmpListSlice[0]
 
-	if *flags.OptDbg {
+	if *OptDbg {
 		fmt.Println("Located Files:")
-		fmt.Printf("dir_list_medium: %v\n", dirListMedium)
-		fmt.Printf("darkweb_top1000: %v\n", darkwebTop1000)
-		fmt.Printf("extensions_list: %v\n", extensionsList)
-		fmt.Printf("users_list: %v\n", usersList)
-		fmt.Printf("snmp_list: %v\n", snmpList)
+		fmt.Printf("dir_list_medium: %v\n", DirListMedium)
+		fmt.Printf("darkweb_top1000: %v\n", DarkwebTop1000)
+		fmt.Printf("extensions_list: %v\n", ExtensionsList)
+		fmt.Printf("users_list: %v\n", UsersList)
+		fmt.Printf("snmp_list: %v\n", SnmpList)
 	}
 }
 
