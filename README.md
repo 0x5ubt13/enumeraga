@@ -1,3 +1,7 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/0x5ubt13/enumeraga)](https://goreportcard.com/report/github.com/0x5ubt13/enumeraga) 
+[![Maintainability](https://api.codeclimate.com/v1/badges/a26c3b3db97f4a3fdeef/maintainability)](https://codeclimate.com/github/0x5ubt13/enumeraga/maintainability) 
+![License](https://img.shields.io/github/license/0x5ubt13/enumeraga?color=blue)
+
 # Enumeraga
 
 Automatic enumeration Golang tool that wraps Linux pentesting tools, ported from [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a richer tool that leverages the nice features Go has to offer. Executable binary only 3MB in size! :eyes:
@@ -147,6 +151,8 @@ Enumeraga:
 
 - [x] Port all of this to Golang
 - [x] Rewrite in modules to enable `go get`
+- [x] Add cool GitHub badges
+- [ ] Work on getting maintenability rate up to A
 - [ ] Test thoroughly
 - [ ] Release v1.0
 - [ ] Containerise
