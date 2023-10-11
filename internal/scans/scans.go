@@ -398,6 +398,6 @@ func FullAggressiveScan(target, ports, outFile string) {
 	ticker.Stop()
 	done <- true
 
-	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggresive nmap", " against target '", target, "' finished successfully")
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggressive nmap", " against target '", target, "' finished successfully")
 	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(oN))
 }
