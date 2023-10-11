@@ -304,7 +304,7 @@ func IndividualPortScanner(target, port, outFile string) {
 					"cyan", "yellow",
 					"[*] Individual protocol nmap scan still running against port(s) '", port,
 					"' on target '", target,
-					"'. Time lapsed: '", string(lapsed), "' minutes. Please wait...")
+					"'. Time lapsed: '", string(rune(lapsed)), "' minutes. Please wait...")
 
 				if *utils.OptDbg {
 					fmt.Println(utils.Debug(t))
@@ -373,7 +373,7 @@ func FullAggressiveScan(target, ports, outFile string) {
 				utils.PrintCustomBiColourMsg(
 					"cyan", "yellow",
 					"[*] Main nmap scan still running against all open ports on target '", target,
-					"'. Time lapsed: '", string(lapsed), "' minutes. Please wait...")
+					"'. Time lapsed: '", string(rune(lapsed)), "' minutes. Please wait...")
 
 				if *utils.OptDbg {
 					fmt.Println(utils.Debug(t))
