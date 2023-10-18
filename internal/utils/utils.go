@@ -457,24 +457,7 @@ func AptGetInstallCmd(tool string) {
 	fmt.Printf("%s\n", Green("Done!"))
 }
 
-// Try and install Enum4linux-ng on behalf of the user
-func installEnum4linuxNg() error {
-	// Ask for consent first of all
-	PrintCustomBiColourMsg(
-		"yellow", "cyan",
-		"Do you want for ", "Enumeraga ",
-		"to try and handle the installation of '", "enum4linux-ng",
-		"'?\nIt might be the case you have it in your machine but not in your $PATH.\nBear in mind that this will call '", "pip", "' as root",
-	)
-
-	userInput := Consent("enum4linux-ng using pip as root")
-	if userInput == 'n' {
-		consentErr := fmt.Errorf("%s", "Error. Consent not given")
-		return consentErr
-	}
-
-	fmt.Printf("%s %s%s\n", Yellow("[!] Checking pre-requisites to install '"), Cyan("enum4linux-ng"), Yellow("'..."))
-
+func enum4linuxNgPreReqs() {
 	reqs := []string{"python3-ldap3", "python3-yaml", "python3-impacket", "pip"}
 	for _, tool := range reqs {
 		if !Updated {
@@ -483,15 +466,14 @@ func installEnum4linuxNg() error {
 		}
 		AptGetInstallCmd(tool)
 	}
+}
 
-	// Run git clone "https://github.com/cddmp/enum4linux-ng"
-	PrintCustomBiColourMsg("yellow", "cyan", "[!] Installing '", "enum4linux-ng", "' ...")
-
-	// Git clone
-	gitClone := exec.Command("git", "clone", "https://github.com/cddmp/enum4linux-ng", "/usr/share/enum4linux-ng")
+func gitCloneCmd(repoName, repoUrl string) error {
+	localDir := "/usr/share/" + repoName
+	gitClone := exec.Command("git", "clone", repoUrl, localDir)
 
 	// Redirect the command's error output to the standard output in terminal
-	gitClone.Stderr = os.Stderr
+	gitClone.Stderr = os.Stderr 
 
 	// Only print to stdout if debugging
 	if *OptDbg {
@@ -508,87 +490,107 @@ func installEnum4linuxNg() error {
 		return gitCloneErr
 	}
 
-	// Run Pip install wheel
-	pipInstallWheel := exec.Command("pip", "install", "wheel", "clone")
+	return nil
+}
+
+func pipInstallCmd(pipPackage ...string) error {
+	pipInstall := exec.Command("pip", "install", strings.Join(pipPackage, ", "))
 
 	// Redirect the command's error output to the standard output in terminal
-	pipInstallWheel.Stderr = os.Stderr
+	pipInstall.Stderr = os.Stderr
 
 	// Only print to stdout if debugging
 	if *OptDbg {
-		fmt.Println(Cyan("[*] Debug -> printing pip install wheel's output ------"))
-		pipInstallWheel.Stdout = os.Stdout
+		fmt.Println(Cyan("[*] Debug -> printing pip install output ------"))
+		pipInstall.Stdout = os.Stdout
 	}
 
 	// Run the command
-	pipInstallWheelErr := pipInstallWheel.Run()
+	pipInstallErr := pipInstall.Run()
+	if pipInstallErr != nil {
+		if *OptDbg {
+			fmt.Printf("Debug - Error running pip install wheel: %v\n", pipInstallErr)
+		}
+		return pipInstallErr
+	}
+
+	return nil
+}
+
+func runCmd(command ...string) error {
+	cmd := exec.Command(strings.Join(command, ","))
+
+	// Redirect the command's error output to the standard output in terminal
+	cmd.Stderr = os.Stderr
+
+	// Only print to stdout if debugging
+	if *OptDbg {
+		fmt.Println(Cyan("[*] Debug -> printing cmd's output ------"))
+		cmd.Stdout = os.Stdout
+	}
+
+	// Run cmd
+	cmdErr := cmd.Run()
+	if cmdErr != nil {
+		if *OptDbg {
+			fmt.Printf("Debug - Error running cmd: %v\n", cmdErr)
+		}
+		return cmdErr
+	}
+
+	return nil
+}
+
+// Try and install Enum4linux-ng on behalf of the user
+func installEnum4linuxNg() error {
+	// Print ask for consent
+	PrintCustomBiColourMsg(
+		"yellow", "cyan",
+		"Do you want for ", "Enumeraga ",
+		"to try and handle the installation of '", "enum4linux-ng",
+		"'?\nIt might be the case you have it in your machine but not in your $PATH.\nBear in mind that this will call '", "pip", "' as root",
+	)
+
+	// Get consent
+	userInput := Consent("enum4linux-ng using pip as root")
+	if userInput == 'n' {
+		consentErr := fmt.Errorf("%s", "Error. Consent not given")
+		return consentErr
+	}
+
+	fmt.Printf("%s %s%s\n", Yellow("[!] Checking pre-requisites to install '"), Cyan("enum4linux-ng"), Yellow("'..."))
+
+	// Check and installed pre-requisites
+	enum4linuxNgPreReqs()
+
+	// Run git clone "https://github.com/cddmp/enum4linux-ng"
+	PrintCustomBiColourMsg("yellow", "cyan", "[!] Installing '", "enum4linux-ng", "' ...")
+	gitCloneErr := gitCloneCmd("enum4linux-ng", "https://github.com/cddmp/enum4linux-ng")
 	if gitCloneErr != nil {
-		if *OptDbg {
-			fmt.Printf("Debug - Error running pip install wheel: %v\n", pipInstallWheelErr)
-		}
-		return pipInstallWheelErr
+		return gitCloneErr
 	}
 
+	// Run pip to install wheel and clone
+	pipInstallErr := pipInstallCmd("wheel", "clone")
+	if pipInstallErr != nil {
+		return pipInstallErr
+	}
+	
 	// Run Pip install -r requirements.txt
-	pipInstallRequirements := exec.Command("pip", "install", "-r", "/usr/share/enum4linux-ng/requirements.txt")
-
-	// Redirect the command's error output to the standard output in terminal
-	pipInstallRequirements.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	if *OptDbg {
-		fmt.Println(Cyan("[*] Debug -> printing pip install wheel's output ------"))
-		pipInstallRequirements.Stdout = os.Stdout
-	}
-
-	// Run the command
-	pipInstallRequirementsErr := pipInstallRequirements.Run()
-	if pipInstallRequirementsErr != nil {
-		if *OptDbg {
-			fmt.Printf("Debug - Error running pip install -r requirements.txt: %v\n", pipInstallRequirementsErr)
-		}
-		return pipInstallRequirementsErr
+	pipInstallErr = pipInstallCmd("-r", "/usr/share/enum4linux-ng/requirements.txt")
+	if pipInstallErr != nil {
+		return pipInstallErr
 	}
 
 	// Make executable
-	chmod := exec.Command("chmod", "+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
-
-	// Redirect the command's error output to the standard output in terminal
-	chmod.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	if *OptDbg {
-		fmt.Println(Cyan("[*] Debug -> printing chmod's output ------"))
-		chmod.Stdout = os.Stdout
-	}
-
-	// Run chmod
-	chmodErr := chmod.Run()
+	chmodErr := runCmd("chmod", "+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
 	if chmodErr != nil {
-		if *OptDbg {
-			fmt.Printf("Debug - Error running chmod: %v\n", chmodErr)
-		}
 		return chmodErr
 	}
 
 	// Create symbolic link
-	ln := exec.Command("ln", "-s", "/usr/share/enum4linux-ng/enum4linux-ng.py", "/usr/bin/enum4linux-ng")
-
-	// Redirect the command's error output to the standard output in terminal
-	ln.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	if *OptDbg {
-		fmt.Println(Cyan("[*] Debug -> printing git clone's output ------"))
-		ln.Stdout = os.Stdout
-	}
-
-	// Run the command
-	lnErr := ln.Run()
+	lnErr := runCmd("ln", "-s", "/usr/share/enum4linux-ng/enum4linux-ng.py", "/usr/bin/enum4linux-ng")
 	if lnErr != nil {
-		if *OptDbg {
-			fmt.Printf("Debug - Error running git clone: %v\n", lnErr)
-		}
 		return lnErr
 	}
 

@@ -1,10 +1,9 @@
-<img src="img/Enumeraga-logo_transparent.png" align="left" width="130" 
-     height="130"/>
+<img src="img/Enumeraga-logo_transparent.png" align="left" width="130" height="130"/>
 
-# Enumeraga - Automate your initial scans with style
+# Enumeraga - Automated Scans with Style
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/0x5ubt13/enumeraga)](https://goreportcard.com/report/github.com/0x5ubt13/enumeraga) 
-[![Maintainability](https://api.codeclimate.com/v1/badges/a26c3b3db97f4a3fdeef/maintainability)](https://codeclimate.com/github/0x5ubt13/enumeraga/maintainability) 
+[![Go Report Card](https://goreportcard.com/badge/github.com/0x5ubt13/enumeraga)](https://goreportcard.com/report/github.com/0x5ubt13/enumeraga)
+[![Maintainability](https://api.codeclimate.com/v1/badges/a26c3b3db97f4a3fdeef/maintainability)](https://codeclimate.com/github/0x5ubt13/enumeraga/maintainability)
 ![License](https://img.shields.io/github/license/0x5ubt13/enumeraga?color=blue)
 
 Automatic enumeration Golang tool that wraps Linux pentesting tools, ported from [autoEnum](https://github.com/0x5ubt13/autoenum), originally written in Bash. This is an attempt to develop a richer tool that leverages the nice features Go has to offer. Executable binary only 3MB in size! :eyes:
@@ -21,7 +20,7 @@ Working as pentesters, or playing CTFs, or fiddling around with practice labs, w
 
 ## Usage
 
-Give Enumeraga either a single IP address or a file containing a list of IPs. Sit back, relax, and laugh maniacally while it handles all enumeration for you, going through every open port on your target on your behalf:
+Give `Enumeraga` either a single IP address or a file containing a list of IPs. Sit back, relax, and laugh maniacally while it handles all enumeration for you, going through every open port on your target on your behalf:
 
     ┌──(root㉿SubtleLabs)-[~]
     └─# enumeraga -h
@@ -62,9 +61,9 @@ Give Enumeraga either a single IP address or a file containing a list of IPs. Si
 
 ### Executable version
 
-Simply grab the executable and launch it at your leisure! All the necessary tools to run that might be missing in your distro should be directly installed (if Enumeraga has your consent), otherwise it will prompt you to install it manually and exit.
+Simply grab the executable and launch it at your leisure! All the necessary tools to run that might be missing in your distro should be directly installed (if `Enumeraga` has your consent), otherwise it will prompt you to install it manually and exit.
 
-This program has been developed in a Kali distro on WSL, so for maximum compatibility I'd suggest it's also ran on a Kali VM (for now). I haven't tested it in any other distro yet.
+This program has been developed in a Kali distro on WSL, so for maximum compatibility I'd suggest it's also run on a Kali VM (for now). I haven't tested it in any other distro yet.
 
 What? You'd like to have a fancy, no-brainer one-liner to try it quick? You've got it! This will download `enumeraga`, put it on `/opt/enumeraga`, make it executable, create a soft link on your path and finally call it with help flag:
 
@@ -76,7 +75,7 @@ What? You'd like to have a fancy, no-brainer one-liner to try it quick? You've g
 
 ## Disclaimer
 
-This tool has to run as `root`, and despite my nickname, it's not precisely a subtle tool! Contrarily, it will create a ton of noise. Given its aggressive nature, please ensure you know what you're doing before launching it, and of course double-check you have absolute permission to enumerate your target(s). 
+This tool has to run as `root`, and despite my nickname, it's not precisely a subtle tool! Contrarily, it will create a ton of noise. Given its aggressive nature, please ensure you know what you're doing before launching it, and of course double-check you have absolute permission to enumerate your target(s).
 
 ## Similar tools out there
 
@@ -155,13 +154,13 @@ Enumeraga:
 - [x] Port all of this to Golang
 - [x] Rewrite in modules to enable `go get`
 - [x] Add cool GitHub badges
-- [ ] Work on getting maintenability rate up to A
+- [ ] Work on getting maintainability rate up to A
 - [ ] Test thoroughly
 - [ ] Release v1.0
 - [ ] Containerise
 - [ ] Improve the way output is presented to terminal
-- [ ] Add a flag to pass vhosts and functionality to use them
-- [ ] Rewrite the enum4linux-ng installing function to avoid installing pip and dependencies as root
+- [ ] Add a flag to pass `vhosts` and functionality to use them
+- [ ] Rewrite the `enum4linux-ng` installing function to avoid installing `pip` and dependencies as `root`
 - [ ] Link each wrapped tool on README to their official repos
 - [ ] Improve README.md to show all protocols the script enumerates
 - [ ] Add MOAR enum tools
