@@ -21,12 +21,10 @@ func WPEnumeration(targetUrl, caseDir, port string) {
 
 	// grep 'wp-content'
 	if !strings.Contains(string(curlOutput), "wp-content") {
-		if *utils.OptDbg {
-			fmt.Println(utils.Debug("Debug Error: wordpress not detected"))
-		}
 		return
 	}
 
+	// Detected, prepare to run wpscan
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "WordPress detected. Running", "WPScan", "...")
 	wpScanArgs := []string{"wpscan", "--url", targetUrl, "-e", "p,u"}
 	wpScanPath := fmt.Sprintf("%swpscan_%s.out", caseDir, port)
@@ -40,16 +38,13 @@ func TomcatEnumeration(target, targetUrl, caseDir, port string) {
 
 	// grep 'wp-content'
 	if !strings.Contains(strings.ToLower(string(curlOutput)), "tomcat") {
-		if *utils.OptDbg {
-			fmt.Println(utils.Debug("Debug Error: tomcat not detected"))
-		}
 		return
 	}
 
-	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "Tomcat detected. Running", "WPScan", "...")
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "Tomcat detected. Running", "Gobuster", "...")
 
 	// Run Gobuster
-	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "u", fmt.Sprintf("%s:8080", target), "-w", utils.DirListMedium}
+	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "u", fmt.Sprintf("%s:%s", target, port), "-w", utils.DirListMedium}
 	gobusterPath := fmt.Sprintf("%stomcat_gobuster.out", caseDir)
 	CallRunTool(gobusterArgs, gobusterPath)
 
@@ -128,10 +123,6 @@ func runTool(args []string, filePath string) {
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Running '", tool, "' and sending it to the background")
 	}
 
-	if *utils.OptDbg {
-		fmt.Printf("%s%s %s\n", utils.Debug("Debug - command to exec: "), tool, command)
-	}
-
 	cmd := exec.Command(tool, cmdArgs...)
 
 	// Create a pipe to capture the command's output
@@ -158,13 +149,13 @@ func runTool(args []string, filePath string) {
 	go func() {
 		_, err := io.Copy(file, stdout)
 		if err != nil {
-			if *utils.OptDbg {
+			if *utils.OptVVervose {
 				fmt.Println("Error copying output for tool", tool, ":", err)
 			}
 		}
 	}()
 
-	// Wait for the command to complete (optional)
+	// Wait for the command to complete
 	if err := cmd.Wait(); err != nil {
 		if tool == "nikto" || tool == "fping" {
 			// Nikto and fping don't have a clean exit
@@ -195,15 +186,9 @@ func runTool(args []string, filePath string) {
 func RunRangeTools(targetRange string) {
 	// Print Flag detected
 	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] ", "-r", " flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
-	if *utils.OptDbg {
-		fmt.Println("[*] Debug: target CIDR range string -> ", targetRange)
-	}
 
 	// Make CIDR dir
 	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *utils.OptOutput, strings.Replace(targetRange, "/", "_", 1))
-	if *utils.OptDbg {
-		fmt.Println("[*] Debug: cidrDir -> ", cidrDir)
-	}
 	utils.CustomMkdir(cidrDir)
 
 	// Get wordlists for the range

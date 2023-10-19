@@ -58,9 +58,6 @@ var (
 	// Default option: -n
 	// OptDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
 
-	// Activate debug text
-	OptDbg = getopt.BoolLong("Debug", 'D', "Activate debug text")
-
 	// Display help dialogue and exit
 	OptHelp = getopt.BoolLong("help", 'h', "Display this help and exit.")
 
@@ -169,10 +166,6 @@ func ProtocolDetected(protocol, baseDir string) string {
 	}
 
 	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
-	if *OptDbg {
-		fmt.Printf("%s\n", Cyan("[*] Debug: protocolDir ->", protocolDir))
-	}
-
 	CustomMkdir(protocolDir)
 
 	return protocolDir
@@ -283,14 +276,7 @@ func Consent(tool string) rune {
 func checkToolExists(tool string) bool {
 	_, lookPatherr := exec.LookPath(tool)
 	if lookPatherr != nil {
-		if *OptDbg {
-			fmt.Println(Debug("Debug - Error: ", lookPatherr.Error()))
-		}
 		return false
-	}
-
-	if *OptDbg {
-		fmt.Printf("%s%s%s\n", Green("Debug - '"), Green(tool), Green("' is installed"))
 	}
 
 	return true
@@ -298,6 +284,10 @@ func checkToolExists(tool string) bool {
 
 // Instruct the program to try and install tools that are absent from the pentesting distro
 func InstallMissingTools() {
+	if *OptInstall {
+		fmt.Println(Cyan("[*] Install flag detected. Aborting other checks and running pre-requisites check.\n"))
+	}
+
 	keyTools := []string{
 		"cewl",
 		"enum4linux-ng",
@@ -387,8 +377,8 @@ func AptGetUpdateCmd() {
 	// Redirect the command's error output to the standard output in terminal
 	update.Stderr = os.Stderr
 
-	// Only print to stdout if debugging
-	if *OptDbg {
+	// Only print to stdout if very verbose flag
+	if *OptVVervose {
 		fmt.Println(Cyan("[*] Debug -> printing apt-get update's output ------"))
 		update.Stdout = os.Stdout
 	}
@@ -396,7 +386,7 @@ func AptGetUpdateCmd() {
 	// Run the command
 	updateErr := update.Run()
 	if updateErr != nil {
-		if *OptDbg {
+		if *OptVVervose {
 			fmt.Printf("Debug - Error running apt-get update: %v\n", updateErr)
 		}
 		return
@@ -435,7 +425,7 @@ func AptGetInstallCmd(tool string) {
 	aptGetInstallErr := aptGetInstall.Run()
 	if aptGetInstallErr != nil {
 		// if !strings.Contains(string(aptGetInstall.Stdout), "Unable to locate package") {
-		if *OptDbg {
+		if *OptVVervose {
 			fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
 		}
 
@@ -476,16 +466,16 @@ func gitCloneCmd(repoName, repoUrl string) error {
 	gitClone.Stderr = os.Stderr 
 
 	// Only print to stdout if debugging
-	if *OptDbg {
-		fmt.Println(Cyan("[*] Debug -> printing git clone's output ------"))
+	if *OptVVervose {
+		fmt.Println(Cyan("[*] Very verbose -> printing git clone's output ------"))
 		gitClone.Stdout = os.Stdout
 	}
 
 	// Run the command
 	gitCloneErr := gitClone.Run()
 	if gitCloneErr != nil {
-		if *OptDbg {
-			fmt.Printf("Debug - Error running git clone: %v\n", gitCloneErr)
+		if *OptVVervose {
+			fmt.Printf("Very verbose -> Error running git clone: %v\n", gitCloneErr)
 		}
 		return gitCloneErr
 	}
@@ -499,17 +489,17 @@ func pipInstallCmd(pipPackage ...string) error {
 	// Redirect the command's error output to the standard output in terminal
 	pipInstall.Stderr = os.Stderr
 
-	// Only print to stdout if debugging
-	if *OptDbg {
-		fmt.Println(Cyan("[*] Debug -> printing pip install output ------"))
+	// Only print to stdout if very verbose
+	if *OptVVervose {
+		fmt.Println(Cyan("[*] Very verbose -> printing pip install output ------"))
 		pipInstall.Stdout = os.Stdout
 	}
 
 	// Run the command
 	pipInstallErr := pipInstall.Run()
 	if pipInstallErr != nil {
-		if *OptDbg {
-			fmt.Printf("Debug - Error running pip install wheel: %v\n", pipInstallErr)
+		if *OptVVervose {
+			fmt.Printf("Very verbose - Error running pip install wheel: %v\n", pipInstallErr)
 		}
 		return pipInstallErr
 	}
@@ -524,16 +514,16 @@ func runCmd(command ...string) error {
 	cmd.Stderr = os.Stderr
 
 	// Only print to stdout if debugging
-	if *OptDbg {
-		fmt.Println(Cyan("[*] Debug -> printing cmd's output ------"))
+	if *OptVVervose {
+		fmt.Println(Cyan("[*] Very verbose -> printing cmd's output ------"))
 		cmd.Stdout = os.Stdout
 	}
 
 	// Run cmd
 	cmdErr := cmd.Run()
 	if cmdErr != nil {
-		if *OptDbg {
-			fmt.Printf("Debug - Error running cmd: %v\n", cmdErr)
+		if *OptVVervose {
+			fmt.Printf("Very verbose - Error running cmd: %v\n", cmdErr)
 		}
 		return cmdErr
 	}
@@ -639,7 +629,7 @@ func GetWordlists() {
 	}
 	SnmpList := snmpListSlice[0]
 
-	if *OptDbg {
+	if *OptVVervose {
 		fmt.Println("Located Files:")
 		fmt.Printf("dir_list_medium: %v\n", DirListMedium)
 		fmt.Printf("darkweb_top1000: %v\n", DarkwebTop1000)

@@ -11,6 +11,7 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator"
 	"github.com/0x5ubt13/enumeraga/internal/scans"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
+	"github.com/Ullaakut/nmap/v3"
 )
 
 // Main logic of enumeraga
@@ -20,9 +21,6 @@ func main() {
 
 	// Perform pre-flight checks and get number of lines.
 	totalLines := checks.Run()
-	if *utils.OptDbg {
-		fmt.Printf("%s%v\n", utils.Debug("Debug - lines: "), totalLines)
-	}
 
 	// Cidr handling
 	cidrErr := cidrInit()
@@ -83,48 +81,33 @@ func targetInit(totalLines int) error {
 	return nil
 }
 
+func sweepPorts(target string) ([]nmap.Host, []nmap.Host) {
+	return scans.TcpPortSweep(target), scans.UdpPortSweep(target)
+}
+
 // Run all phases of scanning using a single target
 func singleTarget(target string, baseFilePath string, multiTarget bool) error {
-	if *utils.OptDbg {
-		fmt.Println(utils.Debug("Debug Start of singleTarget function"))
-		defer fmt.Println(utils.Debug("Debug End of singleTarget function"))
-		fmt.Printf("%s%s\n", utils.Debug("Debug - Single target: "), target)
-		fmt.Printf("%s%s\n", utils.Debug("Debug - Base file path: "), baseFilePath)
-	}
-
 	// Make base dir for the target
 	targetPath := fmt.Sprintf("%s/%s/", baseFilePath, target)
 	utils.CustomMkdir(targetPath)
 
 	// Perform ports sweep
 	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Sweeping TCP and UDP ports on target '", target, "'...")
-	if *utils.OptDbg {
-		fmt.Println(utils.Debug("Debug - Starting TCP ports sweep"))
-	}
-	sweptHostTcp := scans.TcpPortSweep(target)
-
-	if *utils.OptDbg {
-		fmt.Println(utils.Debug("Debug - Starting UDP ports sweep"))
-	}
-	sweptHostUdp := scans.UdpPortSweep(target)
+	sweptHostTcp, sweptHostUdp := sweepPorts(target)
 
 	// Save open ports in dedicated slice
 	// Convert slice to nmap-friendly formatted numbers
 	openPortsSlice := []string{}
 
-	// Create a string slice using strconv.FormatUint
-	// ... Append strings to it.
+	// Create a string slice using strconv.FormatUint and append strings to it.
 	for _, host := range sweptHostTcp {
 		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
 			continue
 		}
 
 		for _, port := range host.Ports {
-			// Error below: string(port.State) not working for some reason, therefore using Sprintf
+			// Error below: String(port.State) not working for some reason, therefore using Sprintf
 			if fmt.Sprintf("%s", port.State) == "open" {
-				if *utils.OptDbg && *utils.OptVVervose {
-					fmt.Println(utils.Debug("Debug Open port:", port.ID))
-				}
 				text := strconv.FormatUint(uint64(port.ID), 10)
 				openPortsSlice = append(openPortsSlice, text)
 			}
@@ -138,11 +121,8 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 		}
 
 		for _, port := range host.Ports {
-			// Error below: string(port.State) not working for some reason, therefore using Sprintf
+			// Error below: String(port.State) not working for some reason, therefore using Sprintf
 			if fmt.Sprintf("%s", port.State) == "open" {
-				if *utils.OptDbg && *utils.OptVVervose {
-					fmt.Println(utils.Debug("Debug Open port:", port.ID))
-				}
 				text := strconv.FormatUint(uint64(port.ID), 10)
 				openPortsSlice = append(openPortsSlice, text)
 			}
@@ -171,11 +151,6 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 
 // Wrapper of single target for multi-target
 func multiTarget(targetsFile *string) {
-	if *utils.OptDbg {
-		fmt.Println(utils.Debug("Debug Start of multiTarget function"))
-		defer fmt.Println(utils.Debug("Debug End of multiTarget function"))
-	}
-
 	if !*utils.OptQuiet {
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using multi-targets file: '", *targetsFile, "'")
 	}

@@ -11,11 +11,6 @@ import (
 // Core functionality of the script
 // Iterate through each port and automate launching tools
 func Run(target string, baseDir string, openPortsSlice []string) {
-	if *utils.OptDbg {
-		fmt.Println(utils.Debug("Debug Start of portsIterator function"))
-		defer fmt.Println(utils.Debug("Debug End of portsIterator function"))
-	}
-
 	var (
 		msfArgs, hydraArgs []string
 		caseDir, filePath, message, nmapOutputFile,
@@ -23,11 +18,6 @@ func Run(target string, baseDir string, openPortsSlice []string) {
 		visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP,
 		visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
 	)
-
-	// DEV: Debugging purposes
-	if *utils.OptDbg {
-		fmt.Printf("%s %s\n", utils.Debug("Debug: baseDir: "), baseDir)
-	}
 
 	// Bruteforce flag?
 	if *utils.OptBrute {
