@@ -1,6 +1,6 @@
 <img src="img/Enumeraga-logo_transparent.png" align="left" width="130" height="130"/>
 
-# Enumeraga - Automated Scans with Style
+# Enumeraga - Hack your Automated Scans
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/0x5ubt13/enumeraga)](https://goreportcard.com/report/github.com/0x5ubt13/enumeraga)
 [![Maintainability](https://api.codeclimate.com/v1/badges/a26c3b3db97f4a3fdeef/maintainability)](https://codeclimate.com/github/0x5ubt13/enumeraga/maintainability)
