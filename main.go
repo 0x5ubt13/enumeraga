@@ -62,6 +62,7 @@ func cidrInit() error {
 func targetInit(totalLines int) error {
 	// If bruteforce flag was passed, initialise the wordlists
 	if *utils.OptBrute {
+		if !*utils.OptQuiet { fmt.Printf("%s\n", utils.Cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforcing tools where applicable.")) }
 		utils.GetWordlists()
 	}
 

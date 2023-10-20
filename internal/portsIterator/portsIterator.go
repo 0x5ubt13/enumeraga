@@ -8,71 +8,74 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
+// Declare vars
+var (
+	msfArgs, hydraArgs []string
+	caseDir, filePath, message, nmapOutputFile,
+	nmapNSEScripts, hydraPath, msfPath string
+	visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP,
+	visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
+)
+
+// Enumerate FTP
+func ftp(target, baseDir string) {
+	if visitedFTP {
+		return
+	}
+	visitedFTP = true
+
+	caseDir = utils.ProtocolDetected("FTP", baseDir)
+	nmapOutputFile = caseDir + "ftp_scan"
+	nmapNSEScripts = "ftp-* and not brute"
+	commands.CallIndividualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
+
+	// Hydra for FTP
+	if *utils.OptBrute {
+		hydraArgs = []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ftp", target)}
+		hydraPath = fmt.Sprintf("%shydra_ftp.out", caseDir)
+		commands.CallRunTool(hydraArgs, hydraPath)
+	}
+}
+
+func ssh(target, baseDir string) {
+	caseDir = utils.ProtocolDetected("SSH", baseDir)
+	nmapOutputFile = caseDir + "ssh_scan"
+	nmapNSEScripts = "ssh-* and not brute"
+	commands.CallIndividualPortScannerWithNSEScripts(target, "22", nmapOutputFile, nmapNSEScripts)
+
+	// Hydra for SSH
+	if *utils.OptBrute {
+		hydraArgs = []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ssh", target)}
+		hydraPath = fmt.Sprintf("%shydra_ssh.out", caseDir)
+		commands.CallRunTool(hydraArgs, hydraPath)
+	}
+}
+
+func smtp(target, baseDir string) {
+	if visitedSMTP {
+		return
+	}
+	visitedSMTP = true
+
+	caseDir = utils.ProtocolDetected("SMTP", baseDir)
+	nmapOutputFile = caseDir + "smtp_scan"
+	nmapNSEScripts = "smtp-commands,smtp-enum-users,smtp-open-relay"
+	commands.CallIndividualPortScannerWithNSEScripts(target, "25,465,587", nmapOutputFile, nmapNSEScripts)
+}
+
+
 // Core functionality of the script
 // Iterate through each port and automate launching tools
-func Run(target string, baseDir string, openPortsSlice []string) {
-	var (
-		msfArgs, hydraArgs []string
-		caseDir, filePath, message, nmapOutputFile,
-		nmapNSEScripts, hydraPath, msfPath string
-		visitedFTP, visitedSMTP, visitedHTTP, visitedIMAP,
-		visitedSMB, visitedSNMP, visitedLDAP, visitedRsvc, visitedWinRM bool
-	)
-
-	// Bruteforce flag?
-	if *utils.OptBrute {
-		if !*utils.OptQuiet {
-			fmt.Printf("%s\n",
-				utils.Cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforcing tools where applicable."))
-			utils.GetWordlists()
-		}
-	}
-
+func Run(target, baseDir string, openPortsSlice []string) {
 	// Loop through every port
 	for _, port := range openPortsSlice {
 		switch port {
 		case "20", "21":
-			if visitedFTP {
-				continue
-			}
-			visitedFTP = true
-
-			caseDir = utils.ProtocolDetected("FTP", baseDir)
-			nmapOutputFile = caseDir + "ftp_scan"
-			nmapNSEScripts = "ftp-* and not brute"
-			commands.CallIndividualPortScannerWithNSEScripts(target, "20,21", nmapOutputFile, nmapNSEScripts)
-
-			// Hydra for FTP
-			if *utils.OptBrute {
-				hydraArgs = []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ftp", target)}
-				hydraPath = fmt.Sprintf("%shydra_ftp.out", caseDir)
-				commands.CallRunTool(hydraArgs, hydraPath)
-			}
-
+			ftp(target, baseDir)
 		case "22":
-			caseDir = utils.ProtocolDetected("SSH", baseDir)
-			nmapOutputFile = caseDir + "ssh_scan"
-			nmapNSEScripts = "ssh-* and not brute"
-			commands.CallIndividualPortScannerWithNSEScripts(target, port, nmapOutputFile, nmapNSEScripts)
-
-			// Hydra for SSH
-			if *utils.OptBrute {
-				hydraArgs = []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ssh", target)}
-				hydraPath = fmt.Sprintf("%shydra_ssh.out", caseDir)
-				commands.CallRunTool(hydraArgs, hydraPath)
-			}
-
+			ssh(target, baseDir)
 		case "25", "465", "587":
-			if visitedSMTP {
-				continue
-			}
-			visitedSMTP = true
-
-			caseDir = utils.ProtocolDetected("SMTP", baseDir)
-			nmapOutputFile = caseDir + "smtp_scan"
-			nmapNSEScripts = "smtp-commands,smtp-enum-users,smtp-open-relay"
-			commands.CallIndividualPortScannerWithNSEScripts(target, "25,465,587", nmapOutputFile, nmapNSEScripts)
-
+			smtp(target, baseDir)
 		case "53":
 			caseDir = utils.ProtocolDetected("DNS", baseDir)
 			nmapOutputFile = caseDir + "dns_scan"
