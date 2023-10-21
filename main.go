@@ -145,7 +145,9 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 	}
 
 	// Run ports iterator with the open ports found
-	portsIterator.Run(target, targetPath, openPortsSlice)
+	utils.Target = target
+	utils.targetPath = targetPath
+	portsIterator.Run(openPortsSlice)
 
 	return nil
 }

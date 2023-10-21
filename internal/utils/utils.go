@@ -83,6 +83,10 @@ var (
 
 	// Flood your terminal with plenty of verbosity!
 	OptVVervose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
+
+	// Declare vars for portsIterator
+	Target, BaseDir string
+	VisitedFTP, VisitedSMTP, VisitedHTTP, VisitedIMAP, VisitedSMB, VisitedSNMP, VisitedLDAP, VisitedRsvc, VisitedWinRM bool
 )
 
 func PrintBanner() {
