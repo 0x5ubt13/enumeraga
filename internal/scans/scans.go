@@ -77,9 +77,6 @@ func UdpPortSweep(target string) []nmap.Host {
 func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) {
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
 
-	oN := outFile + ".nmap"
-	oG := outFile + ".grep"
-
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
@@ -92,8 +89,8 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 		nmap.WithDisabledDNSResolution(),
 		nmap.WithDefaultScript(),
 		nmap.WithServiceInfo(),
-		nmap.WithNmapOutput(oN),
-		nmap.WithGrepOutput(oG),
+		nmap.WithNmapOutput(outFile+".nmap"),
+		nmap.WithGrepOutput(outFile+".grep"),
 		nmap.WithScripts(scripts),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
@@ -102,8 +99,7 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 		log.Fatalf("unable to create nmap scanner individualPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err)
 	}
 
-	ticker := time.NewTicker(2 * time.Minute)
-	done := make(chan bool)
+	ticker := time.NewTicker(2 * time.Minute); done := make(chan bool)
 
 	go func() {
 		for {
@@ -129,19 +125,15 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 		log.Printf("unable to run nmap scan individualPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err)
 	}
 
-	ticker.Stop()
-	done <- true
+	ticker.Stop(); done <- true
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(oN))
+	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(outFile+".nmap"))
 }
 
 // Run an Nmap scan with NSE scripts and NSE script arguments
 func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string) {
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
-
-	oN := outFile + ".nmap"
-	oG := outFile + ".grep"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -155,8 +147,8 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 		nmap.WithDisabledDNSResolution(),
 		nmap.WithDefaultScript(),
 		nmap.WithServiceInfo(),
-		nmap.WithNmapOutput(oN),
-		nmap.WithGrepOutput(oG),
+		nmap.WithNmapOutput(outFile+".nmap"),
+		nmap.WithGrepOutput(outFile+".grep"),
 		nmap.WithScripts(scripts),
 		nmap.WithScriptArguments(scriptArgs),
 		nmap.WithSkipHostDiscovery(),
@@ -166,8 +158,7 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 		log.Fatalf("unable to create nmap scanner individualPortScannerWithNSEScriptsAndScriptArgs: %s %s %s %v", target, port, outFile, err)
 	}
 
-	ticker := time.NewTicker(2 * time.Minute)
-	done := make(chan bool)
+	ticker := time.NewTicker(2 * time.Minute); done := make(chan bool)
 
 	go func() {
 		for {
@@ -197,14 +188,12 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 	done <- true
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(oN))
+	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(outFile+".nmap"))
 }
 
 // Run an UDP Nmap scan with NSE scripts
 func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string) {
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting UDP scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
-	oN := outFile + ".nmap"
-	oG := outFile + ".grep"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -219,8 +208,8 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 		nmap.WithDisabledDNSResolution(),
 		nmap.WithDefaultScript(),
 		nmap.WithServiceInfo(),
-		nmap.WithNmapOutput(oN),
-		nmap.WithGrepOutput(oG),
+		nmap.WithNmapOutput(outFile+".nmap"),
+		nmap.WithGrepOutput(outFile+".grep"),
 		nmap.WithScripts(scripts),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
@@ -229,8 +218,7 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 		log.Fatalf("unable to create nmap scanner individualUDPPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err)
 	}
 
-	ticker := time.NewTicker(2 * time.Minute)
-	done := make(chan bool)
+	ticker := time.NewTicker(2 * time.Minute); done := make(chan bool)
 
 	go func() {
 		for {
@@ -260,15 +248,12 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 	done <- true
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! UDP scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(oN))
+	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(outFile+".nmap"))
 }
 
 // Run a simple Nmap scan
 func IndividualPortScanner(target, port, outFile string) {
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
-
-	oN := outFile + ".nmap"
-	oG := outFile + ".grep"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -282,8 +267,8 @@ func IndividualPortScanner(target, port, outFile string) {
 		nmap.WithDisabledDNSResolution(),
 		nmap.WithDefaultScript(),
 		nmap.WithServiceInfo(),
-		nmap.WithNmapOutput(oN),
-		nmap.WithGrepOutput(oG),
+		nmap.WithNmapOutput(outFile+".nmap"),
+		nmap.WithGrepOutput(outFile+".grep"),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
 	)
@@ -292,8 +277,7 @@ func IndividualPortScanner(target, port, outFile string) {
 	}
 
 	lapsed := 0
-	ticker := time.NewTicker(1 * time.Minute)
-	done := make(chan bool)
+	ticker := time.NewTicker(1 * time.Minute); done := make(chan bool)
 
 	go func() {
 		for {
@@ -329,16 +313,14 @@ func IndividualPortScanner(target, port, outFile string) {
 	done <- true
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! Nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(oN))
+	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(outFile+".nmap"))
 }
 
 // Run main aggressive scan for all open ports on the target
 func FullAggressiveScan(target, ports, outFile string) {
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against '", target, "' and sending it to the background")
 
-	oN := outFile + ".nmap"
-	oG := outFile + ".grep"
-	ports = ports + ",1337" // Adding 1 likely closed port for OS fingerprinting purposes
+	ports = ports + ",1337" // Adding one likely closed port for OS fingerprinting purposes
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -349,11 +331,11 @@ func FullAggressiveScan(target, ports, outFile string) {
 		nmap.WithPorts(ports),
 		nmap.WithPrivileged(),
 		nmap.WithDisabledDNSResolution(),
-		nmap.WithNmapOutput(oN),
+		nmap.WithNmapOutput(outFile+".nmap"),
 		nmap.WithOSDetection(),
 		nmap.WithServiceInfo(),
 		nmap.WithDefaultScript(),
-		nmap.WithGrepOutput(oG),
+		nmap.WithGrepOutput(outFile+".grep"),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
 	)
@@ -362,8 +344,7 @@ func FullAggressiveScan(target, ports, outFile string) {
 	}
 
 	lapsed := 0
-	ticker := time.NewTicker(1 * time.Minute)
-	done := make(chan bool)
+	ticker := time.NewTicker(1 * time.Minute); done := make(chan bool)
 
 	go func() {
 		for {
@@ -399,5 +380,5 @@ func FullAggressiveScan(target, ports, outFile string) {
 	done <- true
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggressive nmap", " against target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(oN))
+	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(outFile+".nmap"))
 }

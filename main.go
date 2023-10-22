@@ -79,6 +79,8 @@ func targetInit(totalLines int) error {
 		return err
 	}
 
+	utils.PrintCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", utils.Target, "' were successfully parsed.")
+
 	return nil
 }
 
@@ -146,7 +148,8 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 
 	// Run ports iterator with the open ports found
 	utils.Target = target
-	utils.targetPath = targetPath
+	utils.BaseDir = targetPath
+
 	portsIterator.Run(openPortsSlice)
 
 	return nil
@@ -177,6 +180,10 @@ func multiTarget(targetsFile *string) {
 		err := singleTarget(target, targetsBaseFilePath, true)
 		if err != nil {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-] No open ports were found in host '", target, "'. Aborting the rest of scans for this host")
+			continue
 		}
+
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", target, "' were successfully parsed.")
+
 	}
 }

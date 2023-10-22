@@ -178,10 +178,10 @@ func imap() {
 	commands.CallRunTool(openSSLArgs, openSSLPath)
 
 	// NC banner grabbing
-	ports := []string("110","143","993","995")
+	ports := []string{"110","143","993","995"}
 	for port := range ports {
-		ncArgs := []string{"nc", "-nv", utils.Target, port}
-		ncPath := fmt.Sprintf("%s%s_banner_grab.out", dir, port)
+		ncArgs := []string{"nc", "-nv", utils.Target, ports[port]}
+		ncPath := fmt.Sprintf("%s%s_banner_grab.out", dir, ports[port])
 		commands.CallRunTool(ncArgs, ncPath)
 	}
 }
@@ -521,6 +521,4 @@ func Run(openPortsSlice []string) {
 			}
 		}
 	}
-
-	utils.PrintCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", utils.Target, "' were successfully parsed.")
 }

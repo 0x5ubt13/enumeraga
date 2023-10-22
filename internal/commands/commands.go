@@ -104,6 +104,23 @@ func runCewlandFfufKeywords(target, caseDir, port string) {
 	runTool(ffufArgs, ffufPath)
 }
 
+func printToolSuccess(command, tool, filePath string) {
+	if strings.Contains(command, "80") {
+		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
+		fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
+		return
+	}
+
+	if strings.Contains(command, "443") {
+		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 443", tool), "' finished successfully")
+		fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
+		return
+	}
+
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
+	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
+}
+
 // Announce tool and run it
 func runTool(args []string, filePath string) {
 	tool := args[0]
@@ -166,20 +183,7 @@ func runTool(args []string, filePath string) {
 		}
 	}
 
-	if strings.Contains(command, "80") {
-		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
-		fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
-		return
-	}
-
-	if strings.Contains(command, "443") {
-		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 443", tool), "' finished successfully")
-		fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
-		return
-	}
-
-	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
+	printToolSuccess(command, tool, filePath)
 }
 
 // Enumerate a whole CIDR range using specific range tools

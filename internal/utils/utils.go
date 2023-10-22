@@ -286,13 +286,9 @@ func checkToolExists(tool string) bool {
 	return true
 }
 
-// Instruct the program to try and install tools that are absent from the pentesting distro
-func InstallMissingTools() {
-	if *OptInstall {
-		fmt.Println(Cyan("[*] Install flag detected. Aborting other checks and running pre-requisites check.\n"))
-	}
-
-	keyTools := []string{
+// Separate function to add key tools 
+func getKeyTools() []string {
+	return []string{
 		"cewl",
 		"enum4linux-ng",
 		"dirsearch",
@@ -315,6 +311,15 @@ func InstallMissingTools() {
 		"wafw00f",
 		"whatweb",
 	}
+}
+
+// Instruct the program to try and install tools that are absent from the pentesting distro
+func InstallMissingTools() {
+	if *OptInstall {
+		fmt.Println(Cyan("[*] Install flag detected. Aborting other checks and running pre-requisites check.\n"))
+	}
+
+	keyTools := getKeyTools()
 
 	// Loop through listed tool see which ones are missing
 	missingTools := []string{}

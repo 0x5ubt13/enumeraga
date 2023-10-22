@@ -1,6 +1,6 @@
 <img src="img/Enumeraga-logo_transparent.png" align="left" width="130" height="130"/>
 
-# Enumeraga - Hack your Automated Scans
+# Enumeraga - Hack your initial scans
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/0x5ubt13/enumeraga)](https://goreportcard.com/report/github.com/0x5ubt13/enumeraga)
 [![Maintainability](https://api.codeclimate.com/v1/badges/a26c3b3db97f4a3fdeef/maintainability)](https://codeclimate.com/github/0x5ubt13/enumeraga/maintainability)
@@ -39,7 +39,6 @@ Give `Enumeraga` either a single IP address or a file containing a list of IPs. 
     
     Usage: checks [-bDhiqV] [-o value] [-r value] [-t value] [parameters ...]
      -b, --brute        Activate all fuzzing and bruteforcing in the script.
-     -D, --Debug        Activate debug text
      -h, --help         Display this help and exit.
      -i, --install      Only try to install requisites and exit.
      -o, --output=value
@@ -67,7 +66,7 @@ This program has been developed in a Kali distro on WSL, so for maximum compatib
 
 What? You'd like to have a fancy, no-brainer one-liner to try it quick? You've got it! This will download `enumeraga`, put it on `/opt/enumeraga`, make it executable, create a soft link on your path and finally call it with help flag:
 
-    sudo mkdir /opt/enumeraga; sudo curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.8-beta/enumeraga_v0.1.8-beta -o /opt/enumeraga/enumeraga; sudo chmod +x /opt/enumeraga/enumeraga; sudo ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
+    sudo mkdir /opt/enumeraga; sudo curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.9-beta/enumeraga_v0.1.9-beta -o /opt/enumeraga/enumeraga; sudo chmod +x /opt/enumeraga/enumeraga; sudo ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
 
 ### Containerised version
 
@@ -79,7 +78,7 @@ This tool has to run as `root`, and despite my nickname, it's not precisely a su
 
 ## Similar tools out there
 
-I am aware other enumeration tools exist, but this one aims to be very fast and concise. So far by the current testing times, Enumeraga is able to run its core logic in about 20 to 60 seconds per host, depending on the number of ports open. 
+I am aware other enumeration tools exist, but this one aims to be very fast and concise. So far by the current testing times, Enumeraga is able to run its core logic in about 20 to 60 seconds per host, depending on the number of ports open.
 
 Enumeraga's bottleneck is clearly identified at the port sweeping phase. Once that's out the way the rest of logic gets triggered almost instantly, grouping up several ports in their respective protocols and targeting protocols for enumeration instead.
 
@@ -125,11 +124,10 @@ Although I will try my best to adhere to coding conventions, I am still learning
 - SNMPWalk
 - SSH-Audit
 - WPScan
-- Xsltproc
 - WhatWeb
 - WafW00f
 
-Besides from the above 30 tools, there are many more included in GNU/Linux doing magic tricks behind the scenes!! (And now Golang's own logic too!)
+Besides from the above 29 tools, there are many more included in GNU/Linux doing magic tricks behind the scenes!! (And now Golang's own logic too!)
 
 ## Tools yet to implement
 
@@ -154,7 +152,7 @@ Enumeraga:
 - [x] Port all of this to Golang
 - [x] Rewrite in modules to enable `go get`
 - [x] Add cool GitHub badges
-- [ ] Work on getting maintainability rate up to A
+- [x] Work on getting maintainability rate up to A
 - [ ] Test thoroughly
 - [ ] Release v1.0
 - [ ] Containerise
