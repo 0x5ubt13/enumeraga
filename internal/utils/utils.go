@@ -570,7 +570,7 @@ func installEnum4linuxNg() error {
 	}
 
 	// Run pip to install wheel and clone
-	pipInstallErr := pipInstallCmd("wheel", "clone")
+	pipInstallErr := pipInstallCmd("wheel clone")
 	if pipInstallErr != nil {
 		return pipInstallErr
 	}
