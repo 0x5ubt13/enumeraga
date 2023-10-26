@@ -465,6 +465,8 @@ func tenthousand() {
 
 // Iterate through each port, group up by protocol and automate launching tools
 func Run(openPortsSlice []string) {
+	fmt.Printf("DEBUG - STARTING PORTSITERATOR")
+	defer fmt.Printf("DEBUG - ENDING PORTSITERATOR")
 	for _, port := range openPortsSlice {
 		switch port {
 		case "20", "21":

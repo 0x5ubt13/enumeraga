@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/utils"
@@ -99,7 +100,8 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 		log.Fatalf("unable to create nmap scanner individualPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err)
 	}
 
-	ticker := time.NewTicker(2 * time.Minute); done := make(chan bool)
+	ticker := time.NewTicker(2 * time.Minute)
+	done := make(chan bool)
 
 	go func() {
 		for {
@@ -125,7 +127,8 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 		log.Printf("unable to run nmap scan individualPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err)
 	}
 
-	ticker.Stop(); done <- true
+	ticker.Stop()
+	done <- true
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
 	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(outFile+".nmap"))
@@ -158,7 +161,8 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 		log.Fatalf("unable to create nmap scanner individualPortScannerWithNSEScriptsAndScriptArgs: %s %s %s %v", target, port, outFile, err)
 	}
 
-	ticker := time.NewTicker(2 * time.Minute); done := make(chan bool)
+	ticker := time.NewTicker(2 * time.Minute)
+	done := make(chan bool)
 
 	go func() {
 		for {
@@ -218,7 +222,8 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 		log.Fatalf("unable to create nmap scanner individualUDPPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err)
 	}
 
-	ticker := time.NewTicker(2 * time.Minute); done := make(chan bool)
+	ticker := time.NewTicker(2 * time.Minute)
+	done := make(chan bool)
 
 	go func() {
 		for {
@@ -276,22 +281,30 @@ func IndividualPortScanner(target, port, outFile string) {
 		log.Fatalf("unable to create nmap scanner individualPortScanner: %s %s %s %v", target, port, outFile, err)
 	}
 
-	lapsed := 0
-	ticker := time.NewTicker(1 * time.Minute); done := make(chan bool)
+	lapsed := 0; ticker := time.NewTicker(1 * time.Minute); done := make(chan bool)
 
 	go func() {
 		for {
 			select {
 			case t := <-ticker.C:
 				lapsed++
+
+				if *utils.OptVVervose {
+					fmt.Println(utils.Debug("Very verbose - ticker.C contents:", t))
+				}
+
+				if lapsed == 1 {
+					utils.PrintCustomBiColourMsg(
+						"cyan", "yellow",
+					"[*] Individual protocol nmap scan still running against port(s) '", port,
+					"' on target '", target,
+					"'. Time lapsed: '", "1", "' minute. Please wait...")
+				} else {
 				utils.PrintCustomBiColourMsg(
 					"cyan", "yellow",
 					"[*] Individual protocol nmap scan still running against port(s) '", port,
 					"' on target '", target,
-					"'. Time lapsed: '", string(rune(lapsed)), "' minutes. Please wait...")
-
-				if *utils.OptVVervose {
-					fmt.Println(utils.Debug(t))
+					"'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
 				}
 			case <-done:
 				return
@@ -318,7 +331,7 @@ func IndividualPortScanner(target, port, outFile string) {
 
 // Run main aggressive scan for all open ports on the target
 func FullAggressiveScan(target, ports, outFile string) {
-	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against '", target, "' and sending it to the background")
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on'", target, "' and sending it to the background")
 
 	ports = ports + ",1337" // Adding one likely closed port for OS fingerprinting purposes
 
@@ -343,22 +356,30 @@ func FullAggressiveScan(target, ports, outFile string) {
 		log.Fatalf("unable to create nmap scanner fullAggressiveScan: %v", err)
 	}
 
-	lapsed := 0
-	ticker := time.NewTicker(1 * time.Minute); done := make(chan bool)
-
+	lapsed := 0; ticker := time.NewTicker(1 * time.Minute); done := make(chan bool);
+	
 	go func() {
 		for {
 			select {
 			case t := <-ticker.C:
 				lapsed++
-				utils.PrintCustomBiColourMsg(
-					"cyan", "yellow",
-					"[*] Main nmap scan still running against all open ports on target '", target,
-					"'. Time lapsed: '", string(rune(lapsed)), "' minutes. Please wait...")
 
 				if *utils.OptVVervose {
-					fmt.Println(utils.Debug(t))
+					fmt.Println(utils.Debug("Very verbose - ticker.C contents:", t))
 				}
+
+				if lapsed == 1 {
+					utils.PrintCustomBiColourMsg(
+						"cyan", "yellow",
+						"[*] Main nmap scan still running against all open ports on target '", target,
+						"'. Time lapsed: '", "1", "' minute. Please wait...")
+				} else {	
+					utils.PrintCustomBiColourMsg(
+						"cyan", "yellow",
+						"[*] Main nmap scan still running against all open ports on target '", target,
+						"'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
+				}
+						
 			case <-done:
 				return
 			}
@@ -379,6 +400,6 @@ func FullAggressiveScan(target, ports, outFile string) {
 	ticker.Stop()
 	done <- true
 
-	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggressive nmap", " against target '", target, "' finished successfully")
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggressive nmap", " against all open ports on target '", target, "' finished successfully")
 	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(outFile+".nmap"))
 }

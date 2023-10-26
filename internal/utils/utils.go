@@ -279,11 +279,8 @@ func Consent(tool string) rune {
 // Check tool exists with exec.LookPath (equivalent to `which <tool>`)
 func checkToolExists(tool string) bool {
 	_, lookPatherr := exec.LookPath(tool)
-	if lookPatherr != nil {
-		return false
-	}
 
-	return true
+	return lookPatherr == nil
 }
 
 // Separate function to add key tools 
@@ -413,9 +410,9 @@ func AptGetInstallCmd(tool string) {
 		tool = "nfs-common"
 	}
 
-	if tool == "seclists" {
-		tool = "nfs-common"
-	}
+	// if tool == "seclists" {
+	// 	tool = "nfs-common"
+	// }
 
 	if tool == "msfconsole" {
 		tool = "metasploit-framework"
@@ -433,7 +430,6 @@ func AptGetInstallCmd(tool string) {
 
 	aptGetInstallErr := aptGetInstall.Run()
 	if aptGetInstallErr != nil {
-		// if !strings.Contains(string(aptGetInstall.Stdout), "Unable to locate package") {
 		if *OptVVervose {
 			fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
 		}
@@ -493,7 +489,7 @@ func gitCloneCmd(repoName, repoUrl string) error {
 }
 
 func pipInstallCmd(pipPackage ...string) error {
-	pipInstall := exec.Command("pip", "install", strings.Join(pipPackage, ", "))
+	pipInstall := exec.Command("pip", "install", pipPackage[0], pipPackage[1])
 
 	// Redirect the command's error output to the standard output in terminal
 	pipInstall.Stderr = os.Stderr
@@ -516,8 +512,8 @@ func pipInstallCmd(pipPackage ...string) error {
 	return nil
 }
 
-func runCmd(command ...string) error {
-	cmd := exec.Command(strings.Join(command, ","))
+func runChmod(command ...string) error {
+	cmd := exec.Command("chmod", command[0], command[1])
 
 	// Redirect the command's error output to the standard output in terminal
 	cmd.Stderr = os.Stderr
@@ -533,6 +529,30 @@ func runCmd(command ...string) error {
 	if cmdErr != nil {
 		if *OptVVervose {
 			fmt.Printf("Very verbose - Error running cmd: %v\n", cmdErr)
+		}
+		return cmdErr
+	}
+
+	return nil
+}
+
+func runLn(command ...string) error {
+	cmd := exec.Command("ln", command[0], command[1], command[2])
+
+	// Redirect the command's error output to the standard output in terminal
+	cmd.Stderr = os.Stderr
+
+	// Only print to stdout if debugging
+	if *OptVVervose {
+		fmt.Println(Cyan("[*] Very verbose -> printing ln's output ------"))
+		cmd.Stdout = os.Stdout
+	}
+
+	// Run cmd
+	cmdErr := cmd.Run()
+	if cmdErr != nil {
+		if *OptVVervose {
+			fmt.Printf("Very verbose - Error running ln: %v\n", cmdErr)
 		}
 		return cmdErr
 	}
@@ -570,8 +590,9 @@ func installEnum4linuxNg() error {
 	}
 
 	// Run pip to install wheel and clone
-	pipInstallErr := pipInstallCmd("wheel clone")
+	pipInstallErr := pipInstallCmd("wheel", "clone")
 	if pipInstallErr != nil {
+		fmt.Println("PIP FAILED...")
 		return pipInstallErr
 	}
 	
@@ -582,13 +603,13 @@ func installEnum4linuxNg() error {
 	}
 
 	// Make executable
-	chmodErr := runCmd("chmod", "+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
+	chmodErr := runChmod("+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
 	if chmodErr != nil {
 		return chmodErr
 	}
 
 	// Create symbolic link
-	lnErr := runCmd("ln", "-s", "/usr/share/enum4linux-ng/enum4linux-ng.py", "/usr/bin/enum4linux-ng")
+	lnErr := runLn("-s", "/usr/share/enum4linux-ng/enum4linux-ng.py", "/usr/bin/enum4linux-ng")
 	if lnErr != nil {
 		return lnErr
 	}
