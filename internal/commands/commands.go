@@ -31,7 +31,7 @@ func WPEnumeration(targetUrl, caseDir, port string) {
 	runTool(wpScanArgs, wpScanPath)
 }
 
-func TomcatEnumeration(target, targetUrl, caseDir, port string) {
+func tomcatEnumeration(target, targetUrl, caseDir, port string) {
 	// Identify Tomat: Run curl
 	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
 	curlOutput, _ := curl.Output()
@@ -177,7 +177,11 @@ func runTool(args []string, filePath string) {
 		if tool == "nikto" || tool == "fping" {
 			// Nikto and fping don't have a clean exit
 			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
-			fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
+			if filePath == "/dev/null" {
+
+			} else {
+				fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
+			}
 		} else {
 			fmt.Println(utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
 		}
@@ -268,6 +272,7 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Positive Match! IPs vulnerable to ", "EternalBlue", " !\n\tShortcut: '", fmt.Sprintf("less -R %s", confirmedFile), "'")
 }
 
+
 // Goroutine for eternalBlueSweepCheck()
 func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
 	utils.Wg.Add(1)
@@ -277,6 +282,26 @@ func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, 
 
 		eternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, dir)
 	}(msfEternalBlueArgs, msfEternalBluePath, dir)
+}
+
+func CallWPEnumeration(targetUrl, caseDir, port string) {
+	utils.Wg.Add(1)
+
+	go func(targetUrl, caseDir, port string) {
+		defer utils.Wg.Done()
+
+		WPEnumeration(targetUrl, caseDir, port)
+	}(targetUrl, caseDir, port)
+}
+
+func CallTomcatEnumeration(target, targetUrl, caseDir, port string) {
+	utils.Wg.Add(1)
+
+	go func(target, targetUrl, caseDir, port string) {
+		defer utils.Wg.Done()
+
+		tomcatEnumeration(target, targetUrl, caseDir, port)
+	}(target, targetUrl, caseDir, port)
 }
 
 // Goroutine for runCewlandFfufKeywords()

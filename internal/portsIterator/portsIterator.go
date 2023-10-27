@@ -84,7 +84,7 @@ func http() {
 	// Port 80:
 
 	// WordPress on port 80
-	commands.WPEnumeration(fmt.Sprintf("https://%s:80", utils.Target), dir, "80")
+	commands.CallWPEnumeration(fmt.Sprintf("https://%s:80", utils.Target), dir, "80")
 
 	// Nikto on port 80
 	nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", utils.Target)}
@@ -102,7 +102,7 @@ func http() {
 	commands.CallRunTool(whatWeb80Args, whatWeb80Path)
 
 	// Dirsearch - Light dirbusting on port 80
-	dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s", utils.Target)}
+	dirsearch80Args := []string{"dirsearch", "-t", "10", "-q", "-u", fmt.Sprintf("http://%s:80", utils.Target)}
 	dirsearch80Path := fmt.Sprintf("%sdirsearch_80.out", dir)
 	commands.CallRunTool(dirsearch80Args, dirsearch80Path)
 
@@ -116,7 +116,7 @@ func http() {
 	// Port 443:
 
 	// WordPress on port 443
-	commands.WPEnumeration(fmt.Sprintf("https://%s:443", utils.Target), dir, "443")
+	commands.CallWPEnumeration(fmt.Sprintf("https://%s:443", utils.Target), dir, "443")
 
 	// Nikto on port 443
 	nikto443Args := []string{"nikto", "-host", fmt.Sprintf("https://%s:443", utils.Target)}
@@ -133,18 +133,18 @@ func http() {
 	whatWeb443Path := fmt.Sprintf("%swhatweb_443.out", dir)
 	commands.CallRunTool(whatWeb443Args, whatWeb443Path)
 
-	// Dirsearch - Light dirbusting on port 80
-	dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s", utils.Target)}
+	// Dirsearch - Light dirbusting on port 443
+	dirsearch443Args := []string{"dirsearch", "-t", "10", "-q", "-u", fmt.Sprintf("https://%s:443", utils.Target)}
 	dirsearch443Path := fmt.Sprintf("%sdirsearch_443.out", dir)
 	commands.CallRunTool(dirsearch443Args, dirsearch443Path)
 
 	// Port 8080
 
 	// WordPress on port 8080
-	commands.WPEnumeration(fmt.Sprintf("https://%s:8080", utils.Target), dir, "8080")
+	commands.CallWPEnumeration(fmt.Sprintf("https://%s:8080", utils.Target), dir, "8080")
 
 	// Tomcat
-	commands.TomcatEnumeration(utils.Target, fmt.Sprintf("https://%s:8080/docs", utils.Target), dir, "8080")
+	commands.CallTomcatEnumeration(utils.Target, fmt.Sprintf("https://%s:8080/docs", utils.Target), dir, "8080")
 }
 
 func kerberos() {
@@ -465,8 +465,6 @@ func tenthousand() {
 
 // Iterate through each port, group up by protocol and automate launching tools
 func Run(openPortsSlice []string) {
-	fmt.Printf("DEBUG - STARTING PORTSITERATOR")
-	defer fmt.Printf("DEBUG - ENDING PORTSITERATOR")
 	for _, port := range openPortsSlice {
 		switch port {
 		case "20", "21":
