@@ -8,7 +8,7 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
-// Enumerate FTP
+// Enumerate File Transfer Protocol (20-21/TCP)
 func ftp() {
 	if utils.VisitedFTP {
 		return
@@ -28,6 +28,7 @@ func ftp() {
 	}
 }
 
+// Enumerate Secure Shell Protocol (22/TCP)
 func ssh() {
 	sshDir := utils.ProtocolDetected("SSH", utils.BaseDir)
 	nmapOutputFile := sshDir + "ssh_scan"
@@ -42,6 +43,7 @@ func ssh() {
 	}
 }
 
+// Enumertae Simple Mail Transfer Protocol (25,465,587/TCP)
 func smtp() {
 	if utils.VisitedSMTP {
 		return
@@ -54,6 +56,7 @@ func smtp() {
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "25,465,587", nmapOutputFile, nmapNSEScripts)
 }
 
+// Enumerate Domain Name System (53/TCP)
 func dns() {
 	dir := utils.ProtocolDetected("DNS", utils.BaseDir)
 	nmapOutputFile := dir + "dns_scan"
@@ -61,6 +64,7 @@ func dns() {
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "53", nmapOutputFile, nmapNSEScripts)
 }
 
+// Enumerate Finger (79/TCP)
 func finger() {
 	dir := utils.ProtocolDetected("Finger", utils.BaseDir)
 	nmapOutputFile := dir + "finger_scan"
@@ -71,6 +75,7 @@ func finger() {
 	commands.CallRunTool(msfArgs, msfPath)
 }
 
+// Enumerate HyperText Transfer Protocol (80,443,8080/TCP)
 func http() {
 	if utils.VisitedHTTP {
 		return
@@ -147,6 +152,7 @@ func http() {
 	commands.CallTomcatEnumeration(utils.Target, fmt.Sprintf("https://%s:8080/docs", utils.Target), dir, "8080")
 }
 
+// Enumerate Kerberos Protocol (88/TCP)
 func kerberos() {
 	dir := utils.ProtocolDetected("Kerberos", utils.BaseDir)
 	nmapOutputFile := dir + "kerberos_scan"
@@ -162,6 +168,7 @@ func kerberos() {
 	utils.WriteTextToFile(filePath, message)
 }
 
+// Enumerate Internet Message Access Protocol (110,143,993,995/TCP)
 func imap() {
 	if utils.VisitedIMAP {
 		return
@@ -186,12 +193,14 @@ func imap() {
 	}
 }
 
+// Enumerate Remote Procedure Call Protocol (111/TCP)
 func rpc() {
 	dir := utils.ProtocolDetected("RPC", utils.BaseDir)
 	nmapOutputFile := dir + "rpc_scan"
 	commands.CallIndividualPortScanner(utils.Target, "111", nmapOutputFile)
 }
 
+// Enumerate Ident Protocol (113/TCP)
 func ident(openPortsSlice []string) {
 	dir := utils.ProtocolDetected("Ident", utils.BaseDir)
 	nmapOutputFile := dir + "ident_scan"
@@ -204,16 +213,22 @@ func ident(openPortsSlice []string) {
 	commands.CallRunTool(identUserEnumArgs, identUserEnumPath)
 }
 
+// Enumerate Microsoft's Remote Procedure Call Protocol (135,593/TCP)
 func msrpc() {
 	dir := utils.ProtocolDetected("MSRPC", utils.BaseDir)
 	nmapOutputFile := dir + "msrpc_scan"
-	commands.CallIndividualPortScanner(utils.Target, "135", nmapOutputFile)
+	commands.CallIndividualPortScanner(utils.Target, "135,593", nmapOutputFile)
 
-	rpcDumpArgs := []string{"impacket-rpcdump", "135"}
-	rpcDumpPath := fmt.Sprintf("%srpcdump.out", dir)
-	commands.CallRunTool(rpcDumpArgs, rpcDumpPath)
+	rpcDump135Args := []string{"impacket-rpcdump", "135"}
+	rpcDump135Path := fmt.Sprintf("%srpcdump_135.out", dir)
+	commands.CallRunTool(rpcDump135Args, rpcDump135Path)
+
+	rpcDump593Args := []string{"impacket-rpcdump", "593"}
+	rpcDump593Path := fmt.Sprintf("%srpcdump_593.out", dir)
+	commands.CallRunTool(rpcDump593Args, rpcDump593Path)
 }
 
+// Enumerate NetBIOS / Server Message Block Protocol (137-139,445/TCP - 137/UDP)
 func smb() {
 	if utils.VisitedSMB {
 		return
@@ -225,7 +240,7 @@ func smb() {
 	nmapOutputFile := dir + "nb_smb_scan"
 	nmapUDPOutputFile := dir + "nb_smb_UDP_scan"
 	nmapNSEScripts := "smb* and not brute"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "137,139,445", nmapOutputFile, nmapNSEScripts) // TCP
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "137,138,139,445", nmapOutputFile, nmapNSEScripts) // TCP
 	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "137", nmapUDPOutputFile, "nbstat.nse")     // UDP
 
 	// CME
@@ -256,6 +271,7 @@ func smb() {
 	commands.CallRunTool(enum4linuxNgArgs, enum4linuxNgPath)
 }
 
+// Enumerate Simple Network Management Protocol (161-162,10161-10162/UDP)
 func snmp() {
 	// TODO: (outstanding from AutoEnum)
 	// Hold on all SNMP enumeration until onesixtyone has finished bruteforcing community strings
@@ -288,6 +304,7 @@ func snmp() {
 	commands.CallRunTool(braaArgs, braaPath)
 }
 
+// Enumerate Light Desktop Access Protocol (389,636,3268-3269/TCP)
 func ldap() {
 	if utils.VisitedLDAP {
 		return
@@ -306,6 +323,7 @@ func ldap() {
 	commands.CallRunTool(ldapSearchArgs, ldapSearchPath)
 }
 
+// Enumerate Berkeley R-services (512-514/TCP)
 func rservices() {
 	if utils.VisitedRsvc {
 		return
@@ -335,6 +353,7 @@ func rservices() {
 	utils.WriteTextToFile(filePath, message)
 }
 
+// Enumerate Intelligent Platform Management Interface Protocol (623/TCP)
 func ipmi() {
 	dir := utils.ProtocolDetected("IPMI", utils.BaseDir)
 	nmapOutputFile := dir + "ipmi_scan"
@@ -349,13 +368,14 @@ func ipmi() {
 	commands.CallRunTool(msfArgs, msfPath)
 }
 
+// Enumerate Rsync utility (873/TCP)
 func rsync() {
 	dir := utils.ProtocolDetected("Rsync", utils.BaseDir)
 	nmapOutputFile := dir + "rsync_scan"
-	commands.CallIndividualPortScanner(utils.Target, "623", nmapOutputFile)
+	commands.CallIndividualPortScanner(utils.Target, "873", nmapOutputFile)
 
 	// Netcat
-	ncArgs := []string{"nc", "-nv", utils.Target, "623"}
+	ncArgs := []string{"nc", "-nv", utils.Target, "873"}
 	ncPath := fmt.Sprintf("%sbanner_grab.out", dir)
 	commands.CallRunTool(ncArgs, ncPath)
 
@@ -365,6 +385,7 @@ func rsync() {
 	utils.WriteTextToFile(filePath, message)
 }
 
+// Enumerate Microsoft's SQL Server
 func mssql() {
 	dir := utils.ProtocolDetected("MSSQL", utils.BaseDir)
 	nmapOutputFile := dir + "mssql"
@@ -384,6 +405,7 @@ func mssql() {
 	}
 }
 
+// Enumerate Oracle's 
 func tns() {
 	dir := utils.ProtocolDetected("TNS", utils.BaseDir)
 	nmapOutputFile := dir + "tns_scan"
@@ -401,6 +423,9 @@ func nfs() {
 	nmapOutputFile := dir + "nfs_scan"
 	nmapNSEScripts := "nfs-ls,nfs-showmount,nfs-statfs"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "2049", nmapOutputFile, nmapNSEScripts)
+
+	// Showmount and mount
+
 
 	// TODO: port code for showmount + mount:
 	// running_tool "Showmount + mount"
@@ -487,7 +512,7 @@ func Run(openPortsSlice []string) {
 			rpc()
 		case "113":
 			ident(openPortsSlice)
-		case "135":
+		case "135", "593":
 			msrpc()
 		case "137", "138", "139", "445":
 			smb()
