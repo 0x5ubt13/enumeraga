@@ -368,7 +368,7 @@ func ipmi() {
 	commands.CallRunTool(msfArgs, msfPath)
 }
 
-// Enumerate Rsync utility (873/TCP)
+// Enumerate Remote Synchronisation protocol (873/TCP)
 func rsync() {
 	dir := utils.ProtocolDetected("Rsync", utils.BaseDir)
 	nmapOutputFile := dir + "rsync_scan"
@@ -385,7 +385,7 @@ func rsync() {
 	utils.WriteTextToFile(filePath, message)
 }
 
-// Enumerate Microsoft's SQL Server
+// Enumerate Microsoft's SQL Server (1433/TCP)
 func mssql() {
 	dir := utils.ProtocolDetected("MSSQL", utils.BaseDir)
 	nmapOutputFile := dir + "mssql"
@@ -405,7 +405,7 @@ func mssql() {
 	}
 }
 
-// Enumerate Oracle's 
+// Enumerate Oracle's Transparent Network Substrate (1521/TCP)
 func tns() {
 	dir := utils.ProtocolDetected("TNS", utils.BaseDir)
 	nmapOutputFile := dir + "tns_scan"
@@ -418,30 +418,71 @@ func tns() {
 	utils.PrintCustomBiColourMsg("yellow", "cyan", startSentence, midSentence, "'")
 }
 
+// Enumerate Network File System Protocol (2049/TCP)
 func nfs() {
-	dir := utils.ProtocolDetected("NFS", utils.BaseDir)
+	dir := utils.ProtocolDetected("NFS/", utils.BaseDir)
 	nmapOutputFile := dir + "nfs_scan"
 	nmapNSEScripts := "nfs-ls,nfs-showmount,nfs-statfs"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "2049", nmapOutputFile, nmapNSEScripts)
 
-	// Showmount and mount
-
-
 	// TODO: port code for showmount + mount:
-	// running_tool "Showmount + mount"
-	// showmount -e "${1}" >> "${nfs_dir}"showmount.out 2>&1 && \
-	// custom_mkdir "${nfs_dir}"mounted_NFS_contents/ && \
-	// # While loop to mount every found drive with showmount:
-	// grep "/" < "${nfs_dir}"showmount.out | cut -d " " -f1 | while IFS= read -r dir_to_mount
-	// do
-	//     custom_mkdir "${nfs_dir}mounted_NFS_contents/${dir_to_mount}/"
-	//     mount -t nfs "${1}":/"${dir_to_mount}" "${nfs_dir}"mounted_NFS_contents/ -o nolock,vers=3,tcp,timeo=300 # TODO: check these mount options work fine
-	// done && \
-	// tree "${nfs_dir}"mounted_NFS_contents/ >> "${nfs_dir}nfs_mounts.tree" 2>&1 && \
-	// finished_tool "Showmount + mount" "${1}" "${nfs_dir}showmount.out && cat ${nfs_dir}nfs_mounts.tree" && \
-	// printf "To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n" "${nfs_dir}mounted_NFS_contents/" > "${nfs_dir}cleanup_readme.txt" &
+	// Showmount and mount
+	showmountArgs := []string{"showmount", "-e", utils.Target}
+	showmountPath := fmt.Sprintf("%sshowmount.out", dir)
+	commands.CallRunTool(showmountArgs, showmountPath)
+	
+	// Mkdir and mount
+	mountDir := fmt.Sprintf("%s%s", dir, "mounted_NFS_contents/")
+	utils.CustomMkdir(mountDir)
+
+	# While loop to mount every found drive with showmount:
+	grep "/" < "${nfs_dir}"showmount.out | cut -d " " -f1 | while IFS= read -r dir_to_mount
+	do
+	    custom_mkdir "${nfs_dir}mounted_NFS_contents/${dir_to_mount}/"
+	    mount -t nfs "${1}":/"${dir_to_mount}" "${nfs_dir}"mounted_NFS_contents/ -o nolock,vers=3,tcp,timeo=300 # TODO: check these mount options work fine
+	done && \
+	tree "${nfs_dir}"mounted_NFS_contents/ >> "${nfs_dir}nfs_mounts.tree" 2>&1 && \
+	finished_tool "Showmount + mount" "${1}" "${nfs_dir}showmount.out && cat ${nfs_dir}nfs_mounts.tree" && \
+	printf "To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n" "${nfs_dir}mounted_NFS_contents/" > "${nfs_dir}cleanup_readme.txt" &
+
+    showmountOut, err := exec.Command("bash", "-c", fmt.Sprintf("cat %sshowmount.out", dir)).Output()
+    if err != nil {
+        panic(err)
+    }
+    dirsToMount := []string{}
+    for _, line := range strings.Split(string(showmountOut), "\n") {
+        if strings.Contains(line, "/") {
+            dirsToMount = append(dirsToMount, strings.Split(line, " ")[0])
+        }
+    }
+    for _, dirToMount := range dirsToMount {
+        utils.CustomMkdir(fmt.Sprintf("%s%s/", nfsDir, dirToMount))
+        if err := customMkdirCmd.Run(); err != nil {
+            panic(err)
+        }
+        mountCmd := exec.Command("bash", "-c", fmt.Sprintf("mount -t nfs %s:/%s %smounted_NFS_contents/ -o nolock,vers=3,tcp,timeo=300", os.Args[1], dirToMount, nfsDir))
+        if err := mountCmd.Run(); err != nil {
+            panic(err)
+        }
+    }
+    treeCmd := exec.Command("bash", "-c", fmt.Sprintf("tree %smounted_NFS_contents/ >> %snfs_mounts.tree 2>&1", nfsDir, nfsDir))
+    if err := treeCmd.Run(); err != nil {
+        panic(err)
+    }
+    finishedToolCmd := exec.Command("bash", "-c", fmt.Sprintf("finished_tool \"Showmount + mount\" \"%s\" \"%sshowmount.out && cat %snfs_mounts.tree\"", os.Args[1], nfsDir, nfsDir))
+    if err := finishedToolCmd.Run(); err != nil {
+        panic(err)
+    }
+    cleanupReadmeFile, err := os.Create(fmt.Sprintf("%scleanup_readme.txt", nfsDir))
+    if err != nil {
+        panic(err)
+    }
+    defer cleanupReadmeFile.Close()
+    cleanupReadmeFile.WriteString(fmt.Sprintf("To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n", fmt.Sprintf("%smounted_NFS_contents/", nfsDir)))
+}
 }
 
+// Enumerate MySQL server (3306/TCP)
 func mysql() {
 	dir := utils.ProtocolDetected("MYSQL", utils.BaseDir)
 	nmapOutputFile := dir + "mysql_scan"
@@ -456,6 +497,7 @@ func mysql() {
 	}
 }
 
+// Enumerate Remote Desktop Protocol (3389/TCP)
 func rdp() {
 	dir := utils.ProtocolDetected("RDP", utils.BaseDir)
 	nmapOutputFile := dir + "rdp_scan"
@@ -470,6 +512,7 @@ func rdp() {
 	}
 }
 
+// Enumerate Windows Remote Management Protocol (5985-5968/TCP)
 func winrm() {
 	if utils.VisitedWinRM {
 		return
@@ -481,6 +524,7 @@ func winrm() {
 	commands.CallIndividualPortScanner(utils.Target, "5985,5986", nmapOutputFile)
 }
 
+// Enumerate Webmin (10000/TCP)
 func tenthousand() {
 	// TODO: if not webmin, enum ndmp.
 	dir := utils.ProtocolDetected("webmin", utils.BaseDir)
