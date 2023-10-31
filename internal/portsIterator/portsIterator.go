@@ -2,6 +2,7 @@ package portsIterator
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/0x5ubt13/enumeraga/internal/commands"
@@ -431,20 +432,10 @@ func nfs() {
 	showmountPath := fmt.Sprintf("%sshowmount.out", dir)
 	commands.CallRunTool(showmountArgs, showmountPath)
 	
-	// Mkdir and mount
+	// Mkdir and mount, to mount every found drive with showmount
 	mountDir := fmt.Sprintf("%s%s", dir, "mounted_NFS_contents/")
 	utils.CustomMkdir(mountDir)
-
-	# While loop to mount every found drive with showmount:
-	grep "/" < "${nfs_dir}"showmount.out | cut -d " " -f1 | while IFS= read -r dir_to_mount
-	do
-	    custom_mkdir "${nfs_dir}mounted_NFS_contents/${dir_to_mount}/"
-	    mount -t nfs "${1}":/"${dir_to_mount}" "${nfs_dir}"mounted_NFS_contents/ -o nolock,vers=3,tcp,timeo=300 # TODO: check these mount options work fine
-	done && \
-	tree "${nfs_dir}"mounted_NFS_contents/ >> "${nfs_dir}nfs_mounts.tree" 2>&1 && \
-	finished_tool "Showmount + mount" "${1}" "${nfs_dir}showmount.out && cat ${nfs_dir}nfs_mounts.tree" && \
-	printf "To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n" "${nfs_dir}mounted_NFS_contents/" > "${nfs_dir}cleanup_readme.txt" &
-
+	
     showmountOut, err := exec.Command("bash", "-c", fmt.Sprintf("cat %sshowmount.out", dir)).Output()
     if err != nil {
         panic(err)
@@ -456,30 +447,19 @@ func nfs() {
         }
     }
     for _, dirToMount := range dirsToMount {
-        utils.CustomMkdir(fmt.Sprintf("%s%s/", nfsDir, dirToMount))
-        if err := customMkdirCmd.Run(); err != nil {
-            panic(err)
-        }
-        mountCmd := exec.Command("bash", "-c", fmt.Sprintf("mount -t nfs %s:/%s %smounted_NFS_contents/ -o nolock,vers=3,tcp,timeo=300", os.Args[1], dirToMount, nfsDir))
+        utils.CustomMkdir(fmt.Sprintf("%s%s/", mountDir, dirToMount))
+        mountCmd := exec.Command("bash", "-c", fmt.Sprintf("mount -t nfs %s:/%s %s -o nolock,vers=3,tcp,timeo=300", utils.Target, dirToMount, mountDir))
         if err := mountCmd.Run(); err != nil {
             panic(err)
         }
     }
-    treeCmd := exec.Command("bash", "-c", fmt.Sprintf("tree %smounted_NFS_contents/ >> %snfs_mounts.tree 2>&1", nfsDir, nfsDir))
+
+    treeCmd := exec.Command("bash", "-c", fmt.Sprintf("tree %s >> %snfs_mounts.tree 2>&1", mountDir, mountDir))
     if err := treeCmd.Run(); err != nil {
         panic(err)
     }
-    finishedToolCmd := exec.Command("bash", "-c", fmt.Sprintf("finished_tool \"Showmount + mount\" \"%s\" \"%sshowmount.out && cat %snfs_mounts.tree\"", os.Args[1], nfsDir, nfsDir))
-    if err := finishedToolCmd.Run(); err != nil {
-        panic(err)
-    }
-    cleanupReadmeFile, err := os.Create(fmt.Sprintf("%scleanup_readme.txt", nfsDir))
-    if err != nil {
-        panic(err)
-    }
-    defer cleanupReadmeFile.Close()
-    cleanupReadmeFile.WriteString(fmt.Sprintf("To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n", fmt.Sprintf("%smounted_NFS_contents/", nfsDir)))
-}
+
+	utils.WriteTextToFile(fmt.Sprintf("%scleanup_readme.txt", mountDir), fmt.Sprintf("To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n", mountDir))
 }
 
 // Enumerate MySQL server (3306/TCP)

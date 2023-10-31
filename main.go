@@ -184,6 +184,5 @@ func multiTarget(targetsFile *string) {
 		}
 
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", target, "' were successfully parsed.")
-
 	}
 }
