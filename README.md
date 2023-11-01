@@ -25,37 +25,34 @@ Give `Enumeraga` either a single IP address or a file containing a list of IPs. 
 
     ┌──(root㉿SubtleLabs)-[~]
     └─# enumeraga -h
-    
+                 
+                                                          v0.1.13-beta
      __________                                    ______________________
      ___  ____/__________  ________ __________________    |_  ____/__    |
      __  __/  __  __ \  / / /_  __ `__ \  _ \_  ___/_  /| |  / __ __  /| |
      _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ / /_/ / _  ___ |
      /_____/  /_/ /_/\__,_/ /_/ /_/ /_/\___//_/    /_/  |_\____/  /_/  |_|
-                                by 0x5ubt13                           
+                            by 0x5ubt13
     
     
-    [*] ---------- Starting Phase 0: running initial checks ----------
-    
+    [*] ---------- Starting checks phase ----------
     [*] Help flag detected. Aborting other checks and printing usage.
     
-    Usage: checks [-bDhiqV] [-o value] [-r value] [-t value] [parameters ...]
+    Usage: enumeraga [-bhiqV] [-o value] [-p value] [-r value] [-t value] [parameters ...]
      -b, --brute        Activate all fuzzing and bruteforcing in the script.
      -h, --help         Display this help and exit.
-     -i, --install      Only try to install requisites and exit.
+     -i, --install      Only try to install pre-requisite tools and exit.
      -o, --output=value
                         Select a different base folder for the output.
                         [/tmp/enumeraga_output]
+     -p, --top-ports=value
+                        Run port sweep with nmap and the flag --top-ports=<your
+                        input>
      -q, --quiet        Don't print the banner and decrease overall verbosity.
-     -r, --range=value  Specify a CIDR range to use tools for whole subnets
+     -r, --range=value  Specify a CIDR range to use tools for whole subnets.
      -t, --target=value
                         Specify target single IP / List of IPs file.
      -V, --vv           Flood your terminal with plenty of verbosity!
-    
-    Examples:
-     enumeraga -i
-     enumeraga -bq -t 10.10.11.230
-     enumeraga -V -r 10.129.121.0/24 -t 10.129.121.60
-     enumeraga -t targets_file.txt -r 10.10.8.0/24
 
 ## Installation
 

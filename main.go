@@ -62,7 +62,9 @@ func cidrInit() error {
 func targetInit(totalLines int) error {
 	// If bruteforce flag was passed, initialise the wordlists
 	if *utils.OptBrute {
-		if !*utils.OptQuiet { fmt.Printf("%s\n", utils.Cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforcing tools where applicable.")) }
+		if !*utils.OptQuiet {
+			fmt.Printf("%s\n", utils.Cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforcing tools where applicable."))
+		}
 		utils.GetWordlists()
 	}
 
@@ -84,19 +86,25 @@ func targetInit(totalLines int) error {
 	return nil
 }
 
-func sweepPorts(target string) ([]nmap.Host, []nmap.Host) {
-	return scans.TcpPortSweep(target), scans.UdpPortSweep(target)
+func sweepPorts() ([]nmap.Host, []nmap.Host) {
+	// If top ports flag passed, branch to use a common ports scan instead
+	if *utils.OptTopPorts != "" {
+		return scans.TcpPortSweepWithTopPorts(utils.Target), scans.UdpPortSweep(utils.Target)
+	}
+	return scans.TcpPortSweep(utils.Target), scans.UdpPortSweep(utils.Target)
 }
 
 // Run all phases of scanning using a single target
 func singleTarget(target string, baseFilePath string, multiTarget bool) error {
+	utils.Target = target
+
 	// Make base dir for the target
 	targetPath := fmt.Sprintf("%s/%s/", baseFilePath, target)
 	utils.CustomMkdir(targetPath)
 
 	// Perform ports sweep
 	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Sweeping TCP and UDP ports on target '", target, "'...")
-	sweptHostTcp, sweptHostUdp := sweepPorts(target)
+	sweptHostTcp, sweptHostUdp := sweepPorts()
 
 	// Save open ports in dedicated slice
 	// Convert slice to nmap-friendly formatted numbers
@@ -147,9 +155,7 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 	}
 
 	// Run ports iterator with the open ports found
-	utils.Target = target
 	utils.BaseDir = targetPath
-
 	portsIterator.Run(openPortsSlice)
 
 	return nil

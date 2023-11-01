@@ -42,6 +42,40 @@ func TcpPortSweep(target string) []nmap.Host {
 	return result.Hosts
 }
 
+// Run the quickest port sweep on TCP
+func TcpPortSweepWithTopPorts(target string) []nmap.Host {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	topPorts, err := strconv.Atoi(*utils.OptTopPorts)
+	if err != nil {
+		log.Fatalf("unable to convert top ports var: %v", err)
+	}
+
+	scanner, err := nmap.NewScanner(
+		ctx,
+		nmap.WithMostCommonPorts(topPorts),
+		nmap.WithTargets(target),
+		nmap.WithMinRate(2000),
+		nmap.WithPrivileged(),
+	)
+	if err != nil {
+		log.Fatalf("unable to create nmap scanner: %v", err)
+	}
+
+	result, warnings, err := scanner.Run()
+	if len(*warnings) > 0 {
+		if *utils.OptVVervose {
+			fmt.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
+	}
+	if err != nil {
+		log.Fatalf("unable to run nmap scan: %v", err)
+	}
+
+	return result.Hosts
+}
+
 // Run a quick port sweep on UDP
 func UdpPortSweep(target string) []nmap.Host {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
@@ -281,7 +315,9 @@ func IndividualPortScanner(target, port, outFile string) {
 		log.Fatalf("unable to create nmap scanner individualPortScanner: %s %s %s %v", target, port, outFile, err)
 	}
 
-	lapsed := 0; ticker := time.NewTicker(1 * time.Minute); done := make(chan bool)
+	lapsed := 0
+	ticker := time.NewTicker(1 * time.Minute)
+	done := make(chan bool)
 
 	go func() {
 		for {
@@ -296,15 +332,15 @@ func IndividualPortScanner(target, port, outFile string) {
 				if lapsed == 1 {
 					utils.PrintCustomBiColourMsg(
 						"cyan", "yellow",
-					"[*] Individual protocol nmap scan still running against port(s) '", port,
-					"' on target '", target,
-					"'. Time lapsed: '", "1", "' minute. Please wait...")
+						"[*] Individual protocol nmap scan still running against port(s) '", port,
+						"' on target '", target,
+						"'. Time lapsed: '", "1", "' minute. Please wait...")
 				} else {
-				utils.PrintCustomBiColourMsg(
-					"cyan", "yellow",
-					"[*] Individual protocol nmap scan still running against port(s) '", port,
-					"' on target '", target,
-					"'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
+					utils.PrintCustomBiColourMsg(
+						"cyan", "yellow",
+						"[*] Individual protocol nmap scan still running against port(s) '", port,
+						"' on target '", target,
+						"'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
 				}
 			case <-done:
 				return
@@ -356,8 +392,10 @@ func FullAggressiveScan(target, ports, outFile string) {
 		log.Fatalf("unable to create nmap scanner fullAggressiveScan: %v", err)
 	}
 
-	lapsed := 0; ticker := time.NewTicker(1 * time.Minute); done := make(chan bool);
-	
+	lapsed := 0
+	ticker := time.NewTicker(1 * time.Minute)
+	done := make(chan bool)
+
 	go func() {
 		for {
 			select {
@@ -373,13 +411,13 @@ func FullAggressiveScan(target, ports, outFile string) {
 						"cyan", "yellow",
 						"[*] Main nmap scan still running against all open ports on target '", target,
 						"'. Time lapsed: '", "1", "' minute. Please wait...")
-				} else {	
+				} else {
 					utils.PrintCustomBiColourMsg(
 						"cyan", "yellow",
 						"[*] Main nmap scan still running against all open ports on target '", target,
 						"'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
 				}
-						
+
 			case <-done:
 				return
 			}

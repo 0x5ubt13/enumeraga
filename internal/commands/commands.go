@@ -272,7 +272,6 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Positive Match! IPs vulnerable to ", "EternalBlue", " !\n\tShortcut: '", fmt.Sprintf("less -R %s", confirmedFile), "'")
 }
 
-
 // Goroutine for eternalBlueSweepCheck()
 func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
 	utils.Wg.Add(1)

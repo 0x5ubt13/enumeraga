@@ -69,8 +69,7 @@ var (
 	OptOutput = getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
 
 	// Run port sweep with nmap and the flag --top-ports=<your input>
-	// optTopPorts = getopt.StringLong("top", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
-	// DEV/TODO: For ^^^, use nmap.WithMostCommonPorts()
+	OptTopPorts = getopt.StringLong("top-ports", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
 
 	// Don't print the banner and decrease overall verbosity
 	OptQuiet = getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
@@ -85,12 +84,13 @@ var (
 	OptVVervose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 
 	// Declare vars for portsIterator
-	Target, BaseDir string
+	Target, BaseDir                                                                                                    string
 	VisitedFTP, VisitedSMTP, VisitedHTTP, VisitedIMAP, VisitedSMB, VisitedSNMP, VisitedLDAP, VisitedRsvc, VisitedWinRM bool
 )
 
 func PrintBanner() {
-	fmt.Printf("\n%s%s%s\n", Yellow(" __________                                    ________"), Cyan("________"), Yellow("______ "))
+	fmt.Printf("\n%s\n", Cyan("                                                     v0.1.13-beta"))
+	fmt.Printf("%s%s%s\n", Yellow(" __________                                    ________"), Cyan("________"), Yellow("______ "))
 	fmt.Printf("%s%s%s\n", Yellow(" ___  ____/__________  ________ __________________    |"), Cyan("_  ____/"), Yellow("__    |"))
 	fmt.Printf("%s%s%s\n", Yellow(" __  __/  __  __ \\  / / /_  __ `__ \\  _ \\_  ___/_  /| |"), Cyan("  / __ "), Yellow("__  /| |"))
 	fmt.Printf("%s%s%s\n", Yellow(" _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ "), Cyan("/ /_/ / "), Yellow("_  ___ |"))
@@ -283,7 +283,7 @@ func checkToolExists(tool string) bool {
 	return lookPatherr == nil
 }
 
-// Separate function to add key tools 
+// Separate function to add key tools
 func getKeyTools() []string {
 	return []string{
 		"cewl",
@@ -468,7 +468,7 @@ func gitCloneCmd(repoName, repoUrl string) error {
 	gitClone := exec.Command("git", "clone", repoUrl, localDir)
 
 	// Redirect the command's error output to the standard output in terminal
-	gitClone.Stderr = os.Stderr 
+	gitClone.Stderr = os.Stderr
 
 	// Only print to stdout if debugging
 	if *OptVVervose {
@@ -595,7 +595,7 @@ func installEnum4linuxNg() error {
 		fmt.Println("PIP FAILED...")
 		return pipInstallErr
 	}
-	
+
 	// Run Pip install -r requirements.txt
 	pipInstallErr = pipInstallCmd("-r", "/usr/share/enum4linux-ng/requirements.txt")
 	if pipInstallErr != nil {

@@ -186,7 +186,7 @@ func imap() {
 	commands.CallRunTool(openSSLArgs, openSSLPath)
 
 	// NC banner grabbing
-	ports := []string{"110","143","993","995"}
+	ports := []string{"110", "143", "993", "995"}
 	for port := range ports {
 		ncArgs := []string{"nc", "-nv", utils.Target, ports[port]}
 		ncPath := fmt.Sprintf("%s%s_banner_grab.out", dir, ports[port])
@@ -242,7 +242,7 @@ func smb() {
 	nmapUDPOutputFile := dir + "nb_smb_UDP_scan"
 	nmapNSEScripts := "smb* and not brute"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "137,138,139,445", nmapOutputFile, nmapNSEScripts) // TCP
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "137", nmapUDPOutputFile, "nbstat.nse")     // UDP
+	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "137", nmapUDPOutputFile, "nbstat.nse")         // UDP
 
 	// CME
 	cmeArgs := []string{"crackmapexec", "smb", "-u", "''", "-p", "''", utils.Target}
@@ -426,38 +426,37 @@ func nfs() {
 	nmapNSEScripts := "nfs-ls,nfs-showmount,nfs-statfs"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "2049", nmapOutputFile, nmapNSEScripts)
 
-	// TODO: port code for showmount + mount:
 	// Showmount and mount
 	showmountArgs := []string{"showmount", "-e", utils.Target}
 	showmountPath := fmt.Sprintf("%sshowmount.out", dir)
 	commands.CallRunTool(showmountArgs, showmountPath)
-	
+
 	// Mkdir and mount, to mount every found drive with showmount
 	mountDir := fmt.Sprintf("%s%s", dir, "mounted_NFS_contents/")
 	utils.CustomMkdir(mountDir)
-	
-    showmountOut, err := exec.Command("bash", "-c", fmt.Sprintf("cat %sshowmount.out", dir)).Output()
-    if err != nil {
-        panic(err)
-    }
-    dirsToMount := []string{}
-    for _, line := range strings.Split(string(showmountOut), "\n") {
-        if strings.Contains(line, "/") {
-            dirsToMount = append(dirsToMount, strings.Split(line, " ")[0])
-        }
-    }
-    for _, dirToMount := range dirsToMount {
-        utils.CustomMkdir(fmt.Sprintf("%s%s/", mountDir, dirToMount))
-        mountCmd := exec.Command("bash", "-c", fmt.Sprintf("mount -t nfs %s:/%s %s -o nolock,vers=3,tcp,timeo=300", utils.Target, dirToMount, mountDir))
-        if err := mountCmd.Run(); err != nil {
-            panic(err)
-        }
-    }
 
-    treeCmd := exec.Command("bash", "-c", fmt.Sprintf("tree %s >> %snfs_mounts.tree 2>&1", mountDir, mountDir))
-    if err := treeCmd.Run(); err != nil {
-        panic(err)
-    }
+	showmountOut, err := exec.Command("bash", "-c", fmt.Sprintf("cat %sshowmount.out", dir)).Output()
+	if err != nil {
+		panic(err)
+	}
+	dirsToMount := []string{}
+	for _, line := range strings.Split(string(showmountOut), "\n") {
+		if strings.Contains(line, "/") {
+			dirsToMount = append(dirsToMount, strings.Split(line, " ")[0])
+		}
+	}
+	for _, dirToMount := range dirsToMount {
+		utils.CustomMkdir(fmt.Sprintf("%s%s/", mountDir, dirToMount))
+		mountCmd := exec.Command("bash", "-c", fmt.Sprintf("mount -t nfs %s:/%s %s -o nolock,vers=3,tcp,timeo=300", utils.Target, dirToMount, mountDir))
+		if err := mountCmd.Run(); err != nil {
+			panic(err)
+		}
+	}
+
+	treeCmd := exec.Command("bash", "-c", fmt.Sprintf("tree %s >> %snfs_mounts.tree 2>&1", mountDir, mountDir))
+	if err := treeCmd.Run(); err != nil {
+		panic(err)
+	}
 
 	utils.WriteTextToFile(fmt.Sprintf("%scleanup_readme.txt", mountDir), fmt.Sprintf("To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n", mountDir))
 }
