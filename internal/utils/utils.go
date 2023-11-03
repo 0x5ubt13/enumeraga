@@ -590,24 +590,14 @@ func installEnum4linuxNg() error {
 	}
 
 	// Run pip to install wheel and clone
-	pipInstallErr := pipInstallCmd("wheel", "clone")
-	if pipInstallErr != nil {
-		fmt.Println("PIP FAILED...")
-		return pipInstallErr
-	}
-
+	pipInstallCmd("wheel", "clone")
+	
 	// Run Pip install -r requirements.txt
-	pipInstallErr = pipInstallCmd("-r", "/usr/share/enum4linux-ng/requirements.txt")
-	if pipInstallErr != nil {
-		return pipInstallErr
-	}
+	pipInstallCmd("-r", "/usr/share/enum4linux-ng/requirements.txt")
 
 	// Make executable
-	chmodErr := runChmod("+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
-	if chmodErr != nil {
-		return chmodErr
-	}
-
+	runChmod("+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
+	
 	// Create symbolic link
 	lnErr := runLn("-s", "/usr/share/enum4linux-ng/enum4linux-ng.py", "/usr/bin/enum4linux-ng")
 	if lnErr != nil {
