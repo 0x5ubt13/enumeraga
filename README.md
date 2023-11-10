@@ -25,7 +25,7 @@ Give `Enumeraga` either a single IP address or a file containing a list of IPs. 
 
     ┌──(root㉿SubtleLabs)-[~]
     └─# enumeraga -h
-                 
+
                                                           v0.1.13-beta
      __________                                    ______________________
      ___  ____/__________  ________ __________________    |_  ____/__    |
@@ -64,7 +64,7 @@ This program has been developed in a Kali distro on WSL, so for maximum compatib
 
 What? You'd like to have a fancy, no-brainer one-liner to try it quick? You've got it! This will download `enumeraga`, put it on `/opt/enumeraga`, make it executable, create a soft link on your path and finally call it with help flag:
 
-    sudo mkdir /opt/enumeraga; sudo curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.12-beta/enumeraga_v0.1.12-beta -o /opt/enumeraga/enumeraga; sudo chmod +x /opt/enumeraga/enumeraga; sudo ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
+    sudo mkdir /opt/enumeraga; sudo curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.13-beta/enumeraga_v0.1.13-beta -o /opt/enumeraga/enumeraga; sudo chmod +x /opt/enumeraga/enumeraga; sudo ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
 
 ### Containerised version
 

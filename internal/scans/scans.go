@@ -292,8 +292,6 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 
 // Run a simple Nmap scan
 func IndividualPortScanner(target, port, outFile string) {
-	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
-
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
@@ -323,24 +321,15 @@ func IndividualPortScanner(target, port, outFile string) {
 		for {
 			select {
 			case t := <-ticker.C:
-				lapsed++
-
 				if *utils.OptVVervose {
 					fmt.Println(utils.Debug("Very verbose - ticker.C contents:", t))
 				}
 
+				lapsed++
 				if lapsed == 1 {
-					utils.PrintCustomBiColourMsg(
-						"cyan", "yellow",
-						"[*] Individual protocol nmap scan still running against port(s) '", port,
-						"' on target '", target,
-						"'. Time lapsed: '", "1", "' minute. Please wait...")
+					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan still running against port(s) '", port, "' on target '", target, "'. Time lapsed: '", "1", "' minute. Please wait...")
 				} else {
-					utils.PrintCustomBiColourMsg(
-						"cyan", "yellow",
-						"[*] Individual protocol nmap scan still running against port(s) '", port,
-						"' on target '", target,
-						"'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
+					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan still running against port(s) '", port, "' on target '", target, "'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
 				}
 			case <-done:
 				return
@@ -348,14 +337,9 @@ func IndividualPortScanner(target, port, outFile string) {
 		}
 	}()
 
-	_, warnings, err := scanner.Run()
-	if len(*warnings) > 0 {
-		if *utils.OptVVervose {
-			log.Printf("run finished with warnings: %s\n", *warnings)
-		} // Warnings are non-critical errors from nmap.
-	}
+	_, _, err = scanner.Run()
 	if err != nil {
-		log.Printf("unable to run nmap scan individualPortScanner: %s %s %s %v", target, port, outFile, err)
+		utils.ErrorMsg(fmt.Sprintf("unable to run nmap scan individualPortScanner: %s %s %s %v", target, port, outFile, err))
 	}
 
 	ticker.Stop()
@@ -367,10 +351,6 @@ func IndividualPortScanner(target, port, outFile string) {
 
 // Run main aggressive scan for all open ports on the target
 func FullAggressiveScan(target, ports, outFile string) {
-	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on'", target, "' and sending it to the background")
-
-	ports = ports + ",1337" // Adding one likely closed port for OS fingerprinting purposes
-
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
@@ -400,39 +380,25 @@ func FullAggressiveScan(target, ports, outFile string) {
 		for {
 			select {
 			case t := <-ticker.C:
-				lapsed++
-
 				if *utils.OptVVervose {
 					fmt.Println(utils.Debug("Very verbose - ticker.C contents:", t))
 				}
 
+				lapsed++
 				if lapsed == 1 {
-					utils.PrintCustomBiColourMsg(
-						"cyan", "yellow",
-						"[*] Main nmap scan still running against all open ports on target '", target,
-						"'. Time lapsed: '", "1", "' minute. Please wait...")
+					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Main nmap scan still running against all open ports on target '", target, "'. Time lapsed: '", "1", "' minute. Please wait...")
 				} else {
-					utils.PrintCustomBiColourMsg(
-						"cyan", "yellow",
-						"[*] Main nmap scan still running against all open ports on target '", target,
-						"'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
+					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Main nmap scan still running against all open ports on target '", target, "'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
 				}
-
 			case <-done:
 				return
 			}
 		}
 	}()
 
-	_, warnings, err := scanner.Run()
-	if len(*warnings) > 0 {
-		if *utils.OptVVervose {
-			log.Printf("run finished with warnings: %s\n", *warnings)
-		} // Warnings are non-critical errors from nmap.
-	}
-
+	_, _, err = scanner.Run()
 	if err != nil {
-		log.Printf("unable to run nmap scan fullAggressiveScan: %s %s %s %v", target, ports, outFile, err)
+		utils.ErrorMsg(fmt.Sprintf("unable to run nmap scan fullAggressiveScan: %s %s %s %v", target, ports, outFile, err))
 	}
 
 	ticker.Stop()

@@ -515,58 +515,76 @@ func tenthousand() {
 func Run(openPortsSlice []string) {
 	for _, port := range openPortsSlice {
 		switch port {
-		case "20", "21":
-			ftp()
-		case "22":
-			ssh()
-		case "25", "465", "587":
-			smtp()
-		case "53":
-			dns()
-		case "79":
-			finger()
-		case "80", "443", "8080":
-			http()
-		case "88":
-			kerberos()
-		case "110", "143", "993", "995":
-			imap()
-		case "111":
-			rpc()
-		case "113":
-			ident(openPortsSlice)
-		case "135", "593":
-			msrpc()
-		case "137", "138", "139", "445":
-			smb()
-		case "161", "162", "10161", "10162": // UDP
-			snmp()
-		case "389", "636", "3268", "3269":
-			ldap()
-		case "512", "513", "514":
-			rservices()
-		case "623":
-			ipmi()
-		case "873":
-			rsync()
-		case "1433":
-			mssql()
-		case "1521":
-			tns()
-		case "2049":
-			nfs()
-		case "3306":
-			mysql()
-		case "3389":
-			rdp()
-		case "5985", "5986":
-			winrm()
-		case "10000":
-			tenthousand()
+		case "20", "21", "22", "25", "465", "587", "53", "79", "80", "443", "8080", "88", "110", "143", "993", "995", "111", "113", "135", "593", "137", "138", "139", "445":
+			upToSMB(port, openPortsSlice)
+
+		case "161", "162", "10161", "10162", "389", "636", "3268", "3269", "512", "513", "514", "623", "873", "1433", "1521", "2049", "3306", "3389", "5985", "5986", "10000":
+			beyondSMB(port)
+
 		default:
 			if *utils.OptVVervose {
 				fmt.Printf("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
 			}
 		}
+	}
+}
+
+// Splitting Run in half for maintainability purposes
+func upToSMB(port string, openPortsSlice []string) {
+	switch port {
+	case "20", "21":
+		ftp()
+	case "22":
+		ssh()
+	case "25", "465", "587":
+		smtp()
+	case "53":
+		dns()
+	case "79":
+		finger()
+	case "80", "443", "8080":
+		http()
+	case "88":
+		kerberos()
+	case "110", "143", "993", "995":
+		imap()
+	case "111":
+		rpc()
+	case "113":
+		ident(openPortsSlice)
+	case "135", "593":
+		msrpc()
+	case "137", "138", "139", "445":
+		smb()
+	}
+}
+
+// Splitting Run in half for maintainability purposes
+func beyondSMB(port string) {
+	switch port {
+	case "161", "162", "10161", "10162": // UDP
+		snmp()
+	case "389", "636", "3268", "3269":
+		ldap()
+	case "512", "513", "514":
+		rservices()
+	case "623":
+		ipmi()
+	case "873":
+		rsync()
+	case "1433":
+		mssql()
+	case "1521":
+		tns()
+	case "2049":
+		nfs()
+	case "3306":
+		mysql()
+	case "3389":
+		rdp()
+	case "5985", "5986":
+		winrm()
+	case "10000":
+		tenthousand()
 	}
 }

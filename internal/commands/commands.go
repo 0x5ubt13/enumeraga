@@ -343,6 +343,7 @@ func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile,
 	go func(target, port, outFile, scripts string, scriptArgs map[string]string) {
 		defer utils.Wg.Done()
 
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
 		scans.IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs)
 	}(target, port, outFile, scripts, scriptArgs)
 }
@@ -376,6 +377,8 @@ func CallFullAggressiveScan(target, ports, outFile string) {
 	go func(target, ports, outFile string) {
 		defer utils.Wg.Done()
 
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on'", target, "' and sending it to the background")
+		ports = ports + ",1337" // Adding one likely closed port for OS fingerprinting purposes
 		scans.FullAggressiveScan(target, ports, outFile)
 	}(target, ports, outFile)
 }
