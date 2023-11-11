@@ -121,13 +121,8 @@ func printToolSuccess(command, tool, filePath string) {
 	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
 }
 
-// Announce tool and run it
-func runTool(args []string, filePath string) {
-	tool := args[0]
-	cmdArgs := args[1:]
-
-	// Handle messages for HTTP tools to avoid confusion
-	command := strings.Join(cmdArgs, " ")
+// Handle messages for HTTP tools to avoid confusion
+func announceTool(command, tool string) {
 	if strings.Contains(command, "80") {
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Running '", fmt.Sprintf("%s on port 80", tool), "' and sending it to the background")
 	}
@@ -139,27 +134,35 @@ func runTool(args []string, filePath string) {
 	if !strings.Contains(command, "80") && !strings.Contains(command, "443") {
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Running '", tool, "' and sending it to the background")
 	}
+}
 
+// Announce tool and run it
+func runTool(args []string, filePath string) {
+	tool := args[0]
+	cmdArgs := args[1:]
+	command := strings.Join(cmdArgs, " ")
+	announceTool(command, tool)
+	
 	cmd := exec.Command(tool, cmdArgs...)
 
 	// Create a pipe to capture the command's output
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		fmt.Println("Error creating stdout pipe:", err)
+		utils.ErrorMsg(fmt.Sprintf("Error creating stdout pipe: %s", err))
 		os.Exit(1)
 	}
 
-	// Create a file to write the output
+	// Create a file to write the output to
 	file, err := os.Create(filePath)
 	if err != nil {
-		fmt.Println("Error creating output file:", err)
+		utils.ErrorMsg(fmt.Sprintf("Error creating output file: %s", err))
 		os.Exit(1)
 	}
 	defer file.Close()
 
 	// Start the command asynchronously in a goroutine
 	if err := cmd.Start(); err != nil {
-		fmt.Printf("%s%s\n", "Error starting command:", err)
+		utils.ErrorMsg(fmt.Sprintf("%s%s", "Error starting command:", err))
 	}
 
 	// This goroutine will capture and write the command's output to a file
@@ -167,7 +170,7 @@ func runTool(args []string, filePath string) {
 		_, err := io.Copy(file, stdout)
 		if err != nil {
 			if *utils.OptVVervose {
-				fmt.Println("Error copying output for tool", tool, ":", err)
+				utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
 			}
 		}
 	}()
@@ -176,10 +179,8 @@ func runTool(args []string, filePath string) {
 	if err := cmd.Wait(); err != nil {
 		if tool == "nikto" || tool == "fping" {
 			// Nikto and fping don't have a clean exit
-			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
-			if filePath == "/dev/null" {
-
-			} else {
+			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
+			if filePath != "/dev/null" {
 				fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
 			}
 		} else {
