@@ -148,13 +148,13 @@ AutoEnum:
 Enumeraga:
 
 - [x] Port all of this to Golang
+- [x] Improve the way output is presented to terminal
 - [x] Rewrite in modules to enable `go get`
 - [x] Add cool GitHub badges
 - [x] Work on getting maintainability rate up to A
 - [ ] Test thoroughly
 - [ ] Release v1.0
 - [ ] Containerise
-- [ ] Improve the way output is presented to terminal
 - [ ] Add a flag to pass `vhosts` and functionality to use them
 - [ ] Rewrite the `enum4linux-ng` installing function to avoid installing `pip` and dependencies as `root`
 - [ ] Link each wrapped tool on README to their official repos
