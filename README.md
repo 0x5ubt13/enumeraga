@@ -26,7 +26,7 @@ Give `Enumeraga` either a single IP address or a file containing a list of IPs. 
     ┌──(root㉿SubtleLabs)-[~]
     └─# enumeraga -h
 
-                                                          v0.1.13-beta
+                                                          v0.1.14-beta
      __________                                    ______________________
      ___  ____/__________  ________ __________________    |_  ____/__    |
      __  __/  __  __ \  / / /_  __ `__ \  _ \_  ___/_  /| |  / __ __  /| |
@@ -56,7 +56,7 @@ Give `Enumeraga` either a single IP address or a file containing a list of IPs. 
 
 ## Installation
 
-### Executable version
+### Executable version, get latest release
 
 Simply grab the executable and launch it at your leisure! All the necessary tools to run that might be missing in your distro should be directly installed (if `Enumeraga` has your consent), otherwise it will prompt you to install it manually and exit.
 
@@ -64,7 +64,16 @@ This program has been developed in a Kali distro on WSL, so for maximum compatib
 
 What? You'd like to have a fancy, no-brainer one-liner to try it quick? You've got it! This will download `enumeraga`, put it on `/opt/enumeraga`, make it executable, create a soft link on your path and finally call it with help flag:
 
-    sudo mkdir /opt/enumeraga; sudo curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.13-beta/enumeraga_v0.1.13-beta -o /opt/enumeraga/enumeraga; sudo chmod +x /opt/enumeraga/enumeraga; sudo ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
+    sudo mkdir /opt/enumeraga; sudo curl -L https://github.com/0x5ubt13/enumeraga/releases/download/v0.1.14-beta/enumeraga_v0.1.14-beta -o /opt/enumeraga/enumeraga; sudo chmod +x /opt/enumeraga/enumeraga; sudo ln -s /opt/enumeraga/enumeraga /usr/bin/enumeraga; enumeraga -h
+
+### Executable version, build it yourself
+
+Make sure you have Go installed first! (In Kali, `apt-get update && apt-get install golang`); then:
+
+    git clone https://github.com/0x5ubt13/enumeraga.git
+    cd enumeraga
+    go build -o enumeraga main.go
+    ./enumeraga -h
 
 ### Containerised version
 

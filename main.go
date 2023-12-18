@@ -177,12 +177,12 @@ func multiTarget(targetsFile *string) {
 	// Loop through the targets in the file
 	targets, lines := utils.ReadTargetsFile(*targetsFile)
 	if !*utils.OptQuiet {
-		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Found", fmt.Sprintf("%d", lines), "targets")
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Found ", fmt.Sprintf("%d", lines), " targets")
 	}
 
 	for i := 0; i < lines; i++ {
 		target := targets[i]
-		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Attacking target", fmt.Sprint(i+1), "of", fmt.Sprint(lines), ":", target)
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Attacking target ", fmt.Sprint(i+1), " of ", fmt.Sprint(lines), ": ", target)
 		err := singleTarget(target, targetsBaseFilePath, true)
 		if err != nil {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-] No open ports were found in host '", target, "'. Aborting the rest of scans for this host")
