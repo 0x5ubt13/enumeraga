@@ -138,6 +138,8 @@ Besides from the above 29 tools, there are many more included in GNU/Linux doing
 
 ## Tools yet to implement
 
+- Testssl
+- Dnscan
 - Do you have any other suggestion? Send a PR or a message!
 
 ## To Do
