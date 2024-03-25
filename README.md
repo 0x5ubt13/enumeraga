@@ -108,6 +108,7 @@ Although I will try my best to adhere to coding conventions, I am still learning
 - Braa
 - CeWL
 - CrackMapExec
+- Dirsearch
 - Enum4linux-ng
 - Ffuf
 - Fping
@@ -134,7 +135,7 @@ Although I will try my best to adhere to coding conventions, I am still learning
 - WhatWeb
 - WafW00f
 
-Besides from the above 27 tools, there are many more included in GNU/Linux doing magic tricks behind the scenes!! (And now Golang's own logic too!)
+Besides from the above 28 tools, there are many more included in GNU/Linux doing magic tricks behind the scenes!! (And now Golang's own logic too!)
 
 ## Tools yet to implement
 
