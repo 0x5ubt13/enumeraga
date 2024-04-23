@@ -135,6 +135,16 @@ func http() {
 	dirsearch443Path := fmt.Sprintf("%sdirsearch_443.out", dir)
 	commands.CallRunTool(dirsearch443Args, dirsearch443Path)
 
+	// TestSSL on port 443
+	testssl := "testssl"
+	if utils.CheckToolExists("testssl.sh") {
+		testssl = "testssl.sh"
+	}
+
+	testsslArgs := []string{testssl, "-t", "10", "-q", "-u", fmt.Sprintf("https://%s:443", utils.Target)}
+	testsslPath := fmt.Sprintf("%stestssl.out", dir)
+	commands.CallRunTool(testsslArgs, testsslPath)
+
 	// Port 8080
 
 	// WordPress on port 8080

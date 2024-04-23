@@ -277,7 +277,7 @@ func Consent(tool string) rune {
 }
 
 // Check tool exists with exec.LookPath (equivalent to `which <tool>`)
-func checkToolExists(tool string) bool {
+func CheckToolExists(tool string) bool {
 	_, lookPatherr := exec.LookPath(tool)
 
 	return lookPatherr == nil
@@ -305,6 +305,7 @@ func getKeyTools() []string {
 		"seclists",
 		"smbclient",
 		"ssh-audit",
+		"testssl.sh",
 		"wafw00f",
 		"whatweb",
 	}
@@ -322,7 +323,7 @@ func InstallMissingTools() {
 	missingTools := []string{}
 	fullConsent := false
 	for _, tool := range keyTools {
-		if checkToolExists(tool) {
+		if CheckToolExists(tool) {
 			continue
 		}
 
