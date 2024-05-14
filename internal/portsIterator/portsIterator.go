@@ -17,7 +17,7 @@ func ftp() {
 	utils.VisitedFTP = true
 
 	ftpDir := utils.ProtocolDetected("FTP", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "20,21", ftpDir + "ftp_scan", "ftp-* and not brute")
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "20,21", ftpDir+"ftp_scan", "ftp-* and not brute")
 
 	// Hydra for FTP
 	if *utils.OptBrute {
@@ -30,7 +30,7 @@ func ftp() {
 // Enumerate Secure Shell Protocol (22/TCP)
 func ssh() {
 	sshDir := utils.ProtocolDetected("SSH", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "22", sshDir + "ssh_scan", "ssh-* and not brute")
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "22", sshDir+"ssh_scan", "ssh-* and not brute")
 
 	// Hydra for SSH
 	if *utils.OptBrute {
@@ -48,13 +48,13 @@ func smtp() {
 	utils.VisitedSMTP = true
 
 	smtpDir := utils.ProtocolDetected("SMTP", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "25,465,587", smtpDir + "smtp_scan", "smtp-commands,smtp-enum-users,smtp-open-relay")
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "25,465,587", smtpDir+"smtp_scan", "smtp-commands,smtp-enum-users,smtp-open-relay")
 }
 
 // Enumerate Domain Name System (53/TCP)
 func dns() {
 	dir := utils.ProtocolDetected("DNS", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "53", dir + "dns_scan", "*dns*")
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "53", dir+"dns_scan", "*dns*")
 }
 
 // Enumerate Finger (79/TCP)
@@ -76,7 +76,7 @@ func http() {
 	utils.VisitedHTTP = true
 
 	dir := utils.ProtocolDetected("HTTP", utils.BaseDir)
-	commands.CallIndividualPortScanner(utils.Target, "80,443,8080", dir + "http_scan")
+	commands.CallIndividualPortScanner(utils.Target, "80,443,8080", dir+"http_scan")
 
 	// Port 80:
 
@@ -523,7 +523,7 @@ func Run(openPortsSlice []string) {
 			beyondSMB(port)
 
 		default:
-			if *utils.OptVVervose {
+			if *utils.OptVVerbose {
 				fmt.Printf("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
 			}
 		}

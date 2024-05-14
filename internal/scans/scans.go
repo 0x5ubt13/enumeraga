@@ -31,7 +31,7 @@ func TcpPortSweep(target string) []nmap.Host {
 
 	result, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *utils.OptVVervose {
+		if *utils.OptVVerbose {
 			fmt.Printf("run finished with warnings: %s\n", *warnings)
 		} // Warnings are non-critical errors from nmap.
 	}
@@ -65,7 +65,7 @@ func TcpPortSweepWithTopPorts(target string) []nmap.Host {
 
 	result, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *utils.OptVVervose {
+		if *utils.OptVVerbose {
 			fmt.Printf("run finished with warnings: %s\n", *warnings)
 		} // Warnings are non-critical errors from nmap.
 	}
@@ -97,7 +97,7 @@ func UdpPortSweep(target string) []nmap.Host {
 
 	result, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *utils.OptVVervose {
+		if *utils.OptVVerbose {
 			log.Printf("run finished with warnings: %s\n", *warnings)
 		} // Warnings are non-critical errors from nmap.
 	}
@@ -142,7 +142,7 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 			select {
 			case t := <-ticker.C:
 				utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan with NSE Scripts still running against port(s) '", port, "' on target '", target, "'. Please wait...")
-				if *utils.OptVVervose {
+				if *utils.OptVVerbose {
 					fmt.Println(utils.Debug(t))
 				}
 			case <-done:
@@ -153,7 +153,7 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) 
 
 	_, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *utils.OptVVervose {
+		if *utils.OptVVerbose {
 			log.Printf("run finished with warnings: %s\n", *warnings)
 		} // Warnings are non-critical errors from nmap.
 	}
@@ -203,7 +203,7 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 			select {
 			case t := <-ticker.C:
 				utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan with NSE scripts and args still running against port(s) '", port, "' on target '", target, "'. Please wait...")
-				if *utils.OptVVervose {
+				if *utils.OptVVerbose {
 					fmt.Println(utils.Debug(t))
 				}
 			case <-done:
@@ -214,7 +214,7 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 
 	_, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *utils.OptVVervose {
+		if *utils.OptVVerbose {
 			log.Printf("run finished with warnings: %s\n", *warnings)
 		} // Warnings are non-critical errors from nmap.
 	}
@@ -264,7 +264,7 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 			select {
 			case t := <-ticker.C:
 				utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan on UDP with NSE scripts still running against port(s) '", port, "' on target '", target, "'. Please wait...")
-				if *utils.OptVVervose {
+				if *utils.OptVVerbose {
 					fmt.Println(utils.Debug(t))
 				}
 			case <-done:
@@ -275,7 +275,7 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 
 	_, warnings, err := scanner.Run()
 	if len(*warnings) > 0 {
-		if *utils.OptVVervose {
+		if *utils.OptVVerbose {
 			log.Printf("run finished with warnings: %s\n", *warnings)
 		} // Warnings are non-critical errors from nmap.
 	}
@@ -321,7 +321,7 @@ func IndividualPortScanner(target, port, outFile string) {
 		for {
 			select {
 			case t := <-ticker.C:
-				if *utils.OptVVervose {
+				if *utils.OptVVerbose {
 					fmt.Println(utils.Debug("Very verbose - ticker.C contents:", t))
 				}
 
@@ -380,7 +380,7 @@ func FullAggressiveScan(target, ports, outFile string) {
 		for {
 			select {
 			case t := <-ticker.C:
-				if *utils.OptVVervose {
+				if *utils.OptVVerbose {
 					fmt.Println(utils.Debug("Very verbose - ticker.C contents:", t))
 				}
 

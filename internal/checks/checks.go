@@ -9,7 +9,7 @@ import (
 	getopt "github.com/pborman/getopt/v2"
 )
 
-// Perform pre-flight checks and return total lines if multi-target
+// Run pre-flight checks and return total lines if multi-target
 func Run() int {
 	// Parse optional arguments
 	getopt.Parse()

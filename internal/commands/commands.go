@@ -142,7 +142,7 @@ func runTool(args []string, filePath string) {
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
 	announceTool(command, tool)
-	
+
 	cmd := exec.Command(tool, cmdArgs...)
 
 	// Create a pipe to capture the command's output
@@ -169,7 +169,7 @@ func runTool(args []string, filePath string) {
 	go func() {
 		_, err := io.Copy(file, stdout)
 		if err != nil {
-			if *utils.OptVVervose {
+			if *utils.OptVVerbose {
 				utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
 			}
 		}

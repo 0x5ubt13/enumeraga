@@ -17,23 +17,27 @@ import (
 
 // Declare global variables available throughout Enumeraga
 var (
-	// Print a message in yellow colour
+	// Yellow prints a message in yellow colour
 	Yellow = color.New(color.FgYellow).SprintFunc()
 
-	// Print a message in red colour
+	// Red prints a message in red colour
 	Red = color.New(color.FgRed).SprintFunc()
 
-	// Print a message in green colour
+	// Green prints a message in green colour
 	Green = color.New(color.FgHiGreen).SprintFunc()
 
-	// Print a message in cyan colour
+	// Cyan prints a message in cyan colour
 	Cyan = color.New(color.FgCyan).SprintFunc()
 
-	// Print a message in magenta colour
+	// Debug prints a message in magenta colour
 	Debug = color.New(color.FgMagenta).SprintFunc()
 
-	// Declare wordlists global vars
-	DirListMedium, DarkwebTop1000, ExtensionsList, UsersList, SnmpList string
+	// DarkwebTop1000 and others below are globally available wordlists
+	DarkwebTop1000 string
+	ExtensionsList string
+	UsersList      string
+	SnmpList       string
+	DirListMedium  string
 
 	// Declare globals updated and wordlistsLocated, as these may consume a lot of time and aren't needed more than once
 	Updated, wordlistsLocated bool
@@ -44,48 +48,56 @@ var (
 	// Sync: Define a mutex to synchronize access to standard output
 	outputMutex sync.Mutex
 
-	// Sync: Define a waitgroup to generate goroutines
+	// Wg sync: Define a WaitGroup to generate goroutines
 	Wg sync.WaitGroup
 
 	// Declare global flags and have getopt return pointers to the values.
 	// DEV: initialising vars only once they have been implemented/ported in the code
 	// optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
 
-	// Activate all fuzzing and bruteforcing in the script
-	OptBrute = getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforcing in the script.")
+	// OptBrute Activates all fuzzing and bruteforce in the script
+	OptBrute = getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforce in the tool.")
 
 	// Specify custom DNS servers.
 	// Default option: -n
 	// OptDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
 
-	// Display help dialogue and exit
+	// OptHelp displays help dialogue and exit
 	OptHelp = getopt.BoolLong("help", 'h', "Display this help and exit.")
 
-	// Only try to install pre-requisite tools and exit
+	// OptInstall Only try to install pre-requisite tools and exit
 	OptInstall = getopt.BoolLong("install", 'i', "Only try to install pre-requisite tools and exit.")
 
-	// Select a different base folder for the output
+	// OptOutput selects a different base folder for the output
 	// Default option: "/tmp/enumeraga_output"
 	OptOutput = getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
 
-	// Run port sweep with nmap and the flag --top-ports=<your input>
+	// OptTopPorts runs port sweep with nmap and the flag --top-ports=<your input>
 	OptTopPorts = getopt.StringLong("top-ports", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
 
-	// Don't print the banner and decrease overall verbosity
+	// OptQuiet makes the tool not print the banner and decreases the overall verbosity
 	OptQuiet = getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
 
-	// Specify a CIDR range to use tools for whole subnets
+	// OptRange specifies a CIDR range to use tools for whole subnets
 	OptRange = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets.")
 
-	// Specify target single IP / List of IPs file.
+	// OptTarget specifies a single IP target or a file with a list of IPs.
 	OptTarget = getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
 
-	// Flood your terminal with plenty of verbosity!
-	OptVVervose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
+	// OptVVerbose floods your terminal with plenty of verbosity!
+	OptVVerbose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 
-	// Declare vars for portsIterator
-	Target, BaseDir                                                                                                    string
-	VisitedFTP, VisitedSMTP, VisitedHTTP, VisitedIMAP, VisitedSMB, VisitedSNMP, VisitedLDAP, VisitedRsvc, VisitedWinRM bool
+	BaseDir      string
+	Target       string
+	VisitedSMTP  bool
+	VisitedHTTP  bool
+	VisitedIMAP  bool
+	VisitedSMB   bool
+	VisitedSNMP  bool
+	VisitedLDAP  bool
+	VisitedRsvc  bool
+	VisitedWinRM bool
+	VisitedFTP   bool
 )
 
 func PrintBanner() {
@@ -153,11 +165,11 @@ func ReadTargetsFile(filename string) ([]string, int) {
 func CustomMkdir(name string) {
 	err := os.Mkdir(name, os.ModePerm)
 	if err != nil {
-		if *OptVVervose {
+		if *OptVVerbose {
 			fmt.Println(Red("[-] Error creating new dir:", err))
 		}
 	} else {
-		if *OptVVervose {
+		if *OptVVerbose {
 			PrintCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
 		}
 	}
@@ -254,7 +266,7 @@ func RemoveDuplicates(s string) string {
 	return strings.Join(result, ",")
 }
 
-// Ask for user consent
+// Consent asks for user consent
 func Consent(tool string) rune {
 	PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be installed")
 	PrintCustomBiColourMsg("yellow", "cyan", "Do you want to install '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
@@ -276,7 +288,7 @@ func Consent(tool string) rune {
 	return 'n'
 }
 
-// Check tool exists with exec.LookPath (equivalent to `which <tool>`)
+// CheckToolExists checks that the tool exists with exec.LookPath (equivalent to `which <tool>`)
 func CheckToolExists(tool string) bool {
 	_, lookPatherr := exec.LookPath(tool)
 
@@ -311,7 +323,7 @@ func getKeyTools() []string {
 	}
 }
 
-// Instruct the program to try and install tools that are absent from the pentesting distro
+// InstallMissingTools instructs the program to try and install tools that are absent from the pentesting distro
 func InstallMissingTools() {
 	if *OptInstall {
 		fmt.Println(Cyan("[*] Install flag detected. Aborting other checks and running pre-requisites check.\n"))
@@ -385,7 +397,7 @@ func AptGetUpdateCmd() {
 	update.Stderr = os.Stderr
 
 	// Only print to stdout if very verbose flag
-	if *OptVVervose {
+	if *OptVVerbose {
 		fmt.Println(Cyan("[*] Debug -> printing apt-get update's output ------"))
 		update.Stdout = os.Stdout
 	}
@@ -393,7 +405,7 @@ func AptGetUpdateCmd() {
 	// Run the command
 	updateErr := update.Run()
 	if updateErr != nil {
-		if *OptVVervose {
+		if *OptVVerbose {
 			fmt.Printf("Debug - Error running apt-get update: %v\n", updateErr)
 		}
 		return
@@ -431,7 +443,7 @@ func AptGetInstallCmd(tool string) {
 
 	aptGetInstallErr := aptGetInstall.Run()
 	if aptGetInstallErr != nil {
-		if *OptVVervose {
+		if *OptVVerbose {
 			fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
 		}
 
@@ -472,7 +484,7 @@ func gitCloneCmd(repoName, repoUrl string) error {
 	gitClone.Stderr = os.Stderr
 
 	// Only print to stdout if debugging
-	if *OptVVervose {
+	if *OptVVerbose {
 		fmt.Println(Cyan("[*] Very verbose -> printing git clone's output ------"))
 		gitClone.Stdout = os.Stdout
 	}
@@ -480,7 +492,7 @@ func gitCloneCmd(repoName, repoUrl string) error {
 	// Run the command
 	gitCloneErr := gitClone.Run()
 	if gitCloneErr != nil {
-		if *OptVVervose {
+		if *OptVVerbose {
 			fmt.Printf("Very verbose -> Error running git clone: %v\n", gitCloneErr)
 		}
 		return gitCloneErr
@@ -496,7 +508,7 @@ func pipInstallCmd(pipPackage ...string) error {
 	pipInstall.Stderr = os.Stderr
 
 	// Only print to stdout if very verbose
-	if *OptVVervose {
+	if *OptVVerbose {
 		fmt.Println(Cyan("[*] Very verbose -> printing pip install output ------"))
 		pipInstall.Stdout = os.Stdout
 	}
@@ -504,7 +516,7 @@ func pipInstallCmd(pipPackage ...string) error {
 	// Run the command
 	pipInstallErr := pipInstall.Run()
 	if pipInstallErr != nil {
-		if *OptVVervose {
+		if *OptVVerbose {
 			fmt.Printf("Very verbose - Error running pip install wheel: %v\n", pipInstallErr)
 		}
 		return pipInstallErr
@@ -520,7 +532,7 @@ func runChmod(command ...string) error {
 	cmd.Stderr = os.Stderr
 
 	// Only print to stdout if debugging
-	if *OptVVervose {
+	if *OptVVerbose {
 		fmt.Println(Cyan("[*] Very verbose -> printing cmd's output ------"))
 		cmd.Stdout = os.Stdout
 	}
@@ -528,7 +540,7 @@ func runChmod(command ...string) error {
 	// Run cmd
 	cmdErr := cmd.Run()
 	if cmdErr != nil {
-		if *OptVVervose {
+		if *OptVVerbose {
 			fmt.Printf("Very verbose - Error running cmd: %v\n", cmdErr)
 		}
 		return cmdErr
@@ -544,7 +556,7 @@ func runLn(command ...string) error {
 	cmd.Stderr = os.Stderr
 
 	// Only print to stdout if debugging
-	if *OptVVervose {
+	if *OptVVerbose {
 		fmt.Println(Cyan("[*] Very verbose -> printing ln's output ------"))
 		cmd.Stdout = os.Stdout
 	}
@@ -552,7 +564,7 @@ func runLn(command ...string) error {
 	// Run cmd
 	cmdErr := cmd.Run()
 	if cmdErr != nil {
-		if *OptVVervose {
+		if *OptVVerbose {
 			fmt.Printf("Very verbose - Error running ln: %v\n", cmdErr)
 		}
 		return cmdErr
@@ -592,13 +604,13 @@ func installEnum4linuxNg() error {
 
 	// Run pip to install wheel and clone
 	pipInstallCmd("wheel", "clone")
-	
+
 	// Run Pip install -r requirements.txt
 	pipInstallCmd("-r", "/usr/share/enum4linux-ng/requirements.txt")
 
 	// Make executable
 	runChmod("+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
-	
+
 	// Create symbolic link
 	lnErr := runLn("-s", "/usr/share/enum4linux-ng/enum4linux-ng.py", "/usr/bin/enum4linux-ng")
 	if lnErr != nil {
@@ -650,7 +662,7 @@ func GetWordlists() {
 	}
 	SnmpList := snmpListSlice[0]
 
-	if *OptVVervose {
+	if *OptVVerbose {
 		fmt.Println("Located Files:")
 		fmt.Printf("dir_list_medium: %v\n", DirListMedium)
 		fmt.Printf("darkweb_top1000: %v\n", DarkwebTop1000)
