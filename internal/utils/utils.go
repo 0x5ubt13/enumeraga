@@ -388,7 +388,7 @@ func printConsentNotGiven(tool string) {
 	)
 }
 
-// Run the apt-get update command
+// AptGetUpdateCmd runs the apt-get update command
 func AptGetUpdateCmd() {
 	fmt.Printf("%s %s%s ", Yellow("[!] Running"), Cyan("apt-get update"), Yellow("..."))
 	update := exec.Command("apt-get", "update")
@@ -414,7 +414,7 @@ func AptGetUpdateCmd() {
 	fmt.Println(Green("Done!"))
 }
 
-// Run the apt-get install <tool> command
+// AptGetInstallCmd runs the apt-get install <tool> command
 func AptGetInstallCmd(tool string) {
 	// Moving to go due to import cycle
 	PrintInstallingTool(tool)
@@ -476,6 +476,7 @@ func enum4linuxNgPreReqs() {
 	}
 }
 
+// gitCloneCmd clones the git repo in the system
 func gitCloneCmd(repoName, repoUrl string) error {
 	localDir := "/usr/share/" + repoName
 	gitClone := exec.Command("git", "clone", repoUrl, localDir)
@@ -501,6 +502,7 @@ func gitCloneCmd(repoName, repoUrl string) error {
 	return nil
 }
 
+// pipInstallCmd runs pip install <package>
 func pipInstallCmd(pipPackage ...string) error {
 	pipInstall := exec.Command("pip", "install", pipPackage[0], pipPackage[1])
 
@@ -525,6 +527,7 @@ func pipInstallCmd(pipPackage ...string) error {
 	return nil
 }
 
+// runChmod runs chmod in the system
 func runChmod(command ...string) error {
 	cmd := exec.Command("chmod", command[0], command[1])
 
@@ -541,7 +544,7 @@ func runChmod(command ...string) error {
 	cmdErr := cmd.Run()
 	if cmdErr != nil {
 		if *OptVVerbose {
-			fmt.Printf("Very verbose - Error running cmd: %v\n", cmdErr)
+			fmt.Printf("Very verbose -> Error running cmd: %v\n", cmdErr)
 		}
 		return cmdErr
 	}
@@ -549,6 +552,7 @@ func runChmod(command ...string) error {
 	return nil
 }
 
+// runLn links files for execution within the $PATH
 func runLn(command ...string) error {
 	cmd := exec.Command("ln", command[0], command[1], command[2])
 
@@ -565,7 +569,7 @@ func runLn(command ...string) error {
 	cmdErr := cmd.Run()
 	if cmdErr != nil {
 		if *OptVVerbose {
-			fmt.Printf("Very verbose - Error running ln: %v\n", cmdErr)
+			fmt.Printf("Very verbose -> Error running ln: %v\n", cmdErr)
 		}
 		return cmdErr
 	}
@@ -573,13 +577,12 @@ func runLn(command ...string) error {
 	return nil
 }
 
-// Try and install Enum4linux-ng on behalf of the user
+// installEnum4linuxNg tries to install Enum4linux-ng on behalf of the user
 func installEnum4linuxNg() error {
 	// Print ask for consent
 	PrintCustomBiColourMsg(
 		"yellow", "cyan",
-		"Do you want for ", "Enumeraga ",
-		"to try and handle the installation of '", "enum4linux-ng",
+		"Do you want for ", "Enumeraga ", "to try and handle the installation of '", "enum4linux-ng",
 		"'?\nIt might be the case you have it in your machine but not in your $PATH.\nBear in mind that this will call '", "pip", "' as root",
 	)
 
@@ -603,13 +606,22 @@ func installEnum4linuxNg() error {
 	}
 
 	// Run pip to install wheel and clone
-	pipInstallCmd("wheel", "clone")
+	pipInstallWheelAndCloneErr := pipInstallCmd("wheel", "clone")
+	if pipInstallWheelAndCloneErr != nil {
+		return pipInstallWheelAndCloneErr
+	}
 
 	// Run Pip install -r requirements.txt
-	pipInstallCmd("-r", "/usr/share/enum4linux-ng/requirements.txt")
+	pipInstallRequisitesCmd := pipInstallCmd("-r", "/usr/share/enum4linux-ng/requirements.txt")
+	if pipInstallRequisitesCmd != nil {
+		return pipInstallRequisitesCmd
+	}
 
 	// Make executable
-	runChmod("+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
+	runChmodErr := runChmod("+x", "/usr/share/enum4linux-ng/enum4linux-ng.py")
+	if runChmodErr != nil {
+		return runChmodErr
+	}
 
 	// Create symbolic link
 	lnErr := runLn("-s", "/usr/share/enum4linux-ng/enum4linux-ng.py", "/usr/bin/enum4linux-ng")
@@ -672,7 +684,7 @@ func GetWordlists() {
 	}
 }
 
-// Loop over the necessary colours, printing one at a time
+// PrintCustomBiColourMsg loops over the necessary colours, printing one at a time
 func PrintCustomBiColourMsg(dominantColour, secondaryColour string, text ...string) {
 	// Lock the mutex to ensure exclusive access to standard output,
 	// avoiding printing different lines of output to console
