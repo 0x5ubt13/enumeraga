@@ -142,15 +142,13 @@ func isCompatibleDistro() error {
 	return nil
 }
 
-// Custom error message printed out to terminal
+// ErrorMsg gets a custom error message printed out to terminal
 func ErrorMsg(errMsg string) {
 	fmt.Printf("%s %s\n", Red("[-] Error detected:"), errMsg)
 }
 
-// Read a targets file from the argument path passed to -t
-// Return number of targets, one per line
+// ReadTargetsFile from the argument path passed to -t; returns number of targets, one per line
 func ReadTargetsFile(filename string) ([]string, int) {
-	// Fetch the file
 	data, err := os.ReadFile(*OptTarget)
 	if err != nil {
 		panic(err)
@@ -161,40 +159,43 @@ func ReadTargetsFile(filename string) ([]string, int) {
 	return lines, len(lines) - 1
 }
 
-// Check first if it is possible to create new dir, and send custom msg if not.
+// CustomMkdir checks first if it is possible to create new dir, and send custom msg if not.
 func CustomMkdir(name string) {
 	err := os.Mkdir(name, os.ModePerm)
 	if err != nil {
 		if *OptVVerbose {
 			fmt.Println(Red("[-] Error creating new dir:", err))
 		}
-	} else {
-		if *OptVVerbose {
-			PrintCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
-		}
+		return
+	}
+	if *OptVVerbose {
+		PrintCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
 	}
 }
 
-// Announce protocol, create base dir and return its name
+// ProtocolDetected announces protocol, creates base dir and returns its name
 func ProtocolDetected(protocol, baseDir string) string {
 	if !*OptQuiet {
 		PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
 	}
-
 	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
 	CustomMkdir(protocolDir)
 
 	return protocolDir
 }
 
-// Write text to a file
 func WriteTextToFile(filePath string, message string) {
 	// Open file
 	f, err := os.Create(filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			fmt.Println(Red("[-] Error closing file:", err))
+		}
+	}(f)
 
 	// Write to it
 	_, err2 := fmt.Fprintln(f, message)
@@ -203,7 +204,6 @@ func WriteTextToFile(filePath string, message string) {
 	}
 }
 
-// Write bytes output to file
 func WritePortsToFile(filePath string, ports string, host string) string {
 	// Open file
 	fileName := fmt.Sprintf("%sopen_ports.txt", filePath)
@@ -211,7 +211,12 @@ func WritePortsToFile(filePath string, ports string, host string) string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			fmt.Println(Red("[-] Error closing file:", err))
+		}
+	}(f)
 
 	// Write to it
 	_, err2 := fmt.Fprintln(f, ports)
@@ -223,7 +228,7 @@ func WritePortsToFile(filePath string, ports string, host string) string {
 	return ports
 }
 
-// Finish the main flow with time tracker and a couple nice messages to the terminal
+// FinishLine finishes the main flow with time tracker and prints a couple nice messages to the terminal
 func FinishLine(start time.Time, interrupted bool) {
 	elapsed := time.Since(start)
 	var output string
@@ -250,7 +255,7 @@ func FinishLine(start time.Time, interrupted bool) {
 	}
 }
 
-// Remove duplicate ports from the comma-separated ports string
+// RemoveDuplicates removes duplicate ports from the comma-separated ports string
 func RemoveDuplicates(s string) string {
 	parts := strings.Split(s, ",")
 	seen := make(map[string]bool)

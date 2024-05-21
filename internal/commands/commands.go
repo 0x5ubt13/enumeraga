@@ -13,7 +13,7 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
-// Enumeration for WordPress
+// WPEnumeration provides enumeration for WordPress
 func WPEnumeration(targetUrl, caseDir, port string) {
 	// Identify WordPress: Run curl
 	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
@@ -32,7 +32,7 @@ func WPEnumeration(targetUrl, caseDir, port string) {
 }
 
 func tomcatEnumeration(target, targetUrl, caseDir, port string) {
-	// Identify Tomat: Run curl
+	// Identify Tomcat: Run curl
 	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
 	curlOutput, _ := curl.Output()
 
