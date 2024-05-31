@@ -3,9 +3,11 @@ package utils
 import (
 	"bufio"
 	"fmt"
+	"github.com/Ullaakut/nmap/v3"
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +40,9 @@ var (
 	UsersList      string
 	SnmpList       string
 	DirListMedium  string
+
+	// TimesSwept keeps track of how many ports have been tried to be swept for a host
+	TimesSwept int
 
 	// Declare globals updated and wordlistsLocated, as these may consume a lot of time and aren't needed more than once
 	Updated, wordlistsLocated bool
@@ -259,7 +264,7 @@ func FinishLine(start time.Time, interrupted bool) {
 func RemoveDuplicates(s string) string {
 	parts := strings.Split(s, ",")
 	seen := make(map[string]bool)
-	result := []string{}
+	result := make([]string, 0)
 
 	for _, part := range parts {
 		if !seen[part] {
@@ -267,8 +272,42 @@ func RemoveDuplicates(s string) string {
 			result = append(result, part)
 		}
 	}
-
 	return strings.Join(result, ",")
+}
+
+// GetOpenPortsSlice creates a string slice using strconv.FormatUint and append strings to it.
+func GetOpenPortsSlice(sweptHostTcp, sweptHostUdp []nmap.Host) []string {
+	openPortsSlice := make([]string, 0)
+
+	for _, host := range sweptHostTcp {
+		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
+			continue
+		}
+
+		for _, port := range host.Ports {
+			// Error below: String(port.State) not working for some reason, therefore using Sprintf
+			if fmt.Sprintf("%s", port.State) == "open" {
+				text := strconv.FormatUint(uint64(port.ID), 10)
+				openPortsSlice = append(openPortsSlice, text)
+			}
+		}
+	}
+
+	// Same than above but for the swept ports running on UDP
+	for _, host := range sweptHostUdp {
+		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
+			continue
+		}
+
+		for _, port := range host.Ports {
+			// Error below: String(port.State) not working for some reason, therefore using Sprintf
+			if fmt.Sprintf("%s", port.State) == "open" {
+				text := strconv.FormatUint(uint64(port.ID), 10)
+				openPortsSlice = append(openPortsSlice, text)
+			}
+		}
+	}
+	return openPortsSlice
 }
 
 // Consent asks for user consent
@@ -296,7 +335,6 @@ func Consent(tool string) rune {
 // CheckToolExists checks that the tool exists with exec.LookPath (equivalent to `which <tool>`)
 func CheckToolExists(tool string) bool {
 	_, lookPatherr := exec.LookPath(tool)
-
 	return lookPatherr == nil
 }
 
@@ -337,7 +375,7 @@ func InstallMissingTools() {
 	keyTools := getKeyTools()
 
 	// Loop through listed tool see which ones are missing
-	missingTools := []string{}
+	var missingTools []string
 	fullConsent := false
 	for _, tool := range keyTools {
 		if CheckToolExists(tool) {

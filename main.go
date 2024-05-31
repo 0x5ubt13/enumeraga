@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -75,7 +74,7 @@ func targetInit(totalLines int) error {
 	}
 
 	// If made it this far, run single target scan
-	err := singleTarget(*utils.OptTarget, *utils.OptOutput, false)
+	err := singleTarget(*utils.OptTarget, *utils.OptOutput)
 	if err != nil {
 		utils.Interrupted = true
 		return err
@@ -91,11 +90,16 @@ func sweepPorts() ([]nmap.Host, []nmap.Host) {
 	if *utils.OptTopPorts != "" {
 		return scans.TcpPortSweepWithTopPorts(utils.Target), scans.UdpPortSweep(utils.Target)
 	}
-	return scans.TcpPortSweep(utils.Target), scans.UdpPortSweep(utils.Target)
+
+	if utils.TimesSwept == 0 {
+		return scans.TcpPortSweep(utils.Target), scans.UdpPortSweep(utils.Target)
+	}
+
+	return scans.SlowerTcpPortSweep(utils.Target), scans.SlowerUdpPortSweep(utils.Target)
 }
 
 // Run all phases of scanning using a single target
-func singleTarget(target string, baseFilePath string, multiTarget bool) error {
+func singleTarget(target string, baseFilePath string) error {
 	utils.Target = target
 
 	// Make base dir for the target
@@ -108,40 +112,22 @@ func singleTarget(target string, baseFilePath string, multiTarget bool) error {
 
 	// Save open ports in dedicated slice
 	// Convert slice to nmap-friendly formatted numbers
-	openPortsSlice := []string{}
+	openPortsSlice := utils.GetOpenPortsSlice(sweptHostTcp, sweptHostUdp)
 
-	// Create a string slice using strconv.FormatUint and append strings to it.
-	for _, host := range sweptHostTcp {
-		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
-			continue
-		}
-
-		for _, port := range host.Ports {
-			// Error below: String(port.State) not working for some reason, therefore using Sprintf
-			if fmt.Sprintf("%s", port.State) == "open" {
-				text := strconv.FormatUint(uint64(port.ID), 10)
-				openPortsSlice = append(openPortsSlice, text)
-			}
-		}
-	}
-
-	// Same than above but for the swept ports running on UDP
-	for _, host := range sweptHostUdp {
-		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
-			continue
-		}
-
-		for _, port := range host.Ports {
-			// Error below: String(port.State) not working for some reason, therefore using Sprintf
-			if fmt.Sprintf("%s", port.State) == "open" {
-				text := strconv.FormatUint(uint64(port.ID), 10)
-				openPortsSlice = append(openPortsSlice, text)
-			}
-		}
-	}
-
-	// Join our string slice.
+	// Join our string slice for printing purposes
 	openPorts := utils.RemoveDuplicates(strings.Join(openPortsSlice, ","))
+
+	// Introducing a control to repeat the scan in case there is no ports or only one port open
+	// Do it only once
+	if len(openPorts) >= 1 && utils.TimesSwept == 1 {
+		sweptHostTcp, sweptHostUdp := sweepPorts()
+		openPortsSliceSecondTry := utils.GetOpenPortsSlice(sweptHostTcp, sweptHostUdp)
+
+		if len(openPortsSliceSecondTry) > len(openPortsSlice) {
+			openPorts = utils.RemoveDuplicates(strings.Join(openPortsSlice, ","))
+			utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] No further ports were found in the second slow run for target '", target, "'.")
+		}
+	}
 
 	if len(openPorts) > 0 {
 		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Open ports for target '", target, "' : ", openPorts)
@@ -183,7 +169,7 @@ func multiTarget(targetsFile *string) {
 	for i := 0; i < lines; i++ {
 		target := targets[i]
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Attacking target ", fmt.Sprint(i+1), " of ", fmt.Sprint(lines), ": ", target)
-		err := singleTarget(target, targetsBaseFilePath, true)
+		err := singleTarget(target, targetsBaseFilePath)
 		if err != nil {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-] No open ports were found in host '", target, "'. Aborting the rest of scans for this host")
 			continue

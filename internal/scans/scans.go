@@ -11,7 +11,7 @@ import (
 	nmap "github.com/Ullaakut/nmap/v3"
 )
 
-// Run a quick port sweep on TCP
+// TcpPortSweep runs a quick port sweep on TCP.
 func TcpPortSweep(target string) []nmap.Host {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -39,10 +39,44 @@ func TcpPortSweep(target string) []nmap.Host {
 		log.Fatalf("unable to run nmap scan: %v", err)
 	}
 
+	utils.TimesSwept += 1
+
 	return result.Hosts
 }
 
-// Run the quickest port sweep on TCP
+func SlowerTcpPortSweep(target string) []nmap.Host {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	// Equivalent to `/usr/local/bin/nmap -p1-65535 --min-rate=2000 --privileged <target>`,
+	// with a 15-minute timeout.
+	scanner, err := nmap.NewScanner(
+		ctx,
+		nmap.WithTargets(target),
+		nmap.WithPorts("1-65535"),
+		nmap.WithMinRate(500),
+		nmap.WithPrivileged(),
+	)
+	if err != nil {
+		log.Fatalf("unable to create nmap scanner: %v", err)
+	}
+
+	result, warnings, err := scanner.Run()
+	if len(*warnings) > 0 {
+		if *utils.OptVVerbose {
+			fmt.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
+	}
+	if err != nil {
+		log.Fatalf("unable to run nmap scan: %v", err)
+	}
+
+	utils.TimesSwept = 0
+
+	return result.Hosts
+}
+
+// TcpPortSweepWithTopPorts runs the quickest port sweep on TCP
 func TcpPortSweepWithTopPorts(target string) []nmap.Host {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -76,7 +110,7 @@ func TcpPortSweepWithTopPorts(target string) []nmap.Host {
 	return result.Hosts
 }
 
-// Run a quick port sweep on UDP
+// UdpPortSweep runs a quick port sweep on UDP
 func UdpPortSweep(target string) []nmap.Host {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -89,6 +123,38 @@ func UdpPortSweep(target string) []nmap.Host {
 		nmap.WithUDPScan(),
 		nmap.WithPorts("111,161,162,10161,10162,623"),
 		nmap.WithMinRate(2000),
+		nmap.WithPrivileged(),
+	)
+	if err != nil {
+		log.Fatalf("unable to create nmap scanner udpPortSweep: %s %v", target, err)
+	}
+
+	result, warnings, err := scanner.Run()
+	if len(*warnings) > 0 {
+		if *utils.OptVVerbose {
+			log.Printf("run finished with warnings: %s\n", *warnings)
+		} // Warnings are non-critical errors from nmap.
+	}
+	if err != nil {
+		log.Fatalf("unable to run nmap scan udpPortSweep: %v", err)
+	}
+
+	return result.Hosts
+}
+
+// SlowerUdpPortSweep runs a slower port sweep on UDP
+func SlowerUdpPortSweep(target string) []nmap.Host {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	// Equivalent to `/usr/local/bin/nmap -sU -p111,161,162,10161,10162,623 --min-rate=2000 --privileged <target>`,
+	// with a 15-minute timeout.
+	scanner, err := nmap.NewScanner(
+		ctx,
+		nmap.WithTargets(target),
+		nmap.WithUDPScan(),
+		nmap.WithPorts("111,161,162,10161,10162,623"),
+		nmap.WithMinRate(500),
 		nmap.WithPrivileged(),
 	)
 	if err != nil {
