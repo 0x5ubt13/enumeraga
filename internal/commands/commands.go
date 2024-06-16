@@ -191,7 +191,7 @@ func runTool(args []string, filePath string) {
 	printToolSuccess(command, tool, filePath)
 }
 
-// Enumerate a whole CIDR range using specific range tools
+// RunRangeTools enumerates a whole CIDR range using specific range tools
 func RunRangeTools(targetRange string) {
 	// Print Flag detected
 	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] ", "-r", " flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
@@ -224,6 +224,10 @@ func RunRangeTools(targetRange string) {
 	CallRunTool(fpingArgs, fpingPath)
 
 	// run Metasploit scan module for EternalBlue
+	answer := utils.OSCPConsent("Metasploit")
+	if answer == 'n' {
+		return
+	}
 	msfEternalBlueArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use scanner/smb/smb_ms17_010;set rhosts %s;set threads 10;run;exit", targetRange)}
 	msfEternalBluePath := fmt.Sprintf("%seternalblue_sweep.txt", cidrDir)
 	callEternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, cidrDir)

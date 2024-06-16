@@ -332,6 +332,28 @@ func Consent(tool string) rune {
 	return 'n'
 }
 
+// OSCPConsent asks for user consent to run any forbidden tool for OSCP
+func OSCPConsent(tool string) rune {
+	PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be run, which won't be very good if you're trying OSCP 😬")
+	PrintCustomBiColourMsg("yellow", "cyan", "Do you want to run '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
+
+	consent := bufio.NewScanner(os.Stdin)
+	consent.Scan()
+	userInput := strings.ToLower(consent.Text())
+
+	if userInput == "yes" || userInput == "y" {
+		return 'y'
+	}
+
+	if userInput == "all" || userInput == "a" {
+		return 'a'
+	}
+
+	// If flow made it to down here, consent wasn't given
+	printOSCPConsentNotGiven(tool)
+	return 'n'
+}
+
 // CheckToolExists checks that the tool exists with exec.LookPath (equivalent to `which <tool>`)
 func CheckToolExists(tool string) bool {
 	_, lookPatherr := exec.LookPath(tool)
@@ -428,6 +450,15 @@ func printConsentNotGiven(tool string) {
 		Red("[-] Please install"),
 		Cyan(tool),
 		Red("manually. Aborting..."),
+	)
+}
+
+func printOSCPConsentNotGiven(tool string) {
+	fmt.Printf(
+		"%s\n%s %s %s\n",
+		Red("[-] Consent not given to run '"),
+		Cyan(tool),
+		Red(". Aborting..."),
 	)
 }
 
