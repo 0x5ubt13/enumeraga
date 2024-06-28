@@ -92,6 +92,9 @@ var (
 	// OptVVerbose floods your terminal with plenty of verbosity!
 	OptVVerbose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 
+	// Adding placeholder for OptVhost
+	// OptVhost = getopt.StringLong("", '', "", "")
+
 	BaseDir      string
 	Target       string
 	VisitedSMTP  bool
