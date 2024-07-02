@@ -379,6 +379,7 @@ func getKeyTools() []string {
 		"nbtscan-unixwiz",
 		"nikto",
 		"nmap",
+		// TODO: add nuclei!!!
 		"odat",
 		"responder-RunFinger",
 		"rusers",
