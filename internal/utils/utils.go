@@ -3,9 +3,11 @@ package utils
 import (
 	"bufio"
 	"fmt"
+	"github.com/Ullaakut/nmap/v3"
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +40,9 @@ var (
 	UsersList      string
 	SnmpList       string
 	DirListMedium  string
+
+	// TimesSwept keeps track of how many ports have been tried to be swept for a host
+	TimesSwept int
 
 	// Declare globals updated and wordlistsLocated, as these may consume a lot of time and aren't needed more than once
 	Updated, wordlistsLocated bool
@@ -87,6 +92,9 @@ var (
 	// OptVVerbose floods your terminal with plenty of verbosity!
 	OptVVerbose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 
+	// Adding placeholder for OptVhost
+	// OptVhost = getopt.StringLong("", '', "", "")
+
 	BaseDir      string
 	Target       string
 	VisitedSMTP  bool
@@ -101,7 +109,7 @@ var (
 )
 
 func PrintBanner() {
-	fmt.Printf("\n%s\n", Cyan("                                                     v0.1.13-beta"))
+	fmt.Printf("\n%s\n", Cyan("                                                     v0.1.14-beta"))
 	fmt.Printf("%s%s%s\n", Yellow(" __________                                    ________"), Cyan("________"), Yellow("______ "))
 	fmt.Printf("%s%s%s\n", Yellow(" ___  ____/__________  ________ __________________    |"), Cyan("_  ____/"), Yellow("__    |"))
 	fmt.Printf("%s%s%s\n", Yellow(" __  __/  __  __ \\  / / /_  __ `__ \\  _ \\_  ___/_  /| |"), Cyan("  / __ "), Yellow("__  /| |"))
@@ -259,7 +267,7 @@ func FinishLine(start time.Time, interrupted bool) {
 func RemoveDuplicates(s string) string {
 	parts := strings.Split(s, ",")
 	seen := make(map[string]bool)
-	result := []string{}
+	result := make([]string, 0)
 
 	for _, part := range parts {
 		if !seen[part] {
@@ -267,8 +275,42 @@ func RemoveDuplicates(s string) string {
 			result = append(result, part)
 		}
 	}
-
 	return strings.Join(result, ",")
+}
+
+// GetOpenPortsSlice creates a string slice using strconv.FormatUint and append strings to it.
+func GetOpenPortsSlice(sweptHostTcp, sweptHostUdp []nmap.Host) []string {
+	openPortsSlice := make([]string, 0)
+
+	for _, host := range sweptHostTcp {
+		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
+			continue
+		}
+
+		for _, port := range host.Ports {
+			// Error below: String(port.State) not working for some reason, therefore using Sprintf
+			if fmt.Sprintf("%s", port.State) == "open" {
+				text := strconv.FormatUint(uint64(port.ID), 10)
+				openPortsSlice = append(openPortsSlice, text)
+			}
+		}
+	}
+
+	// Same than above but for the swept ports running on UDP
+	for _, host := range sweptHostUdp {
+		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
+			continue
+		}
+
+		for _, port := range host.Ports {
+			// Error below: String(port.State) not working for some reason, therefore using Sprintf
+			if fmt.Sprintf("%s", port.State) == "open" {
+				text := strconv.FormatUint(uint64(port.ID), 10)
+				openPortsSlice = append(openPortsSlice, text)
+			}
+		}
+	}
+	return openPortsSlice
 }
 
 // Consent asks for user consent
@@ -293,10 +335,31 @@ func Consent(tool string) rune {
 	return 'n'
 }
 
+// OSCPConsent asks for user consent to run any forbidden tool for OSCP
+func OSCPConsent(tool string) rune {
+	PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be run, which won't be very good if you're trying OSCP 😬")
+	PrintCustomBiColourMsg("yellow", "cyan", "Do you want to run '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
+
+	consent := bufio.NewScanner(os.Stdin)
+	consent.Scan()
+	userInput := strings.ToLower(consent.Text())
+
+	if userInput == "yes" || userInput == "y" {
+		return 'y'
+	}
+
+	if userInput == "all" || userInput == "a" {
+		return 'a'
+	}
+
+	// If flow made it to down here, consent wasn't given
+	printOSCPConsentNotGiven(tool)
+	return 'n'
+}
+
 // CheckToolExists checks that the tool exists with exec.LookPath (equivalent to `which <tool>`)
 func CheckToolExists(tool string) bool {
 	_, lookPatherr := exec.LookPath(tool)
-
 	return lookPatherr == nil
 }
 
@@ -316,6 +379,7 @@ func getKeyTools() []string {
 		"nbtscan-unixwiz",
 		"nikto",
 		"nmap",
+		// TODO: add nuclei!!!
 		"odat",
 		"responder-RunFinger",
 		"rusers",
@@ -337,7 +401,7 @@ func InstallMissingTools() {
 	keyTools := getKeyTools()
 
 	// Loop through listed tool see which ones are missing
-	missingTools := []string{}
+	var missingTools []string
 	fullConsent := false
 	for _, tool := range keyTools {
 		if CheckToolExists(tool) {
@@ -390,6 +454,15 @@ func printConsentNotGiven(tool string) {
 		Red("[-] Please install"),
 		Cyan(tool),
 		Red("manually. Aborting..."),
+	)
+}
+
+func printOSCPConsentNotGiven(tool string) {
+	fmt.Printf(
+		"%s\n%s %s %s\n",
+		Red("[-] Consent not given to run '"),
+		Cyan(tool),
+		Red(". Aborting..."),
 	)
 }
 
