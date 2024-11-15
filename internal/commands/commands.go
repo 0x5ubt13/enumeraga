@@ -349,7 +349,7 @@ func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile,
 	}(target, port, outFile, scripts, scriptArgs)
 }
 
-// Goroutine for scans.IndividualUDPPortScannerWithNSEScripts()
+// CallIndividualUDPPortScannerWithNSEScripts is a Goroutine for scans.IndividualUDPPortScannerWithNSEScripts()
 func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string) {
 	utils.Wg.Add(1)
 
@@ -360,7 +360,7 @@ func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts s
 	}(target, port, outFile, scripts)
 }
 
-// Goroutine for scans.IndividualPortScanner()
+// CallIndividualPortScanner is a Goroutine for scans.IndividualPortScanner()
 func CallIndividualPortScanner(target, port, outFile string) {
 	utils.Wg.Add(1)
 
@@ -371,7 +371,7 @@ func CallIndividualPortScanner(target, port, outFile string) {
 	}(target, port, outFile)
 }
 
-// Goroutine for scans.FullAggressiveScan()
+// CallFullAggressiveScan is a Goroutine for scans.FullAggressiveScan()
 func CallFullAggressiveScan(target, ports, outFile string) {
 	utils.Wg.Add(1)
 
