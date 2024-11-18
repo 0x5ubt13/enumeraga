@@ -158,7 +158,13 @@ func runTool(args []string, filePath string) {
 		utils.ErrorMsg(fmt.Sprintf("Error creating output file: %s", err))
 		os.Exit(1)
 	}
-	defer file.Close()
+
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			utils.ErrorMsg(fmt.Sprintf("Error closing file: %s", err))
+		}
+	}(file)
 
 	// Start the command asynchronously in a goroutine
 	if err := cmd.Start(); err != nil {
@@ -233,7 +239,7 @@ func RunRangeTools(targetRange string) {
 	callEternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, cidrDir)
 }
 
-// Wee fun module to detect quite low hanging fruit
+// eternalBlueSweepCheck is a wee fun module to detect quite low-hanging fruit
 func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
 	// Run msf recon first
 	runTool(msfEternalBlueArgs, msfEternalBluePath)
@@ -245,7 +251,12 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			utils.ErrorMsg(fmt.Sprintf("Error closing file: %s", err))
+		}
+	}(file)
 
 	confirmedFile := fmt.Sprintf("%seternalblue_confirmed.txt", dir)
 	confirmed, err := os.Create(confirmedFile)
@@ -253,20 +264,30 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 		fmt.Println(err)
 		return
 	}
-	defer confirmed.Close()
+	defer func(confirmed *os.File) {
+		err := confirmed.Close()
+		if err != nil {
+			utils.ErrorMsg(fmt.Sprintf("Error closing file: %s", err))
+		}
+	}(confirmed)
 
 	scanner := bufio.NewScanner(file)
+	if err := scanner.Err(); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error while creating new scanner on file %s: %s", msfEternalBluePath, err))
+		log.Fatal(err)
+	}
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Grep -i likely
 		if strings.Contains(strings.ToLower(line), "likely") {
 			confirmedVuln = true
-			confirmed.WriteString(line + "\n")
+			_, err := confirmed.WriteString(line + "\n")
+			if err != nil {
+				utils.ErrorMsg(fmt.Sprintf("Error writing string: %s", err))
+				return
+			}
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
 	}
 
 	if !confirmedVuln {
@@ -308,7 +329,7 @@ func CallTomcatEnumeration(target, targetUrl, caseDir, port string) {
 	}(target, targetUrl, caseDir, port)
 }
 
-// Goroutine for runCewlandFfufKeywords()
+// CallRunCewlandFfufKeywords is a Goroutine for runCewlandFfufKeywords()
 func CallRunCewlandFfufKeywords(target, caseDir, port string) {
 	utils.Wg.Add(1)
 
@@ -319,7 +340,7 @@ func CallRunCewlandFfufKeywords(target, caseDir, port string) {
 	}(target, caseDir, port)
 }
 
-// Goroutine for runTool()
+// CallRunTool is a Goroutine for runTool()
 func CallRunTool(args []string, filePath string) {
 	utils.Wg.Add(1)
 
@@ -330,7 +351,7 @@ func CallRunTool(args []string, filePath string) {
 	}(args, filePath)
 }
 
-// Goroutine for individualPortScannerWithNSEScripts()
+// CallIndividualPortScannerWithNSEScripts is a Goroutine for individualPortScannerWithNSEScripts()
 func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) {
 	utils.Wg.Add(1)
 
@@ -341,7 +362,7 @@ func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts stri
 	}(target, port, outFile, scripts)
 }
 
-// Goroutine for scans.IndividualPortScannerWithNSEScriptsAndScriptArgs()
+// CallIndividualPortScannerWithNSEScriptsAndScriptArgs is a Goroutine for scans.IndividualPortScannerWithNSEScriptsAndScriptArgs()
 func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string) {
 	utils.Wg.Add(1)
 
@@ -353,7 +374,7 @@ func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile,
 	}(target, port, outFile, scripts, scriptArgs)
 }
 
-// Goroutine for scans.IndividualUDPPortScannerWithNSEScripts()
+// CallIndividualUDPPortScannerWithNSEScripts is a Goroutine for scans.IndividualUDPPortScannerWithNSEScripts()
 func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string) {
 	utils.Wg.Add(1)
 
@@ -364,7 +385,7 @@ func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts s
 	}(target, port, outFile, scripts)
 }
 
-// Goroutine for scans.IndividualPortScanner()
+// CallIndividualPortScanner is a Goroutine for scans.IndividualPortScanner()
 func CallIndividualPortScanner(target, port, outFile string) {
 	utils.Wg.Add(1)
 
@@ -375,7 +396,7 @@ func CallIndividualPortScanner(target, port, outFile string) {
 	}(target, port, outFile)
 }
 
-// Goroutine for scans.FullAggressiveScan()
+// CallFullAggressiveScan is a Goroutine for scans.FullAggressiveScan()
 func CallFullAggressiveScan(target, ports, outFile string) {
 	utils.Wg.Add(1)
 
