@@ -92,6 +92,9 @@ var (
 	// OptVVerbose floods your terminal with plenty of verbosity!
 	OptVVerbose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 
+	// Adding placeholder for OptVhost
+	// OptVhost = getopt.StringLong("", '', "", "")
+
 	BaseDir      string
 	Target       string
 	VisitedSMTP  bool
@@ -106,7 +109,7 @@ var (
 )
 
 func PrintBanner() {
-	fmt.Printf("\n%s\n", Cyan("                                                     v0.1.13-beta"))
+	fmt.Printf("\n%s\n", Cyan("                                                     v0.1.14-beta"))
 	fmt.Printf("%s%s%s\n", Yellow(" __________                                    ________"), Cyan("________"), Yellow("______ "))
 	fmt.Printf("%s%s%s\n", Yellow(" ___  ____/__________  ________ __________________    |"), Cyan("_  ____/"), Yellow("__    |"))
 	fmt.Printf("%s%s%s\n", Yellow(" __  __/  __  __ \\  / / /_  __ `__ \\  _ \\_  ___/_  /| |"), Cyan("  / __ "), Yellow("__  /| |"))
@@ -376,6 +379,7 @@ func getKeyTools() []string {
 		"nbtscan-unixwiz",
 		"nikto",
 		"nmap",
+		// TODO: add nuclei!!!
 		"odat",
 		"responder-RunFinger",
 		"rusers",
