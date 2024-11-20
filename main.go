@@ -18,6 +18,8 @@ func main() {
 	// Timing the execution
 	start := time.Now()
 
+	fmt.Println("----------\n[!] WARNING: \nYou're running a version currently under beta development. \nPlease use the latest pre-compiled version of Enumeraga in the official repo instead (unless you're helping me debug).\nThanks!\n----------\n")
+
 	// Perform pre-flight checks and get number of lines.
 	totalLines := checks.Run()
 

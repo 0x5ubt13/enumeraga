@@ -5,7 +5,9 @@ import (
 	"net"
 	"os"
 
+	// "github.com/0x5ubt13/enumeraga/cloud/cloudScanner"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
+
 	getopt "github.com/pborman/getopt/v2"
 )
 
@@ -47,12 +49,24 @@ func Run() int {
 		os.Exit(99)
 	}
 
+	// Check 3.5: if this is for cloud, get into cloud flow instead
+	cloudArg := os.Args[1]
+
+    switch cloudArg {
+    case "c", "cl", "clo", "clou", "cloud":
+        fmt.Println(utils.Cyan("[*] Cloud argument detected. Starting Cloud enumeration.\n"))
+        cloudScanner.Run()
+		/* placeholder for when 'enumeraga infra' and enumeraga 'cloud' are both implemented
+		case "i", "in", "inf", "infr", "infra":
+		*/
+	}
+
 	// Check 4: key tools exist in the system
 	if !*utils.OptQuiet {
 		fmt.Println(utils.Cyan("[*] Checking all tools are installed... "))
 	}
 
-	utils.InstallMissingTools()
+	utils.InstallMissingTools('i')
 
 	if *utils.OptInstall {
 		fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga -t!"))

@@ -408,3 +408,10 @@ func CallFullAggressiveScan(target, ports, outFile string) {
 		scans.FullAggressiveScan(target, ports, outFile)
 	}(target, ports, outFile)
 }
+
+/* ----- Cloud enumeration commands ----- */
+
+// Scoutsuite launches scout.py
+func Scoutsuite() {
+
+}

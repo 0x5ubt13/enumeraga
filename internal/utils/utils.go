@@ -109,7 +109,7 @@ var (
 )
 
 func PrintBanner() {
-	fmt.Printf("\n%s\n", Cyan("                                                     v0.1.14-beta"))
+	fmt.Printf("\n%s\n", Cyan("                                                     v0.2.0-beta"))
 	fmt.Printf("%s%s%s\n", Yellow(" __________                                    ________"), Cyan("________"), Yellow("______ "))
 	fmt.Printf("%s%s%s\n", Yellow(" ___  ____/__________  ________ __________________    |"), Cyan("_  ____/"), Yellow("__    |"))
 	fmt.Printf("%s%s%s\n", Yellow(" __  __/  __  __ \\  / / /_  __ `__ \\  _ \\_  ___/_  /| |"), Cyan("  / __ "), Yellow("__  /| |"))
@@ -119,18 +119,32 @@ func PrintBanner() {
 }
 
 func PrintUsageExamples() {
-	e := color.WhiteString("enumeraga")
+	e := color.WhiteString("enumeraga ")
 
 	// Print "examples" in white
 	fmt.Printf("\nExamples:\n ")
 	PrintCustomBiColourMsg(
 		"cyan", "yellow",
-		e, " -i\n ",
-		e, " -bq -t ", "10.10.11.230", "\n ",
-		e, " -V -r ", "10.129.121.0/24", " -t ", "10.129.121.60", "\n ",
-		e, " -t ", "targets_file.txt", " -r ", "10.10.8.0/24",
+		e, "-i\n ",
+		e, "-bq -t ", "10.10.11.230", "\n ",
+		e, "-V -r ", "10.129.121.0/24", " -t ", "10.129.121.60", "\n ",
+		e, "-t ", "targets_file.txt", " -r ", "10.10.8.0/24",
 	)
 }
+
+func PrintCloudUsageExamples() {
+	e := color.WhiteString("enumeraga cloud ")
+
+	// Print "examples" in white
+	fmt.Printf("\nExamples:\n ")
+	PrintCustomBiColourMsg(
+		"cyan", "yellow",
+		e, "aws\n ",
+		e, "gcp\n ",
+		e, "azure\n ",
+	)
+}
+
 
 // Check if OS is debian-like
 func isCompatibleDistro() error {
@@ -392,13 +406,36 @@ func getKeyTools() []string {
 	}
 }
 
+func getKeyCloudTools() []string {
+	return []string{
+		"prowler",
+		"scout",
+		"cloudfox",
+		/*
+		- Prowler (https://github.com/prowler-cloud/prowler)
+		- Scoutsuite (https://github.com/nccgroup/scoutsuite)
+		- CloudFox (https://github.com/BishopFox/cloudfox)
+			Note: it'd be good if pmapper was installed alongside cloudfox, with their integration it could also have it generate the default privesc query and images as output
+		- Pmapper (https://github.com/nccgroup/PMapper)
+		- Steampipe (https://github.com/turbot/steampipe)
+		- Powerpipe (https://github.com/turbot/powerpipe)
+		*/
+	}
+}
+
 // InstallMissingTools instructs the program to try and install tools that are absent from the pentesting distro
-func InstallMissingTools() {
+func InstallMissingTools(kind rune) {
 	if *OptInstall {
 		fmt.Println(Cyan("[*] Install flag detected. Aborting other checks and running pre-requisites check.\n"))
 	}
 
-	keyTools := getKeyTools()
+	var keyTools []string
+	switch kind {
+	case 'c':
+		keyTools = getKeyCloudTools()
+	case 'i':
+		keyTools = getKeyTools()
+	}
 
 	// Loop through listed tool see which ones are missing
 	var missingTools []string
@@ -459,7 +496,7 @@ func printConsentNotGiven(tool string) {
 
 func printOSCPConsentNotGiven(tool string) {
 	fmt.Printf(
-		"%s\n%s %s %s\n",
+		"%s\n%s %s\n",
 		Red("[-] Consent not given to run '"),
 		Cyan(tool),
 		Red(". Aborting..."),

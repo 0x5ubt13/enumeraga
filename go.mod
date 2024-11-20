@@ -1,6 +1,6 @@
 module github.com/0x5ubt13/enumeraga
 
-go 1.21.1
+go 1.23
 
 require (
 	github.com/Ullaakut/nmap/v3 v3.0.3
