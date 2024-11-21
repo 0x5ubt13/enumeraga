@@ -412,6 +412,9 @@ func CallFullAggressiveScan(target, ports, outFile string) {
 /* ----- Cloud enumeration commands ----- */
 
 // Scoutsuite launches scout.py
-func Scoutsuite() {
-
+func Scoutsuite(provider, scoutDir string) {
+	// run Scout
+	scoutArgs := []string{"scout", provider}
+	scoutPath := fmt.Sprintf("%sscout_log.out", scoutDir)
+	CallRunTool(scoutArgs, scoutPath)
 }

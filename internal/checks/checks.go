@@ -5,7 +5,7 @@ import (
 	"net"
 	"os"
 
-	// "github.com/0x5ubt13/enumeraga/cloud/cloudScanner"
+	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 
 	getopt "github.com/pborman/getopt/v2"

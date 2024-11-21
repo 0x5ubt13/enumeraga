@@ -9,15 +9,16 @@ import (
 )
 
 func Run() {
-	cloudChecks()
+	cloudDir := ""
+	provider := cloudChecks()
 
-	commands.Scoutsuite()
+	commands.Scoutsuite(provider)
 
 	os.Exit(0)
 }
 
 // cloudChecks works the same than internal/checks but for Cloud enumeration instead
-func cloudChecks() {
+func cloudChecks() string {
 	// Cloud check #1: key tools exist in the system
 	if !*utils.OptQuiet {
 		fmt.Println(utils.Cyan("[*] Checking all tools are installed... "))
@@ -25,8 +26,8 @@ func cloudChecks() {
 	utils.InstallMissingTools('c')
 
 	/* Tools to add:
-		- Prowler (https://github.com/prowler-cloud/prowler)
 		- Scoutsuite (https://github.com/nccgroup/scoutsuite)
+		- Prowler (https://github.com/prowler-cloud/prowler)
 		- CloudFox (https://github.com/BishopFox/cloudfox)
 			Note: it'd be good if pmapper was installed alongside cloudfox, with their integration it could also have it generate the default privesc query and images as output
 		- Pmapper (https://github.com/nccgroup/PMapper)
@@ -35,9 +36,31 @@ func cloudChecks() {
 	*/
 
 	// Cloud check #2: args passed
-	providerArg := os.Args[2]
+	provider := parseCSP()
 
-	utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", providerArg, "' as provider to launch scans")
+	// Cloud check #3: Ensure base output directory is correctly set and exists
+	utils.CustomMkdir(*utils.OptOutput)
+	if !*utils.OptQuiet {
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", *utils.OptOutput, "' as base directory to save the ", "output ", "files")
+	}
+
+	return provider
+}
+
+func parseCSP() string {
+	var provider string
+
+	switch os.Args[2] {
+	case "aws", "amazon":
+		provider = "aws"
+	case "az", "azure":
+		provider = "azure"
+	case "gcp", "gcloud", "g":
+		provider = "gcp"
+	}
+
+	utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", provider, "' as provider to launch scans")
+	return provider
 }
 
 
