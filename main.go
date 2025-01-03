@@ -13,7 +13,7 @@ import (
 	"github.com/Ullaakut/nmap/v3"
 )
 
-// Main logic of enumeraga
+// Main logic of Enumeraga
 func main() {
 	// Timing the execution
 	start := time.Now()

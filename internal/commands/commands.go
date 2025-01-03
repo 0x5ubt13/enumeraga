@@ -418,3 +418,11 @@ func Scoutsuite(provider, scoutDir string) {
 	scoutPath := fmt.Sprintf("%sscout_log.out", scoutDir)
 	CallRunTool(scoutArgs, scoutPath)
 }
+
+// Prowler launches prowler
+func Prowler(provider, prowlerDir string) {
+	// run Prowler
+	scoutArgs := []string{"prowler", provider}
+	scoutPath := fmt.Sprintf("%sprowler_log.out", prowlerDir)
+	CallRunTool(scoutArgs, scoutPath)
+}

@@ -13,6 +13,9 @@ import (
 
 // Run pre-flight checks and return total lines if multi-target
 func Run() int {
+	// Set current version
+	utils.Version = "v0.2.0-beta"
+
 	// Parse optional arguments
 	getopt.Parse()
 
@@ -52,10 +55,10 @@ func Run() int {
 	// Check 3.5: if this is for cloud, get into cloud flow instead
 	cloudArg := os.Args[1]
 
-    switch cloudArg {
-    case "c", "cl", "clo", "clou", "cloud":
-        fmt.Println(utils.Cyan("[*] Cloud argument detected. Starting Cloud enumeration.\n"))
-        cloudScanner.Run()
+	switch cloudArg {
+	case "c", "cl", "clo", "clou", "cloud":
+		fmt.Println(utils.Cyan("[*] Cloud argument detected. Starting Cloud enumeration.\n"))
+		cloudScanner.Run()
 		/* placeholder for when 'enumeraga infra' and enumeraga 'cloud' are both implemented
 		case "i", "in", "inf", "infr", "infra":
 		*/

@@ -97,6 +97,7 @@ var (
 
 	BaseDir      string
 	Target       string
+	Version      string
 	VisitedSMTP  bool
 	VisitedHTTP  bool
 	VisitedIMAP  bool
@@ -109,7 +110,7 @@ var (
 )
 
 func PrintBanner() {
-	fmt.Printf("\n%s\n", Cyan("                                                     v0.2.0-beta"))
+	fmt.Printf("\n%s\n", Cyan("                                                     %s", Version))
 	fmt.Printf("%s%s%s\n", Yellow(" __________                                    ________"), Cyan("________"), Yellow("______ "))
 	fmt.Printf("%s%s%s\n", Yellow(" ___  ____/__________  ________ __________________    |"), Cyan("_  ____/"), Yellow("__    |"))
 	fmt.Printf("%s%s%s\n", Yellow(" __  __/  __  __ \\  / / /_  __ `__ \\  _ \\_  ___/_  /| |"), Cyan("  / __ "), Yellow("__  /| |"))
@@ -144,7 +145,6 @@ func PrintCloudUsageExamples() {
 		e, "azure\n ",
 	)
 }
-
 
 // Check if OS is debian-like
 func isCompatibleDistro() error {
@@ -412,18 +412,20 @@ func getKeyCloudTools() []string {
 		"scout",
 		"cloudfox",
 		/*
-		- Prowler (https://github.com/prowler-cloud/prowler)
-		- Scoutsuite (https://github.com/nccgroup/scoutsuite)
-		- CloudFox (https://github.com/BishopFox/cloudfox)
-			Note: it'd be good if pmapper was installed alongside cloudfox, with their integration it could also have it generate the default privesc query and images as output
-		- Pmapper (https://github.com/nccgroup/PMapper)
-		- Steampipe (https://github.com/turbot/steampipe)
-		- Powerpipe (https://github.com/turbot/powerpipe)
+			- Prowler (https://github.com/prowler-cloud/prowler)
+			- Scoutsuite (https://github.com/nccgroup/scoutsuite)
+			- CloudFox (https://github.com/BishopFox/cloudfox)
+				Note: it'd be good if pmapper was installed alongside cloudfox, with their integration it could also have it generate the default privesc query and images as output
+			- Pmapper (https://github.com/nccgroup/PMapper)
+			- Steampipe (https://github.com/turbot/steampipe)
+			- Powerpipe (https://github.com/turbot/powerpipe)
 		*/
 	}
 }
 
-// InstallMissingTools instructs the program to try and install tools that are absent from the pentesting distro
+// InstallMissingTools instructs the program to try and install tools that are absent from the pentesting distro.
+// Case 'c' installs key cloud tools
+// Case 'i' installs key infra tools
 func InstallMissingTools(kind rune) {
 	if *OptInstall {
 		fmt.Println(Cyan("[*] Install flag detected. Aborting other checks and running pre-requisites check.\n"))
@@ -617,9 +619,14 @@ func gitCloneCmd(repoName, repoUrl string) error {
 	return nil
 }
 
-// pipInstallCmd runs pip install <package>
+// pipInstallCmd runs pip install <packages>
 func pipInstallCmd(pipPackage ...string) error {
-	pipInstall := exec.Command("pip", "install", pipPackage[0], pipPackage[1])
+	if len(pipPackage) == 0 {
+		return fmt.Errorf("at least one package must be passed to the function")
+	}
+
+	args := append([]string{"install", "--break-system-packages"}, pipPackage...)
+	pipInstall := exec.Command("pip", args...)
 
 	// Redirect the command's error output to the standard output in terminal
 	pipInstall.Stderr = os.Stderr
