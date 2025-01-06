@@ -2,19 +2,36 @@ package checks
 
 import (
 	"fmt"
+	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
 	"net"
 	"os"
 
-	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
+	"github.com/0x5ubt13/enumeraga/internal/cloud"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 
-	getopt "github.com/pborman/getopt/v2"
+	"github.com/pborman/getopt/v2"
 )
 
 // Run pre-flight checks and return total lines if multi-target
 func Run() int {
 	// Set current version
 	utils.Version = "v0.2.0-beta"
+
+	// Check if infra flow or cloud flow apply
+	if len(os.Args) < 2 {
+		fmt.Println("you need to choose between `enumeraga infra` or `enumeraga cloud`")
+		os.Exit(1)
+	}
+
+	switch os.Args[1] {
+	case "c", "cl", "clo", "clou", "cloud":
+
+	case "i", "in", "inf", "infr", "infra":
+
+	default:
+		fmt.Println("you need to choose between `enumeraga infra` or `enumeraga cloud`")
+		os.Exit(1)
+	}
 
 	// Parse optional arguments
 	getopt.Parse()
@@ -32,7 +49,7 @@ func Run() int {
 	if len(os.Args) == 1 {
 		utils.ErrorMsg("No arguments were provided.")
 		getopt.Usage()
-		utils.PrintUsageExamples()
+		utils.PrintInfraUsageExamples()
 		os.Exit(1)
 	}
 
@@ -42,7 +59,7 @@ func Run() int {
 			fmt.Println(utils.Cyan("[*] Help flag detected. Aborting other checks and printing usage.\n"))
 		}
 		getopt.Usage()
-		utils.PrintUsageExamples()
+		utils.PrintInfraUsageExamples()
 		os.Exit(0)
 	}
 

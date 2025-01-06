@@ -1,0 +1,125 @@
+package infra
+
+import (
+	"fmt"
+	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
+	"github.com/0x5ubt13/enumeraga/internal/utils"
+	getopt "github.com/pborman/getopt/v2"
+	"net"
+	"os"
+)
+
+var (
+	// DEV: initialising vars only once they have been implemented/ported in the code
+	// optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
+
+	// OptBrute Activates all fuzzing and bruteforce in the script
+	OptBrute = getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforce in the tool.")
+
+	// Specify custom DNS servers.
+	// Default option: -n
+	// OptDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
+
+	// OptHelp displays help dialogue and exit
+	OptHelp = getopt.BoolLong("help", 'h', "Display this help and exit.")
+
+	// OptInstall Only try to install pre-requisite tools and exit
+	OptInstall = getopt.BoolLong("install", 'i', "Only try to install pre-requisite tools and exit.")
+
+	// OptOutput selects a different base folder for the output
+	// Default option: "/tmp/enumeraga_output"
+	OptOutput = getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
+
+	// OptTopPorts runs port sweep with nmap and the flag --top-ports=<your input>
+	OptTopPorts = getopt.StringLong("top-ports", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
+
+	// OptQuiet makes the tool not print the banner and decreases the overall verbosity
+	OptQuiet = getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
+
+	// OptRange specifies a CIDR range to use tools for whole subnets
+	OptRange = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets.")
+
+	// OptTarget specifies a single IP target or a file with a list of IPs.
+	OptTarget = getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
+
+	// OptVVerbose floods your terminal with plenty of verbosity!
+	OptVVerbose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
+
+	// Adding placeholder for OptVhost
+	// OptVhost = getopt.StringLong("", '', "", "")
+)
+
+func Run() {
+
+	// Parse optional arguments
+	getopt.Parse()
+
+	// Check 0: banner!
+	if !*utils.OptQuiet {
+		utils.PrintBanner()
+	}
+
+	if !*utils.OptQuiet {
+		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting checks phase"), utils.Cyan(" ----------"))
+	}
+
+	// Check 1: Args passed fine?
+	if len(os.Args) == 1 {
+		utils.ErrorMsg("No arguments were provided.")
+		getopt.Usage()
+		utils.PrintInfraUsageExamples()
+		os.Exit(1)
+	}
+
+	// Check 2: Help flag passed?
+	if *utils.OptHelp {
+		if !*utils.OptQuiet {
+			fmt.Println(utils.Cyan("[*] Help flag detected. Aborting other checks and printing usage.\n"))
+		}
+		getopt.Usage()
+		utils.PrintInfraUsageExamples()
+		os.Exit(0)
+	}
+
+	// Check 3: am I groot?!
+	if os.Geteuid() != 0 {
+		utils.ErrorMsg("Please run me as root!")
+		os.Exit(99)
+	}
+
+	// Check 4: key tools exist in the system
+	if !*utils.OptQuiet {
+		fmt.Println(utils.Cyan("[*] Checking all tools are installed... "))
+	}
+
+	utils.InstallMissingTools('i')
+
+	if *utils.OptInstall {
+		fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga -t!"))
+		os.Exit(0)
+	}
+
+	// Check 5: Ensure there is a target
+	if *utils.OptTarget == "" {
+		utils.ErrorMsg("You must provide an IP address or targets file with the flag -t to start the attack.")
+		os.Exit(1)
+	}
+
+	// Check 6: Ensure base output directory is correctly set and exists
+	utils.CustomMkdir(*utils.OptOutput)
+	if !*utils.OptQuiet {
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", *utils.OptOutput, "' as base directory to save the ", "output ", "files")
+	}
+
+	// Check 7: Determine whether it is a single target or multi-target
+	targetInput := net.ParseIP(*utils.OptTarget)
+	if targetInput.To4() == nil {
+		// Multi-target
+		// Check file exists and get lines
+		_, totalLines := utils.ReadTargetsFile(*utils.OptTarget)
+		return totalLines
+	}
+
+	// End of checks
+	return 0
+}
