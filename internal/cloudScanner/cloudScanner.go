@@ -17,6 +17,10 @@ func Run() {
 	// commands.Pmapper()
 	// commands.Steampipe()
 	// commands.Powerpipe()
+	// if GCP:
+	// commands.GCPwn()
+	// if AWS:
+	// commands.Pacu()???
 
 	os.Exit(0)
 }
@@ -37,6 +41,8 @@ func cloudChecks() string {
 	- Pmapper (https://github.com/nccgroup/PMapper)
 	- Steampipe (https://github.com/turbot/steampipe)
 	- Powerpipe (https://github.com/turbot/powerpipe)
+	- GCPwn (https://github.com/NetSPI/gcpwn)
+	- Pacu??
 	*/
 
 	// Cloud check #2: args passed

@@ -4,13 +4,9 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="023925fc-4fc5-4c3d-aaaa-12c41f20908a" name="Changes" comment="working towards v0.2.0 - fixed some functions, added commands.Prowler, added context to some checks, and moved version to checks.go">
-      <change afterPath="$PROJECT_DIR$/internal/cloud/cloud.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/infra/infra.go" afterDir="false" />
+    <list default="true" id="023925fc-4fc5-4c3d-aaaa-12c41f20908a" name="Changes" comment="working towards v0.2.0 - noting down potential new tools to add in the near future">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/checks/checks.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/checks/checks.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/utils/utils.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/utils/utils.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/main.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/cloudScanner/cloudScanner.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/cloudScanner/cloudScanner.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -52,23 +48,23 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "DefaultGoTemplateProperty": "Go File",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.go.formatter.settings.were.checked": "true",
-    "RunOnceActivity.go.migrated.go.modules.settings": "true",
-    "RunOnceActivity.go.modules.go.list.on.any.changes.was.set": "true",
-    "git-widget-placeholder": "main",
-    "go.import.settings.migrated": "true",
-    "go.sdk.automatically.set": "true",
-    "last_opened_file_path": "/home/subtle",
-    "node.js.detected.package.eslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;DefaultGoTemplateProperty&quot;: &quot;Go File&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.formatter.settings.were.checked&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.migrated.go.modules.settings&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.modules.go.list.on.any.changes.was.set&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;go.import.settings.migrated&quot;: &quot;true&quot;,
+    &quot;go.sdk.automatically.set&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/subtle&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;
   }
-}]]></component>
+}</component>
   <component name="RdControllerToolWindowsLayoutState" isNewUi="true">
     <layout>
       <window_info id="Bookmarks" side_tool="true" />
@@ -76,8 +72,8 @@
       <window_info id="Commit_Guest" show_stripe_button="false" />
       <window_info id="Pull Requests" />
       <window_info id="Learn" />
-      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.09713541" />
-      <window_info id="Commit" order="1" weight="0.09713541" />
+      <window_info content_ui="combo" id="Project" order="0" weight="0.09713541" />
+      <window_info active="true" id="Commit" order="1" visible="true" weight="0.21640173" />
       <window_info id="Structure" order="2" side_tool="true" weight="0.25" />
       <window_info anchor="bottom" id="Database Changes" />
       <window_info anchor="bottom" id="TypeScript" />
@@ -86,7 +82,7 @@
       <window_info anchor="bottom" id="Find" />
       <window_info anchor="bottom" id="Version Control" order="0" weight="0.29408914" />
       <window_info anchor="bottom" id="Problems" order="1" />
-      <window_info anchor="bottom" id="Problems View" order="2" weight="0.32977644" />
+      <window_info active="true" anchor="bottom" id="Problems View" order="2" visible="true" weight="0.32977644" />
       <window_info anchor="bottom" id="Terminal" order="3" />
       <window_info anchor="bottom" id="Services" order="4" />
       <window_info anchor="right" id="Endpoints" />
@@ -126,7 +122,9 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="working towards v0.2.0 - added content to func parseCPS" />
     <MESSAGE value="working towards v0.2.0 - fixed some functions, added commands.Prowler, added context to some checks, and moved version to checks.go" />
-    <option name="LAST_COMMIT_MESSAGE" value="working towards v0.2.0 - fixed some functions, added commands.Prowler, added context to some checks, and moved version to checks.go" />
+    <MESSAGE value="working towards v0.2.0 - restructuring initial flow to get either into infra or cloud logic" />
+    <MESSAGE value="working towards v0.2.0 - noting down potential new tools to add in the near future" />
+    <option name="LAST_COMMIT_MESSAGE" value="working towards v0.2.0 - noting down potential new tools to add in the near future" />
   </component>
   <component name="VgoProject">
     <settings-migrated>true</settings-migrated>
