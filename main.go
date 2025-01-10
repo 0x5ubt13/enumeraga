@@ -1,9 +1,8 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"os"
+	"github.com/0x5ubt13/enumeraga/internal/infra"
 	"strings"
 	"time"
 
@@ -15,15 +14,15 @@ import (
 	"github.com/Ullaakut/nmap/v3"
 )
 
-// Main logic of Enumeraga
+// Main logic of Enumeraga infra
 func main() {
+	fmt.Println("----------\n[!] WARNING: \nYou're running a version currently under beta development. \nPlease use the latest pre-compiled version of Enumeraga in the official repo instead (unless you're helping me debug).\nThanks!\n----------")
+
+	// Perform pre-flight checks and get number of lines if cloud logic hasn't kicked off.
+	totalLines := checks.Run()
+
 	// Timing the execution
 	start := time.Now()
-
-	fmt.Println("----------\n[!] WARNING: \nYou're running a version currently under beta development. \nPlease use the latest pre-compiled version of Enumeraga in the official repo instead (unless you're helping me debug).\nThanks!\n----------\n")
-
-	// Perform pre-flight checks and get number of lines.
-	totalLines := checks.Run()
 
 	// Cidr handling
 	cidrErr := cidrInit()
@@ -32,7 +31,7 @@ func main() {
 		utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Remember you can also pass a range in ", "CIDR notation ", "to use ", "enum tools ", "that scan a wide range with '", "-r", "'")
 	}
 
-	if !*utils.OptQuiet {
+	if !*infra.OptQuiet {
 		fmt.Printf("%s%s%s\n\n", utils.Cyan("[*] ---------- "), utils.Green("Checks phase complete"), utils.Cyan(" ----------"))
 		fmt.Printf("%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting enumeration phase"), utils.Cyan(" ----------"))
 	}
@@ -52,8 +51,8 @@ func main() {
 
 // Check whether a target CIDR range has been passed to Enumeraga
 func cidrInit() error {
-	if *utils.OptRange != "" {
-		commands.RunRangeTools(*utils.OptRange)
+	if *infra.OptRange != "" {
+		commands.RunRangeTools(*infra.OptRange)
 		return nil
 	}
 
@@ -64,21 +63,21 @@ func cidrInit() error {
 // Check total number of lines to select targets accordingly
 func targetInit(totalLines int) error {
 	// If bruteforce flag was passed, initialise the wordlists
-	if *utils.OptBrute {
-		if !*utils.OptQuiet {
+	if *infra.OptBrute {
+		if !*infra.OptQuiet {
 			fmt.Printf("%s\n", utils.Cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforce tools where applicable."))
 		}
-		utils.GetWordlists()
+		utils.GetWordlists(infra.OptVVerbose)
 	}
 
 	// If not single target, initialise multi target flow
 	if totalLines != 0 {
-		multiTarget(utils.OptTarget)
+		multiTarget(infra.OptTarget)
 		return nil
 	}
 
 	// If made it this far, run single target scan
-	err := singleTarget(*utils.OptTarget, *utils.OptOutput)
+	err := singleTarget(*infra.OptTarget, *infra.OptOutput)
 	if err != nil {
 		utils.Interrupted = true
 		return err
@@ -91,7 +90,7 @@ func targetInit(totalLines int) error {
 
 func sweepPorts() ([]nmap.Host, []nmap.Host) {
 	// If top ports flag passed, branch to use a common ports scan instead
-	if *utils.OptTopPorts != "" {
+	if *infra.OptTopPorts != "" {
 		return scans.TcpPortSweepWithTopPorts(utils.Target), scans.UdpPortSweep(utils.Target)
 	}
 
@@ -108,7 +107,12 @@ func singleTarget(target string, baseFilePath string) error {
 
 	// Make base dir for the target
 	targetPath := fmt.Sprintf("%s/%s/", baseFilePath, target)
-	utils.CustomMkdir(targetPath)
+	_, err := utils.CustomMkdir(targetPath)
+	if err != nil {
+		if *infra.OptVVerbose {
+			utils.ErrorMsg(err)
+		}
+	}
 
 	// Perform ports sweep
 	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Sweeping TCP and UDP ports on target '", target, "'...")
@@ -153,7 +157,7 @@ func singleTarget(target string, baseFilePath string) error {
 
 // Wrapper of single target for multi-target
 func multiTarget(targetsFile *string) {
-	if !*utils.OptQuiet {
+	if !*infra.OptQuiet {
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using multi-targets file: '", *targetsFile, "'")
 	}
 
@@ -161,12 +165,17 @@ func multiTarget(targetsFile *string) {
 	fileName := strings.Split(fileNameWithExtension[len(fileNameWithExtension)-1], ".")
 
 	// Make base folder for the output
-	targetsBaseFilePath := fmt.Sprintf("%s/%s", *utils.OptOutput, fileName[0])
-	utils.CustomMkdir(targetsBaseFilePath)
+	targetsBaseFilePath := fmt.Sprintf("%s/%s", *infra.OptOutput, fileName[0])
+	_, err := utils.CustomMkdir(targetsBaseFilePath)
+	if err != nil {
+		if *infra.OptVVerbose {
+			utils.ErrorMsg(err)
+		}
+	}
 
 	// Loop through the targets in the file
-	targets, lines := utils.ReadTargetsFile(*targetsFile)
-	if !*utils.OptQuiet {
+	targets, lines := utils.ReadTargetsFile(*targetsFile, infra.OptTarget)
+	if !*infra.OptQuiet {
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Found ", fmt.Sprintf("%d", lines), " targets")
 	}
 

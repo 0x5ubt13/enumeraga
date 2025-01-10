@@ -2,6 +2,7 @@ package portsIterator
 
 import (
 	"fmt"
+	"github.com/0x5ubt13/enumeraga/internal/infra"
 	"os/exec"
 	"strings"
 
@@ -20,7 +21,7 @@ func ftp() {
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "20,21", ftpDir+"ftp_scan", "ftp-* and not brute")
 
 	// Hydra for FTP
-	if *utils.OptBrute {
+	if *infra.OptBrute {
 		hydraArgs := []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ftp", utils.Target)}
 		hydraPath := fmt.Sprintf("%shydra_ftp.out", ftpDir)
 		commands.CallRunTool(hydraArgs, hydraPath)
@@ -33,7 +34,7 @@ func ssh() {
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "22", sshDir+"ssh_scan", "ssh-* and not brute")
 
 	// Hydra for SSH
-	if *utils.OptBrute {
+	if *infra.OptBrute {
 		hydraArgs := []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ssh", utils.Target)}
 		hydraPath := fmt.Sprintf("%shydra_ssh.out", sshDir)
 		commands.CallRunTool(hydraArgs, hydraPath)
@@ -103,7 +104,7 @@ func http() {
 	dirsearch80Path := fmt.Sprintf("%sdirsearch_80.out", dir)
 	commands.CallRunTool(dirsearch80Args, dirsearch80Path)
 
-	if *utils.OptBrute {
+	if *infra.OptBrute {
 		// TODO: check why ffuf doesn't work
 		// CeWL + Ffuf Keywords Bruteforcing
 		commands.CallRunCewlandFfufKeywords(utils.Target, dir, "80")
@@ -250,7 +251,7 @@ func smb() {
 	cmePath := fmt.Sprintf("%scme_anon.out", dir)
 	commands.CallRunTool(cmeArgs, cmePath)
 
-	if *utils.OptBrute {
+	if *infra.OptBrute {
 		// CME BruteForcing
 		cmeBfArgs := []string{"crackmapexec", "smb", "-u", utils.UsersList, "-p", utils.DarkwebTop1000, "--shares", "--sessions", "--disks", "--loggedon-users", "--users", "--groups", "--computers", "--local-groups", "--pass-pol", "--rid-brute", utils.Target}
 		cmeBfPath := fmt.Sprintf("%scme_bf.out", dir)
@@ -400,7 +401,7 @@ func mssql() {
 	}
 	commands.CallIndividualPortScannerWithNSEScriptsAndScriptArgs(utils.Target, "1433", nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs)
 
-	if *utils.OptBrute {
+	if *infra.OptBrute {
 		bruteCMEArgs := []string{"crackmapexec", "mssql", utils.Target, "-u", utils.UsersList, "-p", utils.DarkwebTop1000}
 		bruteCMEPath := fmt.Sprintf("%scme_brute.out", dir)
 		commands.CallRunTool(bruteCMEArgs, bruteCMEPath)
@@ -470,7 +471,7 @@ func mysql() {
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3306", nmapOutputFile, nmapNSEScripts)
 
 	// Hydra for MySQL
-	if *utils.OptBrute {
+	if *infra.OptBrute {
 		hydraArgs := []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "mysql", utils.Target)}
 		hydraPath := fmt.Sprintf("%shydra_mysql.out", dir)
 		commands.CallRunTool(hydraArgs, hydraPath)
@@ -485,7 +486,7 @@ func rdp() {
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3389", nmapOutputFile, nmapNSEScripts)
 
 	// Hydra for RDP
-	if *utils.OptBrute {
+	if *infra.OptBrute {
 		hydraArgs := []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "rdp", utils.Target)}
 		hydraPath := fmt.Sprintf("%shydra_rdp.out", dir)
 		commands.CallRunTool(hydraArgs, hydraPath)
@@ -523,7 +524,7 @@ func Run(openPortsSlice []string) {
 			beyondSMB(port)
 
 		default:
-			if *utils.OptVVerbose {
+			if *infra.OptVVerbose {
 				fmt.Printf("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
 			}
 		}

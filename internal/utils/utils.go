@@ -14,7 +14,6 @@ import (
 
 	"github.com/fatih/color"
 	zglob "github.com/mattn/go-zglob"
-	getopt "github.com/pborman/getopt/v2"
 )
 
 // Declare global variables available throughout Enumeraga
@@ -56,6 +55,7 @@ var (
 	// Wg sync: Define a WaitGroup to generate goroutines
 	Wg sync.WaitGroup
 
+	// Taking away the getopt vars from utils so infra and cloud don't overlap
 	//// Declare global flags and have getopt return pointers to the values.
 	//// DEV: initialising vars only once they have been implemented/ported in the code
 	//// optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
@@ -169,13 +169,13 @@ func isCompatibleDistro() error {
 }
 
 // ErrorMsg gets a custom error message printed out to terminal
-func ErrorMsg(errMsg string) {
+func ErrorMsg(errMsg any) {
 	fmt.Printf("%s %s\n", Red("[-] Error detected:"), errMsg)
 }
 
 // ReadTargetsFile from the argument path passed to -t; returns number of targets, one per line
-func ReadTargetsFile(filename string) ([]string, int) {
-	data, err := os.ReadFile(*OptTarget)
+func ReadTargetsFile(filename string, optTarget *string) ([]string, int) {
+	data, err := os.ReadFile(*optTarget)
 	if err != nil {
 		panic(err)
 	}
@@ -186,24 +186,18 @@ func ReadTargetsFile(filename string) ([]string, int) {
 }
 
 // CustomMkdir checks first if it is possible to create new dir, and send custom msg if not.
-func CustomMkdir(name string) {
+func CustomMkdir(name string) (string, error) {
 	err := os.Mkdir(name, os.ModePerm)
 	if err != nil {
-		if *OptVVerbose {
-			fmt.Println(Red("[-] Error creating new dir:", err))
-		}
-		return
+		return "", err
 	}
-	if *OptVVerbose {
-		PrintCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
-	}
+	return name, nil
 }
 
 // ProtocolDetected announces protocol, creates base dir and returns its name
 func ProtocolDetected(protocol, baseDir string) string {
-	if !*OptQuiet {
-		PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
-	}
+	PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
+
 	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
 	CustomMkdir(protocolDir)
 
@@ -275,10 +269,8 @@ func FinishLine(start time.Time, interrupted bool) {
 	}
 
 	PrintCustomBiColourMsg("cyan", "green", "\n[*] Done! It only took '", output, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.")
-	if !*OptQuiet {
-		fmt.Printf("%s%s%s\n\n", Cyan("[*] ---------- "), Green("Enumeration phase complete"), Cyan(" ----------"))
-		fmt.Printf("%s%s%s\n", Cyan("[*] ---------- "), Green("Program complete. Awaiting tools to finish"), Cyan(" ----------"))
-	}
+	fmt.Printf("%s%s%s\n\n", Cyan("[*] ---------- "), Green("Enumeration phase complete"), Cyan(" ----------"))
+	fmt.Printf("%s%s%s\n", Cyan("[*] ---------- "), Green("Program complete. Awaiting tools to finish"), Cyan(" ----------"))
 }
 
 // RemoveDuplicates removes duplicate ports from the comma-separated ports string
@@ -430,8 +422,8 @@ func getKeyCloudTools() []string {
 // InstallMissingTools instructs the program to try and install tools that are absent from the pentesting distro.
 // Case 'c' installs key cloud tools
 // Case 'i' installs key infra tools
-func InstallMissingTools(kind rune) {
-	if *OptInstall {
+func InstallMissingTools(kind rune, optInstall *bool, OptVVerbose *bool) {
+	if *optInstall {
 		fmt.Println(Cyan("[*] Install flag detected. Aborting other checks and running pre-requisites check.\n"))
 	}
 
@@ -511,24 +503,22 @@ func printOSCPConsentNotGiven(tool string) {
 
 // AptGetUpdateCmd runs the apt-get update command
 func AptGetUpdateCmd() {
-	fmt.Printf("%s %s%s ", Yellow("[!] Running"), Cyan("apt-get update"), Yellow("..."))
+	PrintCustomBiColourMsg("yellow", "cyan", "[!] Running", "apt-get update", "...")
 	update := exec.Command("apt-get", "update")
 
 	// Redirect the command's error output to the standard output in terminal
 	update.Stderr = os.Stderr
 
-	// Only print to stdout if very verbose flag
-	if *OptVVerbose {
-		fmt.Println(Cyan("[*] Debug -> printing apt-get update's output ------"))
-		update.Stdout = os.Stdout
-	}
+	//// Only print to stdout if very verbose flag
+	//if OptVVerbose {
+	//	fmt.Println(Cyan("[*] Debug -> printing apt-get update's output ------"))
+	//	update.Stdout = os.Stdout
+	//}
 
 	// Run the command
 	updateErr := update.Run()
 	if updateErr != nil {
-		if *OptVVerbose {
-			fmt.Printf("Debug - Error running apt-get update: %v\n", updateErr)
-		}
+		ErrorMsg(fmt.Sprintf("Debug - Error running apt-get update: %v\n", updateErr))
 		return
 	}
 
@@ -564,9 +554,9 @@ func AptGetInstallCmd(tool string) {
 
 	aptGetInstallErr := aptGetInstall.Run()
 	if aptGetInstallErr != nil {
-		if *OptVVerbose {
-			fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
-		}
+		//if *OptVVerbose {
+		//	fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
+		//}
 
 		// Notify of enum4linux-ng as it's not currently in the official kali repo
 		if tool == "enum4linux-ng" {
@@ -606,17 +596,15 @@ func gitCloneCmd(repoName, repoUrl string) error {
 	gitClone.Stderr = os.Stderr
 
 	// Only print to stdout if debugging
-	if *OptVVerbose {
-		fmt.Println(Cyan("[*] Very verbose -> printing git clone's output ------"))
-		gitClone.Stdout = os.Stdout
-	}
+	//if *OptVVerbose {
+	//	fmt.Println(Cyan("[*] Very verbose -> printing git clone's output ------"))
+	//	gitClone.Stdout = os.Stdout
+	//}
 
 	// Run the command
 	gitCloneErr := gitClone.Run()
 	if gitCloneErr != nil {
-		if *OptVVerbose {
-			fmt.Printf("Very verbose -> Error running git clone: %v\n", gitCloneErr)
-		}
+		ErrorMsg(fmt.Sprintf("Error running git clone: %v\n", gitCloneErr))
 		return gitCloneErr
 	}
 
@@ -636,20 +624,17 @@ func pipInstallCmd(pipPackage ...string) error {
 	pipInstall.Stderr = os.Stderr
 
 	// Only print to stdout if very verbose
-	if *OptVVerbose {
-		fmt.Println(Cyan("[*] Very verbose -> printing pip install output ------"))
-		pipInstall.Stdout = os.Stdout
-	}
+	//if *OptVVerbose {
+	//	fmt.Println(Cyan("[*] Very verbose -> printing pip install output ------"))
+	//	pipInstall.Stdout = os.Stdout
+	//}
 
 	// Run the command
 	pipInstallErr := pipInstall.Run()
 	if pipInstallErr != nil {
-		if *OptVVerbose {
-			fmt.Printf("Very verbose - Error running pip install wheel: %v\n", pipInstallErr)
-		}
+		ErrorMsg(fmt.Sprintf("Very verbose - Error running pip install wheel: %v\n", pipInstallErr))
 		return pipInstallErr
 	}
-
 	return nil
 }
 
@@ -661,20 +646,17 @@ func runChmod(command ...string) error {
 	cmd.Stderr = os.Stderr
 
 	// Only print to stdout if debugging
-	if *OptVVerbose {
-		fmt.Println(Cyan("[*] Very verbose -> printing cmd's output ------"))
-		cmd.Stdout = os.Stdout
-	}
+	//if *OptVVerbose {
+	//	fmt.Println(Cyan("[*] Very verbose -> printing cmd's output ------"))
+	//	cmd.Stdout = os.Stdout
+	//}
 
 	// Run cmd
 	cmdErr := cmd.Run()
 	if cmdErr != nil {
-		if *OptVVerbose {
-			fmt.Printf("Very verbose -> Error running cmd: %v\n", cmdErr)
-		}
+		ErrorMsg(fmt.Sprintf("Very verbose -> Error running cmd: %v\n", cmdErr))
 		return cmdErr
 	}
-
 	return nil
 }
 
@@ -686,20 +668,17 @@ func runLn(command ...string) error {
 	cmd.Stderr = os.Stderr
 
 	// Only print to stdout if debugging
-	if *OptVVerbose {
-		fmt.Println(Cyan("[*] Very verbose -> printing ln's output ------"))
-		cmd.Stdout = os.Stdout
-	}
+	//if *OptVVerbose {
+	//	fmt.Println(Cyan("[*] Very verbose -> printing ln's output ------"))
+	//	cmd.Stdout = os.Stdout
+	//}
 
 	// Run cmd
 	cmdErr := cmd.Run()
 	if cmdErr != nil {
-		if *OptVVerbose {
-			fmt.Printf("Very verbose -> Error running ln: %v\n", cmdErr)
-		}
+		ErrorMsg(fmt.Sprintf("Very verbose -> Error running ln: %v\n", cmdErr))
 		return cmdErr
 	}
-
 	return nil
 }
 
@@ -759,7 +738,7 @@ func installEnum4linuxNg() error {
 	return nil
 }
 
-func GetWordlists() {
+func GetWordlists(optVVerbose *bool) {
 	if wordlistsLocated {
 		return
 	}
@@ -800,7 +779,7 @@ func GetWordlists() {
 	}
 	SnmpList := snmpListSlice[0]
 
-	if *OptVVerbose {
+	if *optVVerbose {
 		fmt.Println("Located Files:")
 		fmt.Printf("dir_list_medium: %v\n", DirListMedium)
 		fmt.Printf("darkweb_top1000: %v\n", DarkwebTop1000)

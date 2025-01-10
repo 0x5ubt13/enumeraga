@@ -2,9 +2,8 @@ package infra
 
 import (
 	"fmt"
-	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
-	getopt "github.com/pborman/getopt/v2"
+	"github.com/pborman/getopt/v2"
 	"net"
 	"os"
 )
@@ -49,17 +48,16 @@ var (
 	// OptVhost = getopt.StringLong("", '', "", "")
 )
 
-func Run() {
-
-	// Parse optional arguments
+func Run() int {
+	// Parse optional infra arguments
 	getopt.Parse()
 
 	// Check 0: banner!
-	if !*utils.OptQuiet {
+	if !*OptQuiet {
 		utils.PrintBanner()
 	}
 
-	if !*utils.OptQuiet {
+	if !*OptQuiet {
 		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting checks phase"), utils.Cyan(" ----------"))
 	}
 
@@ -72,8 +70,8 @@ func Run() {
 	}
 
 	// Check 2: Help flag passed?
-	if *utils.OptHelp {
-		if !*utils.OptQuiet {
+	if *OptHelp {
+		if !*OptQuiet {
 			fmt.Println(utils.Cyan("[*] Help flag detected. Aborting other checks and printing usage.\n"))
 		}
 		getopt.Usage()
@@ -88,35 +86,42 @@ func Run() {
 	}
 
 	// Check 4: key tools exist in the system
-	if !*utils.OptQuiet {
+	if !*OptQuiet {
 		fmt.Println(utils.Cyan("[*] Checking all tools are installed... "))
 	}
 
-	utils.InstallMissingTools('i')
+	utils.InstallMissingTools('i', OptInstall, OptVVerbose)
 
-	if *utils.OptInstall {
-		fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga -t!"))
+	if *OptInstall {
+		fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga infra -t!"))
 		os.Exit(0)
 	}
 
 	// Check 5: Ensure there is a target
-	if *utils.OptTarget == "" {
+	if *OptTarget == "" {
 		utils.ErrorMsg("You must provide an IP address or targets file with the flag -t to start the attack.")
 		os.Exit(1)
 	}
 
 	// Check 6: Ensure base output directory is correctly set and exists
-	utils.CustomMkdir(*utils.OptOutput)
-	if !*utils.OptQuiet {
-		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", *utils.OptOutput, "' as base directory to save the ", "output ", "files")
+	name, err := utils.CustomMkdir(*OptOutput)
+	if err != nil {
+		if *OptVVerbose {
+			utils.ErrorMsg(err)
+		}
+	}
+
+	utils.PrintCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
+	if !*OptQuiet {
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", *OptOutput, "' as base directory to save the ", "output ", "files")
 	}
 
 	// Check 7: Determine whether it is a single target or multi-target
-	targetInput := net.ParseIP(*utils.OptTarget)
+	targetInput := net.ParseIP(*OptTarget)
 	if targetInput.To4() == nil {
 		// Multi-target
 		// Check file exists and get lines
-		_, totalLines := utils.ReadTargetsFile(*utils.OptTarget)
+		_, totalLines := utils.ReadTargetsFile(name, OptTarget)
 		return totalLines
 	}
 

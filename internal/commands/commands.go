@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"fmt"
+	"github.com/0x5ubt13/enumeraga/internal/infra"
 	"io"
 	"log"
 	"os"
@@ -49,7 +50,7 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string) {
 	CallRunTool(gobusterArgs, gobusterPath)
 
 	// Run hydra
-	if !*utils.OptBrute {
+	if !*infra.OptBrute {
 		return
 	}
 
@@ -175,7 +176,7 @@ func runTool(args []string, filePath string) {
 	go func() {
 		_, err := io.Copy(file, stdout)
 		if err != nil {
-			if *utils.OptVVerbose {
+			if *infra.OptVVerbose {
 				utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
 			}
 		}
@@ -203,11 +204,11 @@ func RunRangeTools(targetRange string) {
 	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] ", "-r", " flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
 
 	// Make CIDR dir
-	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *utils.OptOutput, strings.Replace(targetRange, "/", "_", 1))
+	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *infra.OptOutput, strings.Replace(targetRange, "/", "_", 1))
 	utils.CustomMkdir(cidrDir)
 
 	// Get wordlists for the range
-	utils.GetWordlists()
+	utils.GetWordlists(infra.OptVVerbose)
 
 	// run nbtscan-unixwiz
 	nbtscanArgs := []string{"nbtscan-unixwiz", "-f", targetRange}
