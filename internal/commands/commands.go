@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/0x5ubt13/enumeraga/internal/scans"
@@ -410,20 +411,67 @@ func CallFullAggressiveScan(target, ports, outFile string) {
 	}(target, ports, outFile)
 }
 
-/* ----- Cloud enumeration commands ----- */
+/* --------------------------------
+   |  Cloud enumeration commands  |
+   -------------------------------- */
+
+// runToolInVirtualEnv attempts to leverage shell scripting to download, install, and run a python tool, all contained
+// within a virtual environment
+func runToolInVirtualEnv(args []string, filePath string) error {
+	// Create a temporary directory for the virtual environment
+	fmt.Println(utils.Cyan("[*] Debug -> creating dir ", filePath))
+	tempDir, err := os.MkdirTemp(filePath, "venv")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir) // Clean up the temp directory
+
+	// Create the virtual environment
+	venvPath := filepath.Join(tempDir, "venv")
+	cmd := exec.Command("python3", "-m", "venv", venvPath)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create virtualenv: %v", err)
+	}
+
+	// Activate the virtual environment and install requirements
+	activateScript := filepath.Join(venvPath, "bin", "activate")
+	installCmd := fmt.Sprintf("source %s && pip install -r requirements.txt", activateScript)
+	cmd = exec.Command("bash", "-c", installCmd)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to install requirements: %v", err)
+	}
+
+	// Run the tool
+	CallRunTool(strings.Split(fmt.Sprintf("bash -c source %s && %s", activateScript, args), ""), filePath)
+	//cmd = exec.Command("bash", "-c", runCmd)
+	//if err := cmd.Run(); err != nil {
+	//	return fmt.Errorf("failed to run tool: %v", err)
+	//}
+
+	return nil
+}
 
 // Scoutsuite launches scout.py
 func Scoutsuite(provider, scoutDir string) {
 	// run Scout
-	scoutArgs := []string{"scout", provider}
-	scoutPath := fmt.Sprintf("%sscout_log.out", scoutDir)
-	CallRunTool(scoutArgs, scoutPath)
+	// call venv
+	// source into the venv
+	// run the tool
+	// := []string{"python3 -m venv . && \
+	//				source ./bin/activate && \
+	//				pip install -r 			}
+
+	scoutArgs := []string{"scoutsuite", provider}
+	err := runToolInVirtualEnv(scoutArgs, scoutDir)
+	if err != nil {
+		utils.ErrorMsg(err)
+	}
 }
 
 // Prowler launches prowler
 func Prowler(provider, prowlerDir string) {
 	// run Prowler
-	scoutArgs := []string{"prowler", provider}
-	scoutPath := fmt.Sprintf("%sprowler_log.out", prowlerDir)
-	CallRunTool(scoutArgs, scoutPath)
+	prowlerArgs := []string{"prowler", provider}
+	prowlerPath := fmt.Sprintf("%sprowler_log.out", prowlerDir)
+	CallRunTool(prowlerArgs, prowlerPath)
 }

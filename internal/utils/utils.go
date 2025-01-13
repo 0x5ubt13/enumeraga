@@ -404,9 +404,9 @@ func getKeyTools() []string {
 
 func getKeyCloudTools() []string {
 	return []string{
-		"prowler",
-		"scout",
-		"cloudfox",
+		//"prowler",
+		"scoutsuite",
+		//"cloudfox",
 		/*
 			- Prowler (https://github.com/prowler-cloud/prowler)
 			- Scoutsuite (https://github.com/nccgroup/scoutsuite)
@@ -464,6 +464,14 @@ func InstallMissingTools(kind rune, optInstall *bool, OptVVerbose *bool) {
 	}
 
 	// Install all those that are missing
+	if kind == 'c' {
+		// Cloud tools only use pip (so far), so any distro would do
+		for _, tool := range missingTools {
+			InstallMissingCloudTool(tool)
+		}
+		return
+	}
+
 	compatibilityErr := isCompatibleDistro()
 	if compatibilityErr != nil {
 		os.Exit(3)
@@ -475,6 +483,14 @@ func InstallMissingTools(kind rune, optInstall *bool, OptVVerbose *bool) {
 			Updated = true
 		}
 		AptGetInstallCmd(tool)
+	}
+}
+
+// InstallMissingCloudTool tries to install any missing cloud tool
+func InstallMissingCloudTool(tool string) {
+	// Check that the tools need pip
+	if tool == "scoutsuite" || tool == "prowler" {
+		pipInstallCmd(tool)
 	}
 }
 

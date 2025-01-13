@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
-	"github.com/pborman/getopt/v2"
 	"os"
 	"time"
 )
@@ -28,6 +27,9 @@ func Run() {
 	// Parse optional arguments
 	flag.Parse()
 
+	// Assign basedir of OptOutput to avoid cyclic import hell
+	utils.BaseDir = *OptOutput
+
 	// Check 0: banner!
 	if !*OptQuiet {
 		utils.PrintBanner()
@@ -36,8 +38,8 @@ func Run() {
 	// Check 1: Args passed fine?
 	if len(os.Args) == 2 {
 		utils.ErrorMsg("No arguments were provided.")
-		getopt.Usage()
-		utils.PrintInfraUsageExamples()
+		flag.Usage()
+		utils.PrintCloudUsageExamples()
 		os.Exit(1)
 	}
 
@@ -46,8 +48,8 @@ func Run() {
 		if !*OptQuiet {
 			fmt.Println(utils.Cyan("[*] Help flag detected. Aborting other checks and printing usage.\n"))
 		}
-		getopt.Usage()
-		utils.PrintInfraUsageExamples()
+		flag.Usage()
+		utils.PrintCloudUsageExamples()
 		os.Exit(0)
 	}
 
@@ -58,17 +60,17 @@ func Run() {
 	//	os.Exit(99)
 	//}
 
-	// Check 4: key tools exist in the system
-	if !*OptQuiet {
-		fmt.Println(utils.Cyan("[*] Checking all cloud tools are installed... "))
-	}
-
-	utils.InstallMissingTools('c', OptInstall, OptVVerbose)
-
-	if *OptInstall {
-		fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga cloud <provider>!"))
-		os.Exit(0)
-	}
+	//// Check 4: key tools exist in the system
+	//if !*OptQuiet {
+	//	fmt.Println(utils.Cyan("[*] Checking all cloud tools are installed... "))
+	//}
+	//
+	//utils.InstallMissingTools('c', OptInstall, OptVVerbose)
+	//
+	//if *OptInstall {
+	//	fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga cloud <provider>!"))
+	//	os.Exit(0)
+	//}
 
 	// Check 5: Ensure there is a target
 	provider := parseCSP()

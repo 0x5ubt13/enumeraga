@@ -8,10 +8,14 @@ import (
 )
 
 func Run(provider string) {
-	providerDir := fmt.Sprintf("%s_%s/", utils.BaseDir, provider)
+	providerDir, err := utils.CustomMkdir(fmt.Sprintf("%s/%s/", utils.BaseDir, provider))
+	if err != nil {
+		utils.ErrorMsg(err)
+	}
+	fmt.Println(utils.Cyan("[*] Debug -> providerDir = ", providerDir))
 
-	commands.Scoutsuite(provider, fmt.Sprintf("%s_scout/", providerDir))
-	commands.Prowler(provider, fmt.Sprintf("%s_prowler/", providerDir))
+	commands.Scoutsuite(provider, fmt.Sprintf("%sscoutsuite", providerDir))
+	//commands.Prowler(provider, fmt.Sprintf("%sprowler/", providerDir))
 	//commands.CloudFox()
 	// commands.Pmapper()
 	// commands.Steampipe()
@@ -23,3 +27,5 @@ func Run(provider string) {
 
 	os.Exit(0)
 }
+
+// Create new parser?
