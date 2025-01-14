@@ -8,13 +8,14 @@ import (
 )
 
 func Run(provider string) {
-	providerDir, err := utils.CustomMkdir(fmt.Sprintf("%s/%s/", utils.BaseDir, provider))
+	providerDir := fmt.Sprintf("%s/%s/", utils.BaseDir, provider)
+	_, err := utils.CustomMkdir(providerDir)
 	if err != nil {
 		utils.ErrorMsg(err)
 	}
 	fmt.Println(utils.Cyan("[*] Debug -> providerDir = ", providerDir))
 
-	commands.Scoutsuite(provider, fmt.Sprintf("%sscoutsuite", providerDir))
+	commands.Scoutsuite(provider, fmt.Sprintf("%sscoutsuite/", providerDir))
 	//commands.Prowler(provider, fmt.Sprintf("%sprowler/", providerDir))
 	//commands.CloudFox()
 	// commands.Pmapper()

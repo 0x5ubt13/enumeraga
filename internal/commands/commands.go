@@ -154,6 +154,12 @@ func runTool(args []string, filePath string) {
 		os.Exit(1)
 	}
 
+	//stderr, err := cmd.StderrPipe()
+	//if err != nil {
+	//	utils.ErrorMsg(fmt.Sprintf("failed to get stderr pipe: %v", err))
+	//	return
+	//}
+
 	// Create a file to write the output to
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -172,6 +178,10 @@ func runTool(args []string, filePath string) {
 	if err := cmd.Start(); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("%s%s", "Error starting command:", err))
 	}
+
+	//// Copy the output to stdout and stderr
+	//go io.Copy(os.Stdout, stdout)
+	//go io.Copy(os.Stderr, stderr)
 
 	// This goroutine will capture and write the command's output to a file
 	go func() {
@@ -419,30 +429,71 @@ func CallFullAggressiveScan(target, ports, outFile string) {
 // within a virtual environment
 func runToolInVirtualEnv(args []string, filePath string) error {
 	// Create a temporary directory for the virtual environment
-	fmt.Println(utils.Cyan("[*] Debug -> creating dir ", filePath))
-	tempDir, err := os.MkdirTemp(filePath, "venv")
+	fmt.Println(utils.Cyan("[*] Debug -> filePath ", filePath))
+	tempDir := fmt.Sprintf("%svenv/", filePath)
+	fmt.Println(utils.Cyan("[*] Debug -> creating tempDir ", tempDir))
+	_, err := utils.CustomMkdir(tempDir)
 	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %v", err)
+		utils.ErrorMsg(fmt.Sprintf("failed to create temp dir: %v", err))
 	}
+	defer fmt.Println("temp dir ", tempDir, " deleted.")
 	defer os.RemoveAll(tempDir) // Clean up the temp directory
 
 	// Create the virtual environment
-	venvPath := filepath.Join(tempDir, "venv")
-	cmd := exec.Command("python3", "-m", "venv", venvPath)
+	//venvPath := filepath.Join(tempDir, "venv")
+	cmd := exec.Command("python3", "-m", "venv", tempDir)
+
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to create virtualenv: %v", err)
+		fmt.Printf("failed to create virtualenv: %v\n", err)
 	}
 
-	// Activate the virtual environment and install requirements
-	activateScript := filepath.Join(venvPath, "bin", "activate")
-	installCmd := fmt.Sprintf("source %s && pip install -r requirements.txt", activateScript)
-	cmd = exec.Command("bash", "-c", installCmd)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to install requirements: %v", err)
+	// Activate the virtual environment and install tool
+	activateScript := filepath.Join(tempDir, "bin", "activate")
+	var installAndRunCmd string
+	switch args[0] {
+	case "scoutsuite":
+		installAndRunCmd = fmt.Sprintf("source %s && pip install %s && scout %s", activateScript, args[0], strings.Join(args[1:], " "))
+	default:
+		installAndRunCmd = fmt.Sprintf("source %s && pip install %s && %s", activateScript, args[0], strings.Join(args, " "))
+	}
+	cmd = exec.Command("bash", "-c", installAndRunCmd)
+
+	// Get the output pipes
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		utils.ErrorMsg(fmt.Sprintf("failed to get stdout pipe: %v", err))
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		utils.ErrorMsg(fmt.Sprintf("failed to get stderr pipe: %v", err))
 	}
 
-	// Run the tool
-	CallRunTool(strings.Split(fmt.Sprintf("bash -c source %s && %s", activateScript, args), ""), filePath)
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("failed to start command: %v", err))
+	}
+
+	// Copy the output to stdout and stderr
+	go io.Copy(os.Stdout, stdout)
+	go io.Copy(os.Stderr, stderr)
+
+	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Installing ", args[0], " via ", "pip", " in a ", "virtual environment. It might take a while...")
+
+	// Wait for the command to finish
+	if err := cmd.Wait(); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("failed to create virtualenv: %v", err))
+	}
+
+	//if err := cmd.Run(); err != nil {
+	//	fmt.Errorf("failed to install tool %s: %v", args[0], err)
+	//	os.Exit(22)
+	//}
+
+	//// Run the tool
+	//toolOutput := fmt.Sprintf("%soutput.out", filePath)
+	//command := []string{"bash", "-c", fmt.Sprintf("source %s && %s"), activateScript, Strings.args)}
+	//
+	//runCloudTool(command, toolOutput)
 	//cmd = exec.Command("bash", "-c", runCmd)
 	//if err := cmd.Run(); err != nil {
 	//	return fmt.Errorf("failed to run tool: %v", err)
@@ -474,4 +525,75 @@ func Prowler(provider, prowlerDir string) {
 	prowlerArgs := []string{"prowler", provider}
 	prowlerPath := fmt.Sprintf("%sprowler_log.out", prowlerDir)
 	CallRunTool(prowlerArgs, prowlerPath)
+}
+
+// runCloudTool is a new version of runTool for cloud - Announce cloud tool and run it
+func runCloudTool(args []string, filePath string) {
+	tool := args[0]
+	cmdArgs := args[1:]
+	command := strings.Join(cmdArgs, " ")
+	announceTool(command, tool)
+
+	cmd := exec.Command(tool, cmdArgs...)
+
+	// Create a pipe to capture the command's output
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error creating stdout pipe: %s", err))
+		os.Exit(1)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		utils.ErrorMsg(fmt.Sprintf("failed to get stderr pipe: %v", err))
+		return
+	}
+
+	// Create a file to write the output to
+	file, err := os.Create(filePath)
+	if err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error creating output file: %s", err))
+		os.Exit(1)
+	}
+
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			utils.ErrorMsg(fmt.Sprintf("Error closing file: %s", err))
+		}
+	}(file)
+
+	// Start the command asynchronously in a goroutine
+	if err := cmd.Start(); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("%s%s", "Error starting command:", err))
+	}
+
+	// Copy the output to stdout and stderr
+	go io.Copy(os.Stdout, stdout)
+	go io.Copy(os.Stderr, stderr)
+
+	// This goroutine will capture and write the command's output to a file
+	go func() {
+		_, err := io.Copy(file, stdout)
+		if err != nil {
+			if *infra.OptVVerbose {
+				utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
+			}
+		}
+	}()
+
+	// Wait for the command to complete
+	if err := cmd.Wait(); err != nil {
+		if tool == "nikto" || tool == "fping" {
+			// Nikto and fping don't have a clean exit
+			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
+			if filePath != "/dev/null" {
+				fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
+			}
+		} else {
+			fmt.Println(utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
+		}
+	}
+
+	printToolSuccess(command, tool, filePath)
 }
