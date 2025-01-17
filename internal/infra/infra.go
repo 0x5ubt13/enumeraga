@@ -81,7 +81,7 @@ func Run() int {
 
 	// Check 3: am I groot?!
 	if os.Geteuid() != 0 {
-		utils.ErrorMsg("Please run me as root!")
+		utils.ErrorMsg("Please run the infra part as root!")
 		os.Exit(99)
 	}
 

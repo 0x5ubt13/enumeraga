@@ -452,6 +452,14 @@ func runToolInVirtualEnv(args []string, filePath string) error {
 	var installAndRunCmd string
 	switch args[0] {
 	case "scoutsuite":
+		// Look for scout.py or the scoutsuite repo
+		//TODO
+
+		// Found repo but not venv,
+
+		// Found repo and venv, activate it and use it to run scout
+
+		// Not found, go ahead and install it, then run it
 		installAndRunCmd = fmt.Sprintf("source %s && pip install %s && scout %s", activateScript, args[0], strings.Join(args[1:], " "))
 	default:
 		installAndRunCmd = fmt.Sprintf("source %s && pip install %s && %s", activateScript, args[0], strings.Join(args, " "))
@@ -504,14 +512,6 @@ func runToolInVirtualEnv(args []string, filePath string) error {
 
 // Scoutsuite launches scout.py
 func Scoutsuite(provider, scoutDir string) {
-	// run Scout
-	// call venv
-	// source into the venv
-	// run the tool
-	// := []string{"python3 -m venv . && \
-	//				source ./bin/activate && \
-	//				pip install -r 			}
-
 	scoutArgs := []string{"scoutsuite", provider}
 	err := runToolInVirtualEnv(scoutArgs, scoutDir)
 	if err != nil {
