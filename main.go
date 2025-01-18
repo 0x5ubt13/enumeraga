@@ -63,7 +63,7 @@ func cidrInit() error {
 // Check total number of lines to select targets accordingly
 func targetInit(totalLines int) error {
 	// If bruteforce flag was passed, initialise the wordlists
-	if *infra.OptBrute {
+	if *infra.OptBrute && !*infra.OptNmapOnly {
 		if !*infra.OptQuiet {
 			fmt.Printf("%s\n", utils.Cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforce tools where applicable."))
 		}
@@ -125,7 +125,7 @@ func singleTarget(target string, baseFilePath string) error {
 	// Join our string slice for printing purposes
 	openPorts := utils.RemoveDuplicates(strings.Join(openPortsSlice, ","))
 
-	// Introducing a control to repeat the scan in case there is no ports or only one port open
+	// Introducing a control to repeat the scan in case there are no ports or there is only one port open
 	// Do it only once
 	if len(openPorts) >= 1 && utils.TimesSwept == 1 {
 		sweptHostTcp, sweptHostUdp := sweepPorts()
@@ -148,7 +148,10 @@ func singleTarget(target string, baseFilePath string) error {
 		return fmt.Errorf("no ports were found open")
 	}
 
-	// Run ports iterator with the open ports found
+	// Run ports iterator with the open ports found if nmap only flag not passed
+	if *infra.OptNmapOnly {
+		return nil
+	}
 	utils.BaseDir = targetPath
 	portsIterator.Run(openPortsSlice)
 

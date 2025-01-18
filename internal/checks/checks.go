@@ -26,12 +26,7 @@ func Run() int {
 		cloud.Run()
 	case "i", "in", "inf", "infr", "infra":
 		// Infra checks now moved to internal/infra/infra.go
-		totalLines := infra.Run()
-
-		if !*infra.OptQuiet {
-			fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting Infra checks phase"), utils.Cyan(" ----------"))
-		}
-		return totalLines
+		return infra.Run()
 
 	default:
 		utils.ErrorMsg("You need to choose between `enumeraga infra` or `enumeraga cloud`")

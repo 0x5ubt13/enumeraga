@@ -25,6 +25,9 @@ var (
 	// OptInstall Only try to install pre-requisite tools and exit
 	OptInstall = getopt.BoolLong("install", 'i', "Only try to install pre-requisite tools and exit.")
 
+	// OptNmapOnly only runs nmap, ignoring all tools prerequisites
+	OptNmapOnly = getopt.BoolLong("nmap-only", 'n', "Activate nmap scans only in Enumeraga and ignore all other tools, including their installation.")
+
 	// OptOutput selects a different base folder for the output
 	// Default option: "/tmp/enumeraga_output"
 	OptOutput = getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
@@ -49,7 +52,8 @@ var (
 )
 
 func Run() int {
-	// Parse optional infra arguments
+	// Parse optional infra arguments, getting rid of the 'infra' arg
+	os.Args = os.Args[1:]
 	getopt.Parse()
 
 	// Check 0: banner!
@@ -58,7 +62,7 @@ func Run() int {
 	}
 
 	if !*OptQuiet {
-		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting checks phase"), utils.Cyan(" ----------"))
+		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting infra checks phase"), utils.Cyan(" ----------"))
 	}
 
 	// Check 1: Args passed fine?
@@ -69,7 +73,7 @@ func Run() int {
 		os.Exit(1)
 	}
 
-	// Check 2: Help flag passed?
+	// Check 2: Help flag or nmap flag passed?
 	if *OptHelp {
 		if !*OptQuiet {
 			fmt.Println(utils.Cyan("[*] Help flag detected. Aborting other checks and printing usage.\n"))
@@ -79,52 +83,71 @@ func Run() int {
 		os.Exit(0)
 	}
 
+	if *OptNmapOnly {
+		if !*OptQuiet {
+			fmt.Println(utils.Cyan("[*] Nmap only flag detected. Aborting other functionality of Enumeraga and only launching nmap scans.\n"))
+		}
+	}
+
 	// Check 3: am I groot?!
 	if os.Geteuid() != 0 {
-		utils.ErrorMsg("Please run the infra part as root!")
+		utils.ErrorMsg("Please run the infra part as root so nmap doesn't fail!")
 		os.Exit(99)
 	}
 
 	// Check 4: key tools exist in the system
-	if !*OptQuiet {
+	if !*OptQuiet && !*OptNmapOnly {
 		fmt.Println(utils.Cyan("[*] Checking all tools are installed... "))
 	}
 
-	utils.InstallMissingTools('i', OptInstall, OptVVerbose)
+	if !*OptNmapOnly {
+		utils.InstallMissingTools('i', OptInstall, OptVVerbose)
+	}
 
-	if *OptInstall {
+	if *OptInstall && !*OptNmapOnly {
 		fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga infra -t!"))
 		os.Exit(0)
 	}
 
-	// Check 5: Ensure there is a target
-	if *OptTarget == "" {
-		utils.ErrorMsg("You must provide an IP address or targets file with the flag -t to start the attack.")
-		os.Exit(1)
-	}
+	// Call check 5
+	checkFive()
 
-	// Check 6: Ensure base output directory is correctly set and exists
-	name, err := utils.CustomMkdir(*OptOutput)
-	if err != nil {
-		if *OptVVerbose {
-			utils.ErrorMsg(err)
-		}
-	}
-
-	utils.PrintCustomBiColourMsg("green", "yellow", "[+] Directory ", name, " created successfully")
-	if !*OptQuiet {
-		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", *OptOutput, "' as base directory to save the ", "output ", "files")
-	}
+	// Call check 6
+	checkSix()
 
 	// Check 7: Determine whether it is a single target or multi-target
 	targetInput := net.ParseIP(*OptTarget)
 	if targetInput.To4() == nil {
 		// Multi-target
 		// Check file exists and get lines
-		_, totalLines := utils.ReadTargetsFile(name, OptTarget)
+		_, totalLines := utils.ReadTargetsFile(*OptOutput, OptTarget)
 		return totalLines
 	}
 
 	// End of checks
 	return 0
+}
+
+// checkFive ensures there's a valid target
+func checkFive() {
+	if *OptTarget == "" {
+		utils.ErrorMsg("You must provide an IP address or targets file with the flag -t to start the attack.")
+		os.Exit(1)
+	}
+}
+
+// checkSix ensures base output directory is correctly set and exists
+func checkSix() {
+	// Check 6: Ensure base output directory is correctly set and exists
+	_, err := utils.CustomMkdir(*OptOutput)
+	if err != nil {
+		if *OptVVerbose {
+			utils.ErrorMsg(err)
+		}
+	} else {
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Directory ", *OptOutput, " created successfully")
+	}
+	if !*OptQuiet {
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", *OptOutput, "' as base directory to save the ", "output ", "files")
+	}
 }
