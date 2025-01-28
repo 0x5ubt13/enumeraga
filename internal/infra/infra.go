@@ -49,6 +49,9 @@ var (
 
 	// Adding placeholder for OptVhost
 	// OptVhost = getopt.StringLong("", '', "", "")
+
+	// Arm64 determines if software like odat, not currently available for aarch64
+	//Arm64 bool
 )
 
 func Run() int {
@@ -115,17 +118,13 @@ func Run() int {
 	// Call check 6
 	checkSix()
 
-	// Check 7: Determine whether it is a single target or multi-target
-	targetInput := net.ParseIP(*OptTarget)
-	if targetInput.To4() == nil {
-		// Multi-target
-		// Check file exists and get lines
-		_, totalLines := utils.ReadTargetsFile(*OptOutput, OptTarget)
-		return totalLines
-	}
+	// Call check 7
+	//checkSeven()
+
+	// Check 8: Determine whether it is a single target or multi-target and return number of lines
+	return checkEight()
 
 	// End of checks
-	return 0
 }
 
 // checkFive ensures there's a valid target
@@ -150,4 +149,25 @@ func checkSix() {
 	if !*OptQuiet {
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", *OptOutput, "' as base directory to save the ", "output ", "files")
 	}
+}
+
+// checkSeven checks processor's architecture to weed out tools that aren't currently supported on Aarch64
+//func checkSeven() {
+//	if runtime.GOARCH == "arm64" {
+//		Arm64 = true
+//	}
+//}
+
+// checkEight finishes this section by returning number of lines if multi-target or 0 if single-target
+func checkEight() int {
+	targetInput := net.ParseIP(*OptTarget)
+	if targetInput.To4() == nil {
+		// Multi-target
+		// Check file exists and get lines
+		_, totalLines := utils.ReadTargetsFile(OptTarget)
+		return totalLines
+	}
+
+	// Return 0 if not multi-target
+	return 0
 }
