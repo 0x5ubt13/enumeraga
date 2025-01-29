@@ -177,7 +177,7 @@ func multiTarget(targetsFile *string) {
 	}
 
 	// Loop through the targets in the file
-	targets, lines := utils.ReadTargetsFile(*targetsFile, infra.OptTarget)
+	targets, lines := utils.ReadTargetsFile(infra.OptTarget)
 	if !*infra.OptQuiet {
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Found ", fmt.Sprintf("%d", lines), " targets")
 	}

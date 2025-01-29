@@ -443,6 +443,13 @@ func InstallMissingTools(kind rune, optInstall *bool, OptVVerbose *bool) {
 	var missingTools []string
 	fullConsent := false
 	for _, tool := range keyTools {
+		// Check for tools conflicting with arm64
+		if runtime.GOARCH == "arm64" {
+			if tool == "odat" {
+				continue
+			}
+		}
+
 		if CheckToolExists(tool) {
 			continue
 		}
@@ -487,13 +494,6 @@ func InstallMissingTools(kind rune, optInstall *bool, OptVVerbose *bool) {
 			Updated = true
 		}
 
-		// Check for tools conflicting with arm64
-		if runtime.GOARCH == "arm64" {
-			if tool == "odat" {
-				continue
-			}
-		}
-
 		AptGetInstallCmd(tool)
 	}
 }
@@ -531,7 +531,7 @@ func printOSCPConsentNotGiven(tool string) {
 
 // AptGetUpdateCmd runs the apt-get update command
 func AptGetUpdateCmd() {
-	PrintCustomBiColourMsg("yellow", "cyan", "[!] Running", "apt-get update", "...")
+	PrintCustomBiColourMsg("yellow", "cyan", "[!] Running ", "apt-get update", "...")
 	update := exec.Command("apt-get", "update")
 
 	// Redirect the command's error output to the standard output in terminal
