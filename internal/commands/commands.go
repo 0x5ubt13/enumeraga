@@ -453,7 +453,9 @@ func runToolInVirtualEnv(args []string, filePath string) error {
 	switch args[0] {
 	case "scoutsuite":
 		// Look for scout.py or the scoutsuite repo
-		//TODO
+		//exec.LookPath(tool)
+
+		utils.LookForTool("scout.py") //TODO: check it's working fine and finish it
 
 		// Found repo but not venv,
 

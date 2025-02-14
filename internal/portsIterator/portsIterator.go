@@ -41,7 +41,7 @@ func ssh() {
 	}
 }
 
-// Enumertae Simple Mail Transfer Protocol (25,465,587/TCP)
+// Enumerate Simple Mail Transfer Protocol (25,465,587/TCP)
 func smtp() {
 	if utils.VisitedSMTP {
 		return
