@@ -20,3 +20,6 @@
 # Go workspace file
 go.work
 
+# Idea directory to avoid having it rewritten in every commit
+./.idea/*
+

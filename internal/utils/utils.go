@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -174,7 +175,7 @@ func ErrorMsg(errMsg any) {
 }
 
 // ReadTargetsFile from the argument path passed to -t; returns number of targets, one per line
-func ReadTargetsFile(filename string, optTarget *string) ([]string, int) {
+func ReadTargetsFile(optTarget *string) ([]string, int) {
 	data, err := os.ReadFile(*optTarget)
 	if err != nil {
 		panic(err)
@@ -199,6 +200,10 @@ func ProtocolDetected(protocol, baseDir string) string {
 	PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
 
 	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
+	_, err := CustomMkdir(protocolDir)
+	if err != nil {
+		ErrorMsg(fmt.Sprintf("Error creating protocol directory: %v", err))
+	}
 	CustomMkdir(protocolDir)
 
 	return protocolDir
@@ -439,6 +444,13 @@ func InstallMissingTools(kind rune, optInstall *bool, OptVVerbose *bool) {
 	var missingTools []string
 	fullConsent := false
 	for _, tool := range keyTools {
+		// Check for tools conflicting with arm64
+		if runtime.GOARCH == "arm64" {
+			if tool == "odat" {
+				continue
+			}
+		}
+
 		if CheckToolExists(tool) {
 			continue
 		}
@@ -519,7 +531,7 @@ func printOSCPConsentNotGiven(tool string) {
 
 // AptGetUpdateCmd runs the apt-get update command
 func AptGetUpdateCmd() {
-	PrintCustomBiColourMsg("yellow", "cyan", "[!] Running", "apt-get update", "...")
+	PrintCustomBiColourMsg("yellow", "cyan", "[!] Running ", "apt-get update", "...")
 	update := exec.Command("apt-get", "update")
 
 	// Redirect the command's error output to the standard output in terminal
