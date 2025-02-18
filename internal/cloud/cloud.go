@@ -93,6 +93,7 @@ func Run() {
 		fmt.Printf("%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting enumeration phase"), utils.Cyan(" ----------"))
 	}
 
+	// Scan start: changing into cloudScanner's Run function
 	cloudScanner.Run(provider)
 
 	// Finish and show elapsed time

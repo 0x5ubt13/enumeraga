@@ -2,15 +2,18 @@ package utils
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"github.com/Ullaakut/nmap/v3"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/fatih/color"
@@ -145,10 +148,6 @@ func PrintCloudUsageExamples() {
 		e, "gcp\n ",
 		e, "azure\n ",
 	)
-}
-
-func PrintInfraOrCloud() {
-
 }
 
 // Check if OS is debian-like
@@ -376,6 +375,69 @@ func OSCPConsent(tool string) rune {
 func CheckToolExists(tool string) bool {
 	_, lookPatherr := exec.LookPath(tool)
 	return lookPatherr == nil
+}
+
+// LookForTool looks in the system for a tool that hasn't been found with CheckToolExists and returns its locations
+func LookForTool(tool string) ([]string, error) {
+	var out []string
+
+	// TODO: Optimise as it's currently taking ages to run.
+	// TODO: Check first if tool exists like with `which`, if not then run the below
+
+	// filepath.Walk needs for a function to be called as second argument
+	err := filepath.Walk("/", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// Ignore error if it's an open permission denied error such as find / -n <tool> 2>/dev/null
+			var pathErr *os.PathError
+			if errors.As(err, &pathErr) && errors.Is(syscall.EACCES, pathErr.Err) {
+				// Ignore permission errors
+				return nil
+			}
+			return err
+		}
+
+		if !info.IsDir() && info.Name() == tool {
+			out = append(out, path)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(out) > 0 {
+		return out, nil
+	}
+
+	return nil, nil
+}
+
+// LookForVenv looks for virtual environments for tools written in Python, so that a new one is not created.
+func LookForVenv(toolPaths []string) string {
+	possiblePaths := [][]string{
+		{"venv", "bin"},
+		{"venv", "bin", "activate"},
+		{"activate"},
+		{"bin", "activate"},
+		{"venv", "Scripts"}, // Windows
+	}
+
+	for _, toolPath := range toolPaths {
+		for _, possiblePath := range possiblePaths {
+			// Ugly hack to construct this string correctly. TODO: improve this code
+			nextPath := filepath.Join(append([]string{filepath.Dir(toolPath)}, possiblePath...)...)
+
+			if _, err := os.Stat(nextPath); err == nil {
+				fmt.Println("DEBUG: Virtual environment found at:", nextPath)
+				return nextPath
+			}
+		}
+
+	}
+
+	return "not found"
 }
 
 // Separate function to add key tools

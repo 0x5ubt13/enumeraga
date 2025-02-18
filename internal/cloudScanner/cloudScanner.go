@@ -15,6 +15,8 @@ func Run(provider string) {
 	}
 	fmt.Println(utils.Cyan("[*] Debug -> providerDir = ", providerDir))
 
+	// Launch scoutsuite's function inside commands.
+	//TODO: change to goroutine
 	commands.Scoutsuite(provider, fmt.Sprintf("%sscoutsuite/", providerDir))
 	//commands.Prowler(provider, fmt.Sprintf("%sprowler/", providerDir))
 	//commands.CloudFox()

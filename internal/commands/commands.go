@@ -428,6 +428,46 @@ func CallFullAggressiveScan(target, ports, outFile string) {
 // runToolInVirtualEnv attempts to leverage shell scripting to download, install, and run a python tool, all contained
 // within a virtual environment
 func runToolInVirtualEnv(args []string, filePath string) error {
+	var commandToRun string
+
+	// Get name of the tool first
+	switch args[0] {
+	case "scoutsuite":
+		// Look for scout.py or the scoutsuite repo
+		//exec.LookPath(tool)
+		fmt.Println("DEBUG: looking for venv")
+		toolPaths, err := utils.LookForTool("scout.py") //TODO: check it's working fine and finish it
+
+		// Found error
+		if err != nil {
+			utils.ErrorMsg(fmt.Sprintf("Error finding Scoutsuite: %s", err))
+		}
+
+		// Look for venv in directory if tool was found installed
+		var venvPath string
+		if toolPaths != nil {
+			venvPath = utils.LookForVenv(toolPaths)
+		}
+
+		// Found repo and venv
+		if venvPath != "not found" {
+			activatePath := filepath.Join(venvPath, "bin", "activate")
+			commandToRun = fmt.Sprintf("source %s && pip install %s && scout %s", activatePath, args[0], strings.Join(args[1:], " "))
+			break
+		}
+
+		// Found repo but not venv,
+
+		// Found repo and venv, activate it and use it to run scout
+
+		// Not found, go ahead and install it, then run it
+		//installAndRunCmd = fmt.Sprintf("source %s && pip install %s && scout %s", activateScript, args[0], strings.Join(args[1:], " "))
+	default:
+		//installAndRunCmd = fmt.Sprintf("source %s && pip install %s && %s", activateScript, args[0], strings.Join(args, " "))
+	}
+	fmt.Println("DEBUG: commandToRun: ", commandToRun)
+
+	///- -------- review below
 	// Create a temporary directory for the virtual environment
 	fmt.Println(utils.Cyan("[*] Debug -> filePath ", filePath))
 	tempDir := fmt.Sprintf("%svenv/", filePath)
@@ -448,24 +488,10 @@ func runToolInVirtualEnv(args []string, filePath string) error {
 	}
 
 	// Activate the virtual environment and install tool
-	activateScript := filepath.Join(tempDir, "bin", "activate")
+	//activateScript := filepath.Join(tempDir, "bin", "activate")
 	var installAndRunCmd string
-	switch args[0] {
-	case "scoutsuite":
-		// Look for scout.py or the scoutsuite repo
-		//exec.LookPath(tool)
+	///- -------- review above
 
-		utils.LookForTool("scout.py") //TODO: check it's working fine and finish it
-
-		// Found repo but not venv,
-
-		// Found repo and venv, activate it and use it to run scout
-
-		// Not found, go ahead and install it, then run it
-		installAndRunCmd = fmt.Sprintf("source %s && pip install %s && scout %s", activateScript, args[0], strings.Join(args[1:], " "))
-	default:
-		installAndRunCmd = fmt.Sprintf("source %s && pip install %s && %s", activateScript, args[0], strings.Join(args, " "))
-	}
 	cmd = exec.Command("bash", "-c", installAndRunCmd)
 
 	// Get the output pipes
@@ -515,6 +541,8 @@ func runToolInVirtualEnv(args []string, filePath string) error {
 // Scoutsuite launches scout.py
 func Scoutsuite(provider, scoutDir string) {
 	scoutArgs := []string{"scoutsuite", provider}
+
+	// Running Scoutsuite from a virtual environment
 	err := runToolInVirtualEnv(scoutArgs, scoutDir)
 	if err != nil {
 		utils.ErrorMsg(err)
