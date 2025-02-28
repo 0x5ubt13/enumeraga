@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/0x5ubt13/enumeraga/internal/scans"
@@ -425,136 +424,157 @@ func CallFullAggressiveScan(target, ports, outFile string) {
    |  Cloud enumeration commands  |
    -------------------------------- */
 
-// runToolInVirtualEnv attempts to leverage shell scripting to download, install, and run a python tool, all contained
+// Use pipx for all python packages
+func installWithPipx(tool string) error {
+	if !utils.CheckToolExists("pipx") {
+		fmt.Println("Installing pipx")
+		utils.AptGetUpdateCmd()
+		utils.AptGetInstallCmd("pipx")
+	}
+	command := fmt.Sprintf("pipx install %s", tool)
+	cmd := exec.Command("/bin/sh", "-c", command)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// RunToolInVirtualEnv attempts to leverage shell scripting to download, install, and run a python tool, all contained
 // within a virtual environment
-func runToolInVirtualEnv(args []string, filePath string) error {
+func RunToolInVirtualEnv(args []string, filePath string) error {
 	var commandToRun string
 
 	// Get name of the tool first
 	switch args[0] {
 	case "scoutsuite":
+		// ------------------
+		//Leaving all this block commented as too many edge cases to complete right now. Try leverage pipx or prompt user to install
 		// Look for scout.py or the scoutsuite repo
 		//exec.LookPath(tool)
-		fmt.Println("DEBUG: looking for venv")
-		toolPaths, err := utils.LookForTool("scout.py") //TODO: check it's working fine and finish it
-
-		// Found error
-		if err != nil {
-			utils.ErrorMsg(fmt.Sprintf("Error finding Scoutsuite: %s", err))
-		}
-
-		// Look for venv in directory if tool was found installed
-		var venvPath string
-		if toolPaths != nil {
-			venvPath = utils.LookForVenv(toolPaths)
-		}
-
-		// Found repo and venv
-		if venvPath != "not found" {
-			activatePath := filepath.Join(venvPath, "bin", "activate")
-			commandToRun = fmt.Sprintf("source %s && pip install %s && scout %s", activatePath, args[0], strings.Join(args[1:], " "))
-			break
-		}
+		//fmt.Println("DEBUG: looking for venv")
+		//toolPaths, err := utils.LookForTool("scout.py") //TODO: check it's working fine and finish it
+		//
+		//// Found error
+		//if err != nil {
+		//	utils.ErrorMsg(fmt.Sprintf("Error finding Scoutsuite: %s", err))
+		//}
+		//
+		//// Look for venv in directory if tool was found installed
+		//var venvPath string
+		//if toolPaths != nil {
+		//	venvPath = utils.LookForVenv(toolPaths)
+		//}
+		//
+		//// Found repo and venv
+		//if venvPath != "not found" {
+		//	activatePath := filepath.Join(venvPath, "bin", "activate")
+		//	commandToRun = fmt.Sprintf("source %s && pip install %s && scout %s", activatePath, args[0], strings.Join(args[1:], " "))
+		//	break
+		//}
 
 		// Found repo but not venv,
 
 		// Found repo and venv, activate it and use it to run scout
 
 		// Not found, go ahead and install it, then run it
-		//installAndRunCmd = fmt.Sprintf("source %s && pip install %s && scout %s", activateScript, args[0], strings.Join(args[1:], " "))
+		// ------------------
+		if !utils.CheckToolExists("scout") {
+			err := installWithPipx("scoutsuite")
+			if err != nil {
+				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing scout via pipx")
+				return err
+			}
+		}
+
+		commandToRun = fmt.Sprintf("scout %s", strings.Join(args, " "))
+
+	case "prowler":
+		if !utils.CheckToolExists("scout") {
+			err := installWithPipx("scoutsuite")
+			if err != nil {
+				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing prowler via pipx")
+				return err
+			}
+		}
+
+		commandToRun = fmt.Sprintf("prower %s", strings.Join(args, " "))
+
+	case "cloudfox":
+		if !utils.CheckToolExists("cloudfox") {
+			err := installWithPipx("cloudfox")
+			if err != nil {
+				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing cloudfox via pipx")
+				return err
+			}
+		}
+
+		commandToRun = fmt.Sprintf("cloudfox %s", strings.Join(args, " "))
 	default:
-		//installAndRunCmd = fmt.Sprintf("source %s && pip install %s && %s", activateScript, args[0], strings.Join(args, " "))
+		// Case not registered, try and run it anyway
+		commandToRun = fmt.Sprintf("%s %s", args[0], strings.Join(args, " "))
 	}
 	fmt.Println("DEBUG: commandToRun: ", commandToRun)
 
-	///- -------- review below
+	///- -------- review below - don't review, discarding this code for now as so many edge cases possible. Simplifying with pipx
 	// Create a temporary directory for the virtual environment
-	fmt.Println(utils.Cyan("[*] Debug -> filePath ", filePath))
-	tempDir := fmt.Sprintf("%svenv/", filePath)
-	fmt.Println(utils.Cyan("[*] Debug -> creating tempDir ", tempDir))
-	_, err := utils.CustomMkdir(tempDir)
-	if err != nil {
-		utils.ErrorMsg(fmt.Sprintf("failed to create temp dir: %v", err))
-	}
-	defer fmt.Println("temp dir ", tempDir, " deleted.")
-	defer os.RemoveAll(tempDir) // Clean up the temp directory
-
-	// Create the virtual environment
-	//venvPath := filepath.Join(tempDir, "venv")
-	cmd := exec.Command("python3", "-m", "venv", tempDir)
-
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("failed to create virtualenv: %v\n", err)
-	}
-
-	// Activate the virtual environment and install tool
-	//activateScript := filepath.Join(tempDir, "bin", "activate")
-	var installAndRunCmd string
+	//fmt.Println(utils.Cyan("[*] Debug -> filePath ", filePath))
+	//tempDir := fmt.Sprintf("%svenv/", filePath)
+	//fmt.Println(utils.Cyan("[*] Debug -> creating tempDir ", tempDir))
+	//_, err := utils.CustomMkdir(tempDir)
+	//if err != nil {
+	//	utils.ErrorMsg(fmt.Sprintf("failed to create temp dir: %v", err))
+	//}
+	//defer fmt.Println("temp dir ", tempDir, " deleted.")
+	//defer os.RemoveAll(tempDir) // Clean up the temp directory
+	//
+	//// Create the virtual environment
+	////venvPath := filepath.Join(tempDir, "venv")
+	//cmd := exec.Command("python3", "-m", "venv", tempDir)
+	//
+	//if err := cmd.Run(); err != nil {
+	//	fmt.Printf("failed to create virtualenv: %v\n", err)
+	//}
+	//
+	//// Activate the virtual environment and install tool
+	////activateScript := filepath.Join(tempDir, "bin", "activate")
+	//var installAndRunCmd string
 	///- -------- review above
 
-	cmd = exec.Command("bash", "-c", installAndRunCmd)
-
-	// Get the output pipes
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		utils.ErrorMsg(fmt.Sprintf("failed to get stdout pipe: %v", err))
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		utils.ErrorMsg(fmt.Sprintf("failed to get stderr pipe: %v", err))
-	}
-
-	// Start the command
-	if err := cmd.Start(); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("failed to start command: %v", err))
-	}
-
-	// Copy the output to stdout and stderr
-	go io.Copy(os.Stdout, stdout)
-	go io.Copy(os.Stderr, stderr)
-
-	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Installing ", args[0], " via ", "pip", " in a ", "virtual environment. It might take a while...")
-
-	// Wait for the command to finish
-	if err := cmd.Wait(); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("failed to create virtualenv: %v", err))
-	}
+	//// Get the output pipes
+	//stdout, err := cmd.StdoutPipe()
+	//if err != nil {
+	//	utils.ErrorMsg(fmt.Sprintf("failed to get stdout pipe: %v", err))
+	//}
+	//stderr, err := cmd.StderrPipe()
+	//if err != nil {
+	//	utils.ErrorMsg(fmt.Sprintf("failed to get stderr pipe: %v", err))
+	//}
+	//
+	//// Start the command
+	//if err := cmd.Start(); err != nil {
+	//	utils.ErrorMsg(fmt.Sprintf("failed to start command: %v", err))
+	//}
+	//
+	//// Copy the output to stdout and stderr
+	//go io.Copy(os.Stdout, stdout)
+	//go io.Copy(os.Stderr, stderr)
+	//
+	//utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Running ", args[0], ". Please wait, it might take a while...")
+	//
+	//// Wait for the command to finish
+	//if err := cmd.Wait(); err != nil {
+	//	utils.ErrorMsg(fmt.Sprintf("failed to create virtualenv: %v", err))
+	//}
 
 	//if err := cmd.Run(); err != nil {
 	//	fmt.Errorf("failed to install tool %s: %v", args[0], err)
 	//	os.Exit(22)
 	//}
 
-	//// Run the tool
-	//toolOutput := fmt.Sprintf("%soutput.out", filePath)
-	//command := []string{"bash", "-c", fmt.Sprintf("source %s && %s"), activateScript, Strings.args)}
-	//
-	//runCloudTool(command, toolOutput)
-	//cmd = exec.Command("bash", "-c", runCmd)
-	//if err := cmd.Run(); err != nil {
-	//	return fmt.Errorf("failed to run tool: %v", err)
-	//}
+	// Run the tool
+	toolOutput := fmt.Sprintf("%soutput.out", filePath)
+	runCloudTool(strings.Split(commandToRun, " "), toolOutput)
 
 	return nil
-}
-
-// Scoutsuite launches scout.py
-func Scoutsuite(provider, scoutDir string) {
-	scoutArgs := []string{"scoutsuite", provider}
-
-	// Running Scoutsuite from a virtual environment
-	err := runToolInVirtualEnv(scoutArgs, scoutDir)
-	if err != nil {
-		utils.ErrorMsg(err)
-	}
-}
-
-// Prowler launches prowler
-func Prowler(provider, prowlerDir string) {
-	// run Prowler
-	prowlerArgs := []string{"prowler", provider}
-	prowlerPath := fmt.Sprintf("%sprowler_log.out", prowlerDir)
-	CallRunTool(prowlerArgs, prowlerPath)
 }
 
 // runCloudTool is a new version of runTool for cloud - Announce cloud tool and run it

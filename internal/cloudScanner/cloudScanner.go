@@ -16,10 +16,10 @@ func Run(provider string) {
 	fmt.Println(utils.Cyan("[*] Debug -> providerDir = ", providerDir))
 
 	// Launch scoutsuite's function inside commands.
-	//TODO: change to goroutine
-	commands.Scoutsuite(provider, fmt.Sprintf("%sscoutsuite/", providerDir))
-	//commands.Prowler(provider, fmt.Sprintf("%sprowler/", providerDir))
-	//commands.CloudFox()
+	//TODO: change to goroutine????
+	runTool("scoutsuite", provider, fmt.Sprintf("%sscoutsuite/", providerDir))
+	runTool("prowler", provider, fmt.Sprintf("%sprowler/", providerDir))
+	runTool("cloudfox", provider, fmt.Sprintf("%scloud_fox/", providerDir))
 	// commands.Pmapper()
 	// commands.Steampipe()
 	// commands.Powerpipe()
@@ -31,4 +31,9 @@ func Run(provider string) {
 	os.Exit(0)
 }
 
-// Create new parser?
+func runTool(tool, provider, path string) {
+	err := commands.RunToolInVirtualEnv([]string{tool, path}, provider)
+	if err != nil {
+		utils.ErrorMsg(err)
+	}
+}
