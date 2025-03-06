@@ -440,11 +440,11 @@ func installWithPipx(tool string) error {
 
 // RunToolInVirtualEnv attempts to leverage shell scripting to download, install, and run a python tool, all contained
 // within a virtual environment
-func RunToolInVirtualEnv(args []string, filePath string) error {
+func RunToolInVirtualEnv(tool, filePath, provider string) error {
 	var commandToRun string
 
 	// Get name of the tool first
-	switch args[0] {
+	switch tool {
 	case "scoutsuite":
 		// ------------------
 		//Leaving all this block commented as too many edge cases to complete right now. Try leverage pipx or prompt user to install
@@ -485,21 +485,23 @@ func RunToolInVirtualEnv(args []string, filePath string) error {
 			}
 		}
 
-		commandToRun = fmt.Sprintf("scout %s", strings.Join(args, " "))
+		// TODO: add flags to pass azure creds?
+		commandToRun = fmt.Sprintf("scout %s", provider)
 
 	case "prowler":
-		if !utils.CheckToolExists("scout") {
-			err := installWithPipx("scoutsuite")
+		if !utils.CheckToolExists("prowler") {
+			err := installWithPipx("prowler")
 			if err != nil {
 				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing prowler via pipx")
 				return err
 			}
 		}
 
-		commandToRun = fmt.Sprintf("prower %s", strings.Join(args, " "))
+		commandToRun = fmt.Sprintf("prowler %s", provider)
 
 	case "cloudfox":
 		if !utils.CheckToolExists("cloudfox") {
+			// CloudFox is actually a go app, don't try and install with pipx!!
 			err := installWithPipx("cloudfox")
 			if err != nil {
 				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing cloudfox via pipx")
@@ -507,10 +509,10 @@ func RunToolInVirtualEnv(args []string, filePath string) error {
 			}
 		}
 
-		commandToRun = fmt.Sprintf("cloudfox %s", strings.Join(args, " "))
+		commandToRun = fmt.Sprintf("cloudfox %s", provider)
 	default:
-		// Case not registered, try and run it anyway
-		commandToRun = fmt.Sprintf("%s %s", args[0], strings.Join(args, " "))
+		// Case not registered, try and run it anyway see what could go wrong
+		commandToRun = fmt.Sprintf("%s %s", tool, provider)
 	}
 	fmt.Println("DEBUG: commandToRun: ", commandToRun)
 
