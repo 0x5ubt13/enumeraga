@@ -3,7 +3,6 @@ package commands
 import (
 	"bufio"
 	"fmt"
-	"github.com/0x5ubt13/enumeraga/internal/infra"
 	"io"
 	"log"
 	"os"
@@ -15,7 +14,7 @@ import (
 )
 
 // WPEnumeration provides enumeration for WordPress
-func WPEnumeration(targetUrl, caseDir, port string) {
+func WPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
 	// Identify WordPress: Run curl
 	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
 	curlOutput, _ := curl.Output()
@@ -29,10 +28,10 @@ func WPEnumeration(targetUrl, caseDir, port string) {
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "WordPress detected. Running", "WPScan", "...")
 	wpScanArgs := []string{"wpscan", "--url", targetUrl, "-e", "p,u"}
 	wpScanPath := fmt.Sprintf("%swpscan_%s.out", caseDir, port)
-	runTool(wpScanArgs, wpScanPath)
+	runTool(wpScanArgs, wpScanPath, OptVVerbose)
 }
 
-func tomcatEnumeration(target, targetUrl, caseDir, port string) {
+func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, OptVVerbose *bool) {
 	// Identify Tomcat: Run curl
 	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
 	curlOutput, _ := curl.Output()
@@ -47,10 +46,10 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string) {
 	// Run Gobuster
 	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "u", fmt.Sprintf("%s:%s", target, port), "-w", utils.DirListMedium}
 	gobusterPath := fmt.Sprintf("%stomcat_gobuster.out", caseDir)
-	CallRunTool(gobusterArgs, gobusterPath)
+	CallRunTool(gobusterArgs, gobusterPath, OptVVerbose)
 
 	// Run hydra
-	if !*infra.OptBrute {
+	if !*OptBrute {
 		return
 	}
 
@@ -62,16 +61,16 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string) {
 		"http-get", "/manager/html",
 	}
 	hydraPath := fmt.Sprintf("%stomcat_hydra.out", caseDir)
-	CallRunTool(hydraArgs, hydraPath)
+	CallRunTool(hydraArgs, hydraPath, OptVVerbose)
 }
 
-func runCewlandFfufKeywords(target, caseDir, port string) {
+func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 	if port == "80" {
 		keywordsList := fmt.Sprintf("%scewl_keywordslist_80.out", caseDir)
 		targetURL := fmt.Sprintf("http://%s:80", target)
 		cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
 		cewlPath := fmt.Sprintf("%scewl_80.out", caseDir)
-		runTool(cewlArgs, cewlPath)
+		runTool(cewlArgs, cewlPath, OptVVerbose)
 
 		ffufArgs := []string{
 			"ffuf",
@@ -83,7 +82,7 @@ func runCewlandFfufKeywords(target, caseDir, port string) {
 		}
 		fmt.Println(utils.Debug("Debug: ffuf keywords command:", ffufArgs))
 		ffufPath := fmt.Sprintf("%sffuf_keywords_80.out", caseDir)
-		runTool(ffufArgs, ffufPath)
+		runTool(ffufArgs, ffufPath, OptVVerbose)
 		return
 	}
 
@@ -91,7 +90,7 @@ func runCewlandFfufKeywords(target, caseDir, port string) {
 	targetURL := fmt.Sprintf("http://%s:443", target)
 	cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
 	cewlPath := fmt.Sprintf("%scewl_443.out", caseDir)
-	runTool(cewlArgs, cewlPath)
+	runTool(cewlArgs, cewlPath, OptVVerbose)
 
 	ffufArgs := []string{
 		"ffuf",
@@ -102,7 +101,7 @@ func runCewlandFfufKeywords(target, caseDir, port string) {
 		"-maxtime-job", "300",
 	}
 	ffufPath := fmt.Sprintf("%sffuf_keywords_443.out", caseDir)
-	runTool(ffufArgs, ffufPath)
+	runTool(ffufArgs, ffufPath, OptVVerbose)
 }
 
 func printToolSuccess(command, tool, filePath string) {
@@ -138,7 +137,7 @@ func announceTool(command, tool string) {
 }
 
 // Announce tool and run it
-func runTool(args []string, filePath string) {
+func runTool(args []string, filePath string, OptVVerbose *bool) {
 	tool := args[0]
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
@@ -183,14 +182,14 @@ func runTool(args []string, filePath string) {
 	//go io.Copy(os.Stderr, stderr)
 
 	// This goroutine will capture and write the command's output to a file
-	go func() {
+	go func(OptVVerbose *bool) {
 		_, err := io.Copy(file, stdout)
 		if err != nil {
-			if *infra.OptVVerbose {
+			if *OptVVerbose {
 				utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
 			}
 		}
-	}()
+	}(OptVVerbose)
 
 	// Wait for the command to complete
 	if err := cmd.Wait(); err != nil {
@@ -209,36 +208,36 @@ func runTool(args []string, filePath string) {
 }
 
 // RunRangeTools enumerates a whole CIDR range using specific range tools
-func RunRangeTools(targetRange string) {
+func RunRangeTools(targetRange string, OptVVerbose *bool, OptOutput *string) {
 	// Print Flag detected
 	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] ", "-r", " flag detected. Proceeding to scan CIDR range with dedicated range enumeration tools.")
 
 	// Make CIDR dir
-	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *infra.OptOutput, strings.Replace(targetRange, "/", "_", 1))
+	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *OptOutput, strings.Replace(targetRange, "/", "_", 1))
 	utils.CustomMkdir(cidrDir)
 
 	// Get wordlists for the range
-	utils.GetWordlists(infra.OptVVerbose)
+	utils.GetWordlists(OptVVerbose)
 
 	// run nbtscan-unixwiz
 	nbtscanArgs := []string{"nbtscan-unixwiz", "-f", targetRange}
 	nbtscanPath := fmt.Sprintf("%snbtscan-unixwiz.out", cidrDir)
-	CallRunTool(nbtscanArgs, nbtscanPath)
+	CallRunTool(nbtscanArgs, nbtscanPath, OptVVerbose)
 
 	// run Responder-RunFinger
 	responderArgs := []string{"responder-RunFinger", "-i", targetRange}
 	responderPath := fmt.Sprintf("%srunfinger.out", cidrDir)
-	CallRunTool(responderArgs, responderPath)
+	CallRunTool(responderArgs, responderPath, OptVVerbose)
 
 	// run OneSixtyOne
 	oneSixtyOneArgs := []string{"onesixtyone", "-c", utils.UsersList, targetRange, "-w", "100"}
 	oneSixtyOnePath := fmt.Sprintf("%sonesixtyone.out", cidrDir)
-	CallRunTool(oneSixtyOneArgs, oneSixtyOnePath)
+	CallRunTool(oneSixtyOneArgs, oneSixtyOnePath, OptVVerbose)
 
 	// run fping
 	fpingArgs := []string{"fping", "-asgq", targetRange}
 	fpingPath := fmt.Sprintf("%sfping.out", cidrDir)
-	CallRunTool(fpingArgs, fpingPath)
+	CallRunTool(fpingArgs, fpingPath, OptVVerbose)
 
 	// run Metasploit scan module for EternalBlue
 	answer := utils.OSCPConsent("Metasploit")
@@ -247,13 +246,13 @@ func RunRangeTools(targetRange string) {
 	}
 	msfEternalBlueArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use scanner/smb/smb_ms17_010;set rhosts %s;set threads 10;run;exit", targetRange)}
 	msfEternalBluePath := fmt.Sprintf("%seternalblue_sweep.txt", cidrDir)
-	callEternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, cidrDir)
+	callEternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, cidrDir, OptVVerbose)
 }
 
 // eternalBlueSweepCheck is a wee fun module to detect quite low-hanging fruit
-func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
+func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string, OptVVerbose *bool) {
 	// Run msf recon first
-	runTool(msfEternalBlueArgs, msfEternalBluePath)
+	runTool(msfEternalBlueArgs, msfEternalBluePath, OptVVerbose)
 
 	var confirmedVuln = false
 
@@ -310,114 +309,114 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 }
 
 // Goroutine for eternalBlueSweepCheck()
-func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
+func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
 	go func(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
 		defer utils.Wg.Done()
 
-		eternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, dir)
+		eternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, dir, OptVVerbose)
 	}(msfEternalBlueArgs, msfEternalBluePath, dir)
 }
 
-func CallWPEnumeration(targetUrl, caseDir, port string) {
+func CallWPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
-	go func(targetUrl, caseDir, port string) {
+	go func(targetUrl, caseDir, port string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
-		WPEnumeration(targetUrl, caseDir, port)
-	}(targetUrl, caseDir, port)
+		WPEnumeration(targetUrl, caseDir, port, OptVVerbose)
+	}(targetUrl, caseDir, port, OptVVerbose)
 }
 
-func CallTomcatEnumeration(target, targetUrl, caseDir, port string) {
+func CallTomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
-	go func(target, targetUrl, caseDir, port string) {
+	go func(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
-		tomcatEnumeration(target, targetUrl, caseDir, port)
-	}(target, targetUrl, caseDir, port)
+		tomcatEnumeration(target, targetUrl, caseDir, port, OptBrute, OptVVerbose)
+	}(target, targetUrl, caseDir, port, OptBrute, OptVVerbose)
 }
 
 // CallRunCewlandFfufKeywords is a Goroutine for runCewlandFfufKeywords()
-func CallRunCewlandFfufKeywords(target, caseDir, port string) {
+func CallRunCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
-	go func(target, caseDir, port string) {
+	go func(target, caseDir, port string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
-		runCewlandFfufKeywords(target, caseDir, port)
-	}(target, caseDir, port)
+		runCewlandFfufKeywords(target, caseDir, port, OptVVerbose)
+	}(target, caseDir, port, OptVVerbose)
 }
 
 // CallRunTool is a Goroutine for runTool()
-func CallRunTool(args []string, filePath string) {
+func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
-	go func(args []string, filePath string) {
+	go func(args []string, filePath string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
-		go runTool(args, filePath)
-	}(args, filePath)
+		go runTool(args, filePath, OptVVerbose)
+	}(args, filePath, OptVVerbose)
 }
 
 // CallIndividualPortScannerWithNSEScripts is a Goroutine for individualPortScannerWithNSEScripts()
-func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts string) {
+func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts string, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
-	go func(target, port, outFile, scripts string) {
+	go func(target, port, outFile, scripts string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
-		scans.IndividualPortScannerWithNSEScripts(target, port, outFile, scripts)
-	}(target, port, outFile, scripts)
+		scans.IndividualPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
+	}(target, port, outFile, scripts, OptVVerbose)
 }
 
 // CallIndividualPortScannerWithNSEScriptsAndScriptArgs is a Goroutine for scans.IndividualPortScannerWithNSEScriptsAndScriptArgs()
-func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string) {
+func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
-	go func(target, port, outFile, scripts string, scriptArgs map[string]string) {
+	go func(target, port, outFile, scripts string, scriptArgs map[string]string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
-		scans.IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs)
-	}(target, port, outFile, scripts, scriptArgs)
+		scans.IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs, OptVVerbose)
+	}(target, port, outFile, scripts, scriptArgs, OptVVerbose)
 }
 
 // CallIndividualUDPPortScannerWithNSEScripts is a Goroutine for scans.IndividualUDPPortScannerWithNSEScripts()
-func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string) {
+func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
-	go func(target, port, outFile, scripts string) {
+	go func(target, port, outFile, scripts string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
-		scans.IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts)
-	}(target, port, outFile, scripts)
+		scans.IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
+	}(target, port, outFile, scripts, OptVVerbose)
 }
 
 // CallIndividualPortScanner is a Goroutine for scans.IndividualPortScanner()
-func CallIndividualPortScanner(target, port, outFile string) {
+func CallIndividualPortScanner(target, port, outFile string, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
-	go func(target, port, outFile string) {
+	go func(target, port, outFile string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
-		scans.IndividualPortScanner(target, port, outFile)
-	}(target, port, outFile)
+		scans.IndividualPortScanner(target, port, outFile, OptVVerbose)
+	}(target, port, outFile, OptVVerbose)
 }
 
 // CallFullAggressiveScan is a Goroutine for scans.FullAggressiveScan()
-func CallFullAggressiveScan(target, ports, outFile string) {
+func CallFullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
 	utils.Wg.Add(1)
 
-	go func(target, ports, outFile string) {
+	go func(target, ports, outFile string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on'", target, "' and sending it to the background")
 		ports = ports + ",1337" // Adding one likely closed port for OS fingerprinting purposes
-		scans.FullAggressiveScan(target, ports, outFile)
-	}(target, ports, outFile)
+		scans.FullAggressiveScan(target, ports, outFile, OptVVerbose)
+	}(target, ports, outFile, OptVVerbose)
 }
 
 /* --------------------------------
@@ -438,45 +437,13 @@ func installWithPipx(tool string) error {
 	return cmd.Run()
 }
 
-// RunToolInVirtualEnv attempts to leverage shell scripting to download, install, and run a python tool, all contained
-// within a virtual environment
-func RunToolInVirtualEnv(tool, filePath, provider string) error {
+// PrepCloudTool preps the program to run a cloud tool
+func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 	var commandToRun string
 
 	// Get name of the tool first
 	switch tool {
 	case "scoutsuite":
-		// ------------------
-		//Leaving all this block commented as too many edge cases to complete right now. Try leverage pipx or prompt user to install
-		// Look for scout.py or the scoutsuite repo
-		//exec.LookPath(tool)
-		//fmt.Println("DEBUG: looking for venv")
-		//toolPaths, err := utils.LookForTool("scout.py") //TODO: check it's working fine and finish it
-		//
-		//// Found error
-		//if err != nil {
-		//	utils.ErrorMsg(fmt.Sprintf("Error finding Scoutsuite: %s", err))
-		//}
-		//
-		//// Look for venv in directory if tool was found installed
-		//var venvPath string
-		//if toolPaths != nil {
-		//	venvPath = utils.LookForVenv(toolPaths)
-		//}
-		//
-		//// Found repo and venv
-		//if venvPath != "not found" {
-		//	activatePath := filepath.Join(venvPath, "bin", "activate")
-		//	commandToRun = fmt.Sprintf("source %s && pip install %s && scout %s", activatePath, args[0], strings.Join(args[1:], " "))
-		//	break
-		//}
-
-		// Found repo but not venv,
-
-		// Found repo and venv, activate it and use it to run scout
-
-		// Not found, go ahead and install it, then run it
-		// ------------------
 		if !utils.CheckToolExists("scout") {
 			err := installWithPipx("scoutsuite")
 			if err != nil {
@@ -502,11 +469,9 @@ func RunToolInVirtualEnv(tool, filePath, provider string) error {
 	case "cloudfox":
 		if !utils.CheckToolExists("cloudfox") {
 			// CloudFox is actually a go app, don't try and install with pipx!!
-			err := installWithPipx("cloudfox")
-			if err != nil {
-				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing cloudfox via pipx")
-				return err
-			}
+			// TODO: There are binaries for all 3 major OSs, enum OS first and download accordingly
+			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "CloudFox not found. Please install cloudfox")
+			return fmt.Errorf("cloudfox not found")
 		}
 
 		commandToRun = fmt.Sprintf("cloudfox %s", provider)
@@ -516,71 +481,15 @@ func RunToolInVirtualEnv(tool, filePath, provider string) error {
 	}
 	fmt.Println("DEBUG: commandToRun: ", commandToRun)
 
-	///- -------- review below - don't review, discarding this code for now as so many edge cases possible. Simplifying with pipx
-	// Create a temporary directory for the virtual environment
-	//fmt.Println(utils.Cyan("[*] Debug -> filePath ", filePath))
-	//tempDir := fmt.Sprintf("%svenv/", filePath)
-	//fmt.Println(utils.Cyan("[*] Debug -> creating tempDir ", tempDir))
-	//_, err := utils.CustomMkdir(tempDir)
-	//if err != nil {
-	//	utils.ErrorMsg(fmt.Sprintf("failed to create temp dir: %v", err))
-	//}
-	//defer fmt.Println("temp dir ", tempDir, " deleted.")
-	//defer os.RemoveAll(tempDir) // Clean up the temp directory
-	//
-	//// Create the virtual environment
-	////venvPath := filepath.Join(tempDir, "venv")
-	//cmd := exec.Command("python3", "-m", "venv", tempDir)
-	//
-	//if err := cmd.Run(); err != nil {
-	//	fmt.Printf("failed to create virtualenv: %v\n", err)
-	//}
-	//
-	//// Activate the virtual environment and install tool
-	////activateScript := filepath.Join(tempDir, "bin", "activate")
-	//var installAndRunCmd string
-	///- -------- review above
-
-	//// Get the output pipes
-	//stdout, err := cmd.StdoutPipe()
-	//if err != nil {
-	//	utils.ErrorMsg(fmt.Sprintf("failed to get stdout pipe: %v", err))
-	//}
-	//stderr, err := cmd.StderrPipe()
-	//if err != nil {
-	//	utils.ErrorMsg(fmt.Sprintf("failed to get stderr pipe: %v", err))
-	//}
-	//
-	//// Start the command
-	//if err := cmd.Start(); err != nil {
-	//	utils.ErrorMsg(fmt.Sprintf("failed to start command: %v", err))
-	//}
-	//
-	//// Copy the output to stdout and stderr
-	//go io.Copy(os.Stdout, stdout)
-	//go io.Copy(os.Stderr, stderr)
-	//
-	//utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Running ", args[0], ". Please wait, it might take a while...")
-	//
-	//// Wait for the command to finish
-	//if err := cmd.Wait(); err != nil {
-	//	utils.ErrorMsg(fmt.Sprintf("failed to create virtualenv: %v", err))
-	//}
-
-	//if err := cmd.Run(); err != nil {
-	//	fmt.Errorf("failed to install tool %s: %v", args[0], err)
-	//	os.Exit(22)
-	//}
-
 	// Run the tool
 	toolOutput := fmt.Sprintf("%soutput.out", filePath)
-	runCloudTool(strings.Split(commandToRun, " "), toolOutput)
+	runCloudTool(strings.Split(commandToRun, " "), toolOutput, OptVVerbose)
 
 	return nil
 }
 
 // runCloudTool is a new version of runTool for cloud - Announce cloud tool and run it
-func runCloudTool(args []string, filePath string) {
+func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	tool := args[0]
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
@@ -628,7 +537,7 @@ func runCloudTool(args []string, filePath string) {
 	go func() {
 		_, err := io.Copy(file, stdout)
 		if err != nil {
-			if *infra.OptVVerbose {
+			if *OptVVerbose {
 				utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
 			}
 		}

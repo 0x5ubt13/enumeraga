@@ -5,19 +5,12 @@ import (
 	"fmt"
 	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
+	"github.com/pborman/getopt/v2"
 	"os"
 	"time"
 )
 
-var (
-	OptHelp     = flag.Bool("help", false, "Display this help and exit.")
-	OptInstall  = flag.Bool("install", false, "Only try to install pre-requisite tools and exit.")
-	OptOutput   = flag.String("output", "/tmp/enumeraga_cloud_output", "Select a different base folder for the output.")
-	OptQuiet    = flag.Bool("quiet", false, "Don't print the banner and decrease overall verbosity.")
-	OptVVerbose = flag.Bool("vv", false, "Flood your terminal with plenty of verbosity!")
-)
-
-func Run() {
+func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 	// Timing the execution
 	start := time.Now()
 
@@ -25,7 +18,10 @@ func Run() {
 	defer os.Exit(0)
 
 	// Parse optional arguments
-	flag.Parse()
+	//flag.Parse()
+	// Parse optional cloud arguments, getting rid of the 'infra' arg
+	os.Args = os.Args[1:]
+	getopt.Parse()
 
 	// Assign basedir of OptOutput to avoid cyclic import hell
 	utils.BaseDir = *OptOutput
@@ -35,15 +31,7 @@ func Run() {
 		utils.PrintBanner()
 	}
 
-	// Check 1: Args passed fine?
-	if len(os.Args) == 2 {
-		utils.ErrorMsg("No arguments were provided.")
-		flag.Usage()
-		utils.PrintCloudUsageExamples()
-		os.Exit(1)
-	}
-
-	// Check 2: Help flag passed?
+	// Check 1: Help flag passed?
 	if *OptHelp {
 		if !*OptQuiet {
 			fmt.Println(utils.Cyan("[*] Help flag detected. Aborting other checks and printing usage.\n"))
@@ -53,29 +41,18 @@ func Run() {
 		os.Exit(0)
 	}
 
-	// Check 3: am I groot?!
-	// Not needed for cloud I think?
-	//if os.Geteuid() != 0 {
-	//	utils.ErrorMsg("Please run me as root!")
-	//	os.Exit(99)
-	//}
+	// Check 2: Args passed fine?
+	if len(os.Args) == 2 {
+		utils.ErrorMsg("No arguments were provided.")
+		flag.Usage()
+		utils.PrintCloudUsageExamples()
+		os.Exit(1)
+	}
 
-	//// Check 4: key tools exist in the system
-	//if !*OptQuiet {
-	//	fmt.Println(utils.Cyan("[*] Checking all cloud tools are installed... "))
-	//}
-	//
-	//utils.InstallMissingTools('c', OptInstall, OptVVerbose)
-	//
-	//if *OptInstall {
-	//	fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga cloud <provider>!"))
-	//	os.Exit(0)
-	//}
-
-	// Check 5: Ensure there is a target
+	// Check 3: Ensure there is a target
 	provider := parseCSP()
 
-	// Check 6: Ensure base output directory is correctly set and exists
+	// Check 4: Ensure base output directory is correctly set and exists
 	name, err := utils.CustomMkdir(*OptOutput)
 	if err != nil {
 		if *OptVVerbose {
@@ -94,7 +71,7 @@ func Run() {
 	}
 
 	// Scan start: changing into cloudScanner's Run function
-	cloudScanner.Run(provider)
+	cloudScanner.Run(provider, OptVVerbose)
 
 	// Finish and show elapsed time
 	utils.FinishLine(start, utils.Interrupted)

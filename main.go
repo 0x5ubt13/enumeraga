@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/0x5ubt13/enumeraga/internal/infra"
 	"strings"
 	"time"
 
@@ -31,7 +30,7 @@ func main() {
 		utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Remember you can also pass a range in ", "CIDR notation ", "to use ", "enum tools ", "that scan a wide range with '", "-r", "'")
 	}
 
-	if !*infra.OptQuiet {
+	if !*checks.OptQuiet {
 		fmt.Printf("%s%s%s\n\n", utils.Cyan("[*] ---------- "), utils.Green("Checks phase complete"), utils.Cyan(" ----------"))
 		fmt.Printf("%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting enumeration phase"), utils.Cyan(" ----------"))
 	}
@@ -51,8 +50,8 @@ func main() {
 
 // Check whether a target CIDR range has been passed to Enumeraga
 func cidrInit() error {
-	if *infra.OptRange != "" {
-		commands.RunRangeTools(*infra.OptRange)
+	if *checks.OptRange != "" {
+		commands.RunRangeTools(*checks.OptRange, checks.OptVVerbose, checks.OptOutput)
 		return nil
 	}
 
@@ -63,21 +62,21 @@ func cidrInit() error {
 // Check total number of lines to select targets accordingly
 func targetInit(totalLines int) error {
 	// If bruteforce flag was passed, initialise the wordlists
-	if *infra.OptBrute && !*infra.OptNmapOnly {
-		if !*infra.OptQuiet {
+	if *checks.OptBrute && !*checks.OptNmapOnly {
+		if !*checks.OptQuiet {
 			fmt.Printf("%s\n", utils.Cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforce tools where applicable."))
 		}
-		utils.GetWordlists(infra.OptVVerbose)
+		utils.GetWordlists(checks.OptVVerbose)
 	}
 
 	// If not single target, initialise multi target flow
 	if totalLines != 0 {
-		multiTarget(infra.OptTarget)
+		multiTarget(checks.OptTarget)
 		return nil
 	}
 
 	// If made it this far, run single target scan
-	err := singleTarget(*infra.OptTarget, *infra.OptOutput)
+	err := singleTarget(*checks.OptTarget, *checks.OptOutput)
 	if err != nil {
 		utils.Interrupted = true
 		return err
@@ -90,15 +89,16 @@ func targetInit(totalLines int) error {
 
 func sweepPorts() ([]nmap.Host, []nmap.Host) {
 	// If top ports flag passed, branch to use a common ports scan instead
-	if *infra.OptTopPorts != "" {
-		return scans.TcpPortSweepWithTopPorts(utils.Target), scans.UdpPortSweep(utils.Target)
+	if *checks.OptTopPorts != "" {
+		return scans.TcpPortSweepWithTopPorts(utils.Target, checks.OptTopPorts, checks.OptVVerbose),
+			scans.UdpPortSweep(utils.Target, checks.OptVVerbose)
 	}
 
 	if utils.TimesSwept == 0 {
-		return scans.TcpPortSweep(utils.Target), scans.UdpPortSweep(utils.Target)
+		return scans.TcpPortSweep(utils.Target, checks.OptVVerbose), scans.UdpPortSweep(utils.Target, checks.OptVVerbose)
 	}
 
-	return scans.SlowerTcpPortSweep(utils.Target), scans.SlowerUdpPortSweep(utils.Target)
+	return scans.SlowerTcpPortSweep(utils.Target, checks.OptVVerbose), scans.SlowerUdpPortSweep(utils.Target, checks.OptVVerbose)
 }
 
 // Run all phases of scanning using a single target
@@ -109,7 +109,7 @@ func singleTarget(target string, baseFilePath string) error {
 	targetPath := fmt.Sprintf("%s/%s/", baseFilePath, target)
 	_, err := utils.CustomMkdir(targetPath)
 	if err != nil {
-		if *infra.OptVVerbose {
+		if *checks.OptVVerbose {
 			utils.ErrorMsg(err)
 		}
 	}
@@ -143,13 +143,13 @@ func singleTarget(target string, baseFilePath string) error {
 
 		// Launch main aggressive nmap scan in parallel that covers all open ports found
 		outFile := targetPath + "aggressive_scan"
-		commands.CallFullAggressiveScan(target, openPorts, outFile)
+		commands.CallFullAggressiveScan(target, openPorts, outFile, checks.OptVVerbose)
 	} else {
 		return fmt.Errorf("no ports were found open")
 	}
 
 	// Run ports iterator with the open ports found if nmap only flag not passed
-	if *infra.OptNmapOnly {
+	if *checks.OptNmapOnly {
 		return nil
 	}
 	utils.BaseDir = targetPath
@@ -160,7 +160,7 @@ func singleTarget(target string, baseFilePath string) error {
 
 // Wrapper of single target for multi-target
 func multiTarget(targetsFile *string) {
-	if !*infra.OptQuiet {
+	if !*checks.OptQuiet {
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using multi-targets file: '", *targetsFile, "'")
 	}
 
@@ -168,17 +168,17 @@ func multiTarget(targetsFile *string) {
 	fileName := strings.Split(fileNameWithExtension[len(fileNameWithExtension)-1], ".")
 
 	// Make base folder for the output
-	targetsBaseFilePath := fmt.Sprintf("%s/%s", *infra.OptOutput, fileName[0])
+	targetsBaseFilePath := fmt.Sprintf("%s/%s", *checks.OptOutput, fileName[0])
 	_, err := utils.CustomMkdir(targetsBaseFilePath)
 	if err != nil {
-		if *infra.OptVVerbose {
+		if *checks.OptVVerbose {
 			utils.ErrorMsg(err)
 		}
 	}
 
 	// Loop through the targets in the file
-	targets, lines := utils.ReadTargetsFile(infra.OptTarget)
-	if !*infra.OptQuiet {
+	targets, lines := utils.ReadTargetsFile(checks.OptTarget)
+	if !*checks.OptQuiet {
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Found ", fmt.Sprintf("%d", lines), " targets")
 	}
 

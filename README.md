@@ -144,6 +144,16 @@ Besides from the above 29 tools, there are many more included in GNU/Linux doing
 - Spoofy
 - Do you have any other suggestion? Send a PR or a message!
 
+## Enumeraga Cloud
+
+New functionality currently being added to the tool - scan your cloud infrastructure!!
+
+Docker image being prepared, aiming to be called like this:
+
+    docker run gagarter/enumeraga:latest <arg1> <arg2> <arg3>
+
+Explanation: we use the -v flag to mount our local enumeraga binary into the container's /app directory.
+
 ## To Do
 
 ---
