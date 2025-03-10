@@ -19,7 +19,7 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 
 	// Parse optional arguments
 	//flag.Parse()
-	// Parse optional cloud arguments, getting rid of the 'infra' arg
+	// Parse optional cloud arguments, getting rid of the 'cloud' arg
 	os.Args = os.Args[1:]
 	getopt.Parse()
 
@@ -42,8 +42,9 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 	}
 
 	// Check 2: Args passed fine?
-	if len(os.Args) == 2 {
+	if len(os.Args) == 1 {
 		utils.ErrorMsg("No arguments were provided.")
+		fmt.Println(utils.Cyan("[*] Debug -> %v args passed: %v", len(os.Args), os.Args))
 		flag.Usage()
 		utils.PrintCloudUsageExamples()
 		os.Exit(1)
