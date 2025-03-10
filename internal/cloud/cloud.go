@@ -19,8 +19,8 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 
 	// Parse optional arguments
 	//flag.Parse()
-	// Parse optional cloud arguments, getting rid of the 'cloud' arg
-	os.Args = os.Args[1:]
+	// Parse optional cloud arguments, getting rid of the `enumeraga cloud` args
+	os.Args = os.Args[2:]
 	getopt.Parse()
 
 	// Assign basedir of OptOutput to avoid cyclic import hell
@@ -42,7 +42,7 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 	}
 
 	// Check 2: Args passed fine?
-	if len(os.Args) == 1 {
+	if len(os.Args) == 0 {
 		utils.ErrorMsg("No arguments were provided.")
 		fmt.Println(utils.Cyan("[*] Debug -> %v args passed: %v", len(os.Args), os.Args))
 		flag.Usage()
@@ -50,8 +50,12 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 		os.Exit(1)
 	}
 
-	// Check 3: Ensure there is a target
-	provider := parseCSP()
+	// Check 3: Ensure there is a valid CSP target
+	provider, err := parseCSP(os.Args[0])
+	if err != nil {
+		utils.ErrorMsg(err)
+		os.Exit(1)
+	}
 
 	// Check 4: Ensure base output directory is correctly set and exists
 	name, err := utils.CustomMkdir(*OptOutput)
@@ -81,11 +85,10 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 	utils.Wg.Wait()
 }
 
-func parseCSP() string {
-	providers := []string{"aws", "azure", "gcp", "oci", "aliyun", "digitalocean (do)"}
-	var provider string
+func parseCSP(provider string) (string, error) {
+	possibleProviders := []string{"aws", "azure", "gcp", "oci", "aliyun", "digitalocean (do)"}
 
-	switch os.Args[2] {
+	switch provider {
 	case "aws", "amazon":
 		provider = "aws"
 	case "az", "azure":
@@ -99,10 +102,10 @@ func parseCSP() string {
 	case "do", "digital", "digitalocean":
 		provider = "do"
 	default:
-		utils.ErrorMsg(fmt.Sprintf("%s not detected as a suitable cloud service provider. Please try again by using one of these: %v.", provider, providers))
-		os.Exit(1)
+		utils.ErrorMsg(fmt.Sprintf("%s not detected as a suitable cloud service provider. Please try again by using one of these: %v.", provider, possibleProviders))
+		return "", fmt.Errorf("no suitable cloud service provider parsed")
 	}
 
 	utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", provider, "' as provider to launch scans")
-	return provider
+	return provider, nil
 }
