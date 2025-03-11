@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/Ullaakut/nmap/v3"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,12 +17,25 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Ullaakut/nmap/v3"
+
 	"github.com/fatih/color"
 	zglob "github.com/mattn/go-zglob"
 )
 
+// HostOS is a struct that holds the OS and architecture of the host to identify the correct tools to install
+type Host struct {
+	OS  string
+	Arch string
+}
+
 // Declare global variables available throughout Enumeraga
 var (
+	HostOS = Host{
+		OS: runtime.GOOS,
+		Arch: runtime.GOARCH,
+	}
+
 	// Yellow prints a message in yellow colour
 	Yellow = color.New(color.FgYellow).SprintFunc()
 
@@ -187,7 +201,7 @@ func ReadTargetsFile(optTarget *string) ([]string, int) {
 
 // CustomMkdir checks first if it is possible to create new dir, and send custom msg if not.
 func CustomMkdir(name string) (string, error) {
-	err := os.Mkdir(name, os.ModePerm)
+	err := os.MkdirAll(name, os.ModePerm)
 	if err != nil {
 		return "", err
 	}
@@ -914,4 +928,118 @@ func PrintCustomBiColourMsg(dominantColour, secondaryColour string, text ...stri
 	}
 
 	fmt.Printf("\n")
+}
+
+func DownloadFile(fileToDownload, url string) error {
+	// Create the file
+	out, err := os.Create(fileToDownload)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type Asset struct {
+    BrowserDownloadURL string `json:"browser_download_url"`
+    Name               string `json:"name"`
+}
+
+type Release struct {
+    Assets []Asset `json:"assets"`
+    ZipballURL string `json:"zipball_url"`
+}
+
+// GetDownloadURL returns the download URL for the cloudfox tool according to the user's host OS and architecture
+func GetDownloadURL(tool, hostArch string, latest Release) (string, error) {
+    switch tool {
+    case "cloudfox":
+        for _, asset := range latest.Assets {
+            if HostOS.OS == "linux" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && filepath.Base(asset.Name) == "cloudfox-linux-amd64" {
+                return asset.BrowserDownloadURL, nil
+            }
+			if HostOS.OS == "darwin" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && filepath.Base(asset.Name) == "cloudfox-macos-amd64" {                
+				return asset.BrowserDownloadURL, nil
+            }
+            if hostArch == "darwin" && HostOS.Arch == "arm64" && filepath.Ext(asset.Name) == ".zip" && filepath.Base(asset.Name) == "cloudfox-macos-arm64" {
+                return asset.BrowserDownloadURL, nil
+            }
+			if hostArch == "windows" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && filepath.Base(asset.Name) == "cloudfox-windows-amd64" {
+                return asset.BrowserDownloadURL, nil
+            }
+        }
+	// Any other tool that needs downloading from GitHub can be added below:
+    // case "":
+    //     return latest.ZipballURL, nil
+    }
+    return "", fmt.Errorf("no suitable asset found")
+}
+
+func fetchAndDownloadLatestVersionFromGitHub(tool, hostOS, hostArch string) (string, error) {
+    toolTmpDir := fmt.Sprintf("/tmp/%s/", tool)
+    var repo, toolFullPath string
+
+    if err := os.MkdirAll(toolTmpDir, os.ModePerm); err != nil {
+        return "", fmt.Errorf("error while creating tmp dir: %v", err)
+    }
+
+    switch tool {
+    case "kube-bench":
+        repo = "aquasecurity/kube-bench"
+        toolFullPath = filepath.Join(toolTmpDir, tool+".tar.gz")
+    case "kubiscan":
+        repo = "cyberark/KubiScan"
+        toolFullPath = filepath.Join(toolTmpDir, tool+".zip")
+    }
+
+    resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo))
+    if err != nil {
+        return "", fmt.Errorf("error while fetching latest release: %v", err)
+    }
+    defer resp.Body.Close()
+
+    var latestReleaseData Release
+    if err := json.NewDecoder(resp.Body).Decode(&latestReleaseData); err != nil {
+        return "", fmt.Errorf("error decoding latest release data: %v", err)
+    }
+
+    downloadURL, err := getDownloadURL(tool, hostOS, hostArch, latestReleaseData)
+    if err != nil {
+        return "", fmt.Errorf("error getting download URL: %v", err)
+    }
+
+    cmd := exec.Command("wget", "-P", toolTmpDir, downloadURL, "-O", toolFullPath)
+    if err := cmd.Run(); err != nil {
+        return "", fmt.Errorf("error downloading file: %v", err)
+    }
+
+    return toolFullPath, nil
+}
+
+func main() {
+    tool := "kube-bench" // or "kubiscan"
+    hostOS := "Linux"    // or "darwin"
+    hostArch := "amd64"  // or "arm64"
+
+    toolPath, err := fetchAndDownloadLatestVersionFromGitHub(tool, hostOS, hostArch)
+    if err != nil {
+        fmt.Println("Error:", err)
+        return
+    }
+
+    fmt.Println("Downloaded tool path:", toolPath)
 }

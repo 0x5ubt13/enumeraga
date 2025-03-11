@@ -31,9 +31,17 @@ func Run(provider string, OptVVerbose *bool) {
 	os.Exit(0)
 }
 
+// runTool runs the specified tool
 func runTool(tool, provider, path string, OptVVerbose *bool) {
-	err := commands.PrepCloudTool(tool, path, provider, OptVVerbose)
+	// Ensure path exists before continuing
+	_, err := utils.CustomMkdir(path)
 	if err != nil {
 		utils.ErrorMsg(err)
+	}
+	
+	// Change to internal/commands
+	toolErr := commands.PrepCloudTool(tool, path, provider, OptVVerbose)
+	if toolErr != nil {
+		utils.ErrorMsg(toolErr)
 	}
 }

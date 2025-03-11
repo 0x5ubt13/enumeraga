@@ -453,7 +453,7 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 		}
 
 		// TODO: add flags to pass azure creds?
-		commandToRun = fmt.Sprintf("scout %s", provider)
+		commandToRun = fmt.Sprintf("scout %s --no-browser", provider)
 
 	case "prowler":
 		if !utils.CheckToolExists("prowler") {
@@ -470,6 +470,9 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 		if !utils.CheckToolExists("cloudfox") {
 			// CloudFox is actually a go app, don't try and install with pipx!!
 			// TODO: There are binaries for all 3 major OSs, enum OS first and download accordingly
+			fmt.Println("CloudFox not found. Attempting to download it now...")
+			err := utils.DownloadFile("
+
 			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "CloudFox not found. Please install cloudfox")
 			return fmt.Errorf("cloudfox not found")
 		}
@@ -483,6 +486,8 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 
 	// Run the tool
 	toolOutput := fmt.Sprintf("%soutput.out", filePath)
+	// Ensure path exists
+	utils.CustomMkdir(filePath)
 	runCloudTool(strings.Split(commandToRun, " "), toolOutput, OptVVerbose)
 
 	return nil

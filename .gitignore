@@ -20,6 +20,6 @@
 # Go workspace file
 go.work
 
-# Idea directory to avoid having it rewritten in every commit
-.idea
-
+# IDE directories to avoid having them rewritten in every commit
+.idea/*
+.vscode/*
