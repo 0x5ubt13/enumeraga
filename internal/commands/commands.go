@@ -136,6 +136,11 @@ func announceTool(command, tool string) {
 	}
 }
 
+// Handle messages for HTTP tools to avoid confusion
+func announceCloudTool(tool string) {
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Running '", tool, "'. Please wait...")
+}
+
 // Announce tool and run it
 func runTool(args []string, filePath string, OptVVerbose *bool) {
 	tool := args[0]
@@ -424,17 +429,61 @@ func CallFullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
    -------------------------------- */
 
 // Use pipx for all python packages
-func installWithPipx(tool string) error {
-	if !utils.CheckToolExists("pipx") {
-		fmt.Println("Installing pipx")
-		utils.AptGetUpdateCmd()
-		utils.AptGetInstallCmd("pipx")
-	}
-	command := fmt.Sprintf("pipx install %s", tool)
-	cmd := exec.Command("/bin/sh", "-c", command)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+// func installWithPipx(tool string) error {
+// 	if !utils.CheckToolExists("pipx") {
+// 		fmt.Println("Installing pipx")
+// 		utils.AptGetUpdateCmd()
+// 		utils.AptGetInstallCmd("pipx")
+// 	}
+// 	command := fmt.Sprintf("pipx install %s", tool)
+// 	cmd := exec.Command("/bin/sh", "-c", command)
+// 	cmd.Stdout = os.Stdout
+// 	cmd.Stderr = os.Stderr
+// 	return cmd.Run()
+// }
+
+// InstallWithPipxOSAgnostic installs a pipx in any supported OS
+func InstallWithPipxOSAgnostic(tool string) error {
+	// Check pipx is not there in the first place just in case
+    if !utils.CheckToolExists("pipx") {
+        fmt.Println("Installing pipx")
+
+        switch utils.HostOS.OS {
+        case "windows":
+            // Use PowerShell to install pipx on Windows
+            cmd := exec.Command("powershell", "-Command", "iwr https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py; python get-pip.py; pip install pipx; pipx ensurepath")
+            cmd.Stdout = os.Stdout
+            cmd.Stderr = os.Stderr
+            if err := cmd.Run(); err != nil {
+                return fmt.Errorf("error installing pipx on Windows: %v", err)
+            }
+        case "darwin":
+            // Use Homebrew to install pipx on macOS
+            cmd := exec.Command("/bin/sh", "-c", "brew install pipx")
+            cmd.Stdout = os.Stdout
+            cmd.Stderr = os.Stderr
+            if err := cmd.Run(); err != nil {
+                return fmt.Errorf("error installing pipx on macOS: %v", err)
+            }
+        case "linux":
+            // Use apt-get to install pipx on Linux
+            utils.AptGetUpdateCmd()
+            utils.AptGetInstallCmd("pipx")
+        default:
+            return fmt.Errorf("unsupported operating system")
+        }
+    }
+
+    command := fmt.Sprintf("pipx install %s", tool)
+    var cmd *exec.Cmd
+    if utils.HostOS.OS == "windows" {
+        cmd = exec.Command("powershell", "-Command", command)
+    } else {
+        cmd = exec.Command("/bin/sh", "-c", command)
+    }
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    return cmd.Run()
 }
 
 // PrepCloudTool preps the program to run a cloud tool
@@ -445,7 +494,7 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 	switch tool {
 	case "scoutsuite":
 		if !utils.CheckToolExists("scout") {
-			err := installWithPipx("scoutsuite")
+			err := InstallWithPipxOSAgnostic("scoutsuite")
 			if err != nil {
 				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing scout via pipx")
 				return err
@@ -457,38 +506,37 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 
 	case "prowler":
 		if !utils.CheckToolExists("prowler") {
-			err := installWithPipx("prowler")
+			err := InstallWithPipxOSAgnostic("prowler")
 			if err != nil {
 				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing prowler via pipx")
 				return err
 			}
 		}
-
 		commandToRun = fmt.Sprintf("prowler %s", provider)
 
 	case "cloudfox":
 		if !utils.CheckToolExists("cloudfox") {
-			// CloudFox is actually a go app, don't try and install with pipx!!
-			// TODO: There are binaries for all 3 major OSs, enum OS first and download accordingly
-			fmt.Println("CloudFox not found. Attempting to download it now...")
-			err := utils.DownloadFile("
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] CloudFox ", "not found. Attempting to download it now from GitHub...")
+			binaryPath, err := utils.DownloadFromGithubAndInstall("cloudfox")
+			if err != nil {
+				return fmt.Errorf("error downloading cloudfox: %v", err)
+			}
 
-			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "CloudFox not found. Please install cloudfox")
-			return fmt.Errorf("cloudfox not found")
+			commandToRun = fmt.Sprintf("%s %s all-checks", binaryPath, provider)
+		} else {
+			commandToRun = fmt.Sprintf("cloudfox %s all-checks", provider)
 		}
-
-		commandToRun = fmt.Sprintf("cloudfox %s", provider)
 	default:
 		// Case not registered, try and run it anyway see what could go wrong
 		commandToRun = fmt.Sprintf("%s %s", tool, provider)
 	}
-	fmt.Println("DEBUG: commandToRun: ", commandToRun)
 
 	// Run the tool
 	toolOutput := fmt.Sprintf("%soutput.out", filePath)
 	// Ensure path exists
 	utils.CustomMkdir(filePath)
-	runCloudTool(strings.Split(commandToRun, " "), toolOutput, OptVVerbose)
+	cmd := strings.Split(commandToRun, " ")
+	runCloudTool(cmd, toolOutput, OptVVerbose)
 
 	return nil
 }
@@ -498,8 +546,10 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	tool := args[0]
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
-	announceTool(command, tool)
-
+	
+	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Debug -> About to run ", tool, " against ", cmdArgs[0], " using the following command: ", strings.Join(args, " "))
+	announceCloudTool(tool)
+	
 	cmd := exec.Command(tool, cmdArgs...)
 
 	// Create a pipe to capture the command's output

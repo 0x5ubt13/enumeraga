@@ -1,7 +1,6 @@
 package cloud
 
 import (
-	"flag"
 	"fmt"
 	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
@@ -36,7 +35,7 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 		if !*OptQuiet {
 			fmt.Println(utils.Cyan("[*] Help flag detected. Aborting other checks and printing usage.\n"))
 		}
-		flag.Usage()
+		getopt.Usage()
 		utils.PrintCloudUsageExamples()
 		os.Exit(0)
 	}
@@ -45,7 +44,7 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 	if len(os.Args) == 0 {
 		utils.ErrorMsg("No arguments were provided.")
 		fmt.Println(utils.Cyan("[*] Debug -> %v args passed: %v", len(os.Args), os.Args))
-		flag.Usage()
+		getopt.Usage()
 		utils.PrintCloudUsageExamples()
 		os.Exit(1)
 	}
@@ -57,7 +56,10 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 		os.Exit(1)
 	}
 
-	// Check 4: Ensure base output directory is correctly set and exists
+	// Check 4: I AM GROOT!!!!
+	utils.CheckAdminPrivileges("cloud")
+
+	// Check 5: Ensure base output directory is correctly set and exists
 	name, err := utils.CustomMkdir(*OptOutput)
 	if err != nil {
 		if *OptVVerbose {

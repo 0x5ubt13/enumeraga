@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"archive/zip"
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -316,7 +318,7 @@ func GetOpenPortsSlice(sweptHostTcp, sweptHostUdp []nmap.Host) []string {
 		}
 
 		for _, port := range host.Ports {
-			// Error below: String(port.State) not working for some reason, therefore using Sprintf
+			// Error below: String(port.State) not working for some reason, but linter saying use String(); therefore, using Sprintf regardless
 			if fmt.Sprintf("%s", port.State) == "open" {
 				text := strconv.FormatUint(uint64(port.ID), 10)
 				openPortsSlice = append(openPortsSlice, text)
@@ -331,7 +333,7 @@ func GetOpenPortsSlice(sweptHostTcp, sweptHostUdp []nmap.Host) []string {
 		}
 
 		for _, port := range host.Ports {
-			// Error below: String(port.State) not working for some reason, therefore using Sprintf
+			// Error below: String(port.State) not working for some reason, but linter saying use String(); therefore, using Sprintf regardless
 			if fmt.Sprintf("%s", port.State) == "open" {
 				text := strconv.FormatUint(uint64(port.ID), 10)
 				openPortsSlice = append(openPortsSlice, text)
@@ -964,21 +966,24 @@ type Release struct {
     ZipballURL string `json:"zipball_url"`
 }
 
-// GetDownloadURL returns the download URL for the cloudfox tool according to the user's host OS and architecture
-func GetDownloadURL(tool, hostArch string, latest Release) (string, error) {
+// GetDownloadURL returns the download URL for the tool according to the user's host OS and architecture
+func GetDownloadURL(tool string, latest Release) (string, error) {
     switch tool {
     case "cloudfox":
         for _, asset := range latest.Assets {
-            if HostOS.OS == "linux" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && filepath.Base(asset.Name) == "cloudfox-linux-amd64" {
+            if HostOS.OS == "linux" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-linux-amd64.zip" {
                 return asset.BrowserDownloadURL, nil
             }
-			if HostOS.OS == "darwin" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && filepath.Base(asset.Name) == "cloudfox-macos-amd64" {                
-				return asset.BrowserDownloadURL, nil
-            }
-            if hostArch == "darwin" && HostOS.Arch == "arm64" && filepath.Ext(asset.Name) == ".zip" && filepath.Base(asset.Name) == "cloudfox-macos-arm64" {
+            if HostOS.OS == "linux" && HostOS.Arch == "386" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-linux-386.zip" {
                 return asset.BrowserDownloadURL, nil
             }
-			if hostArch == "windows" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && filepath.Base(asset.Name) == "cloudfox-windows-amd64" {
+            if HostOS.OS == "darwin" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-macos-amd64.zip" {
+                return asset.BrowserDownloadURL, nil
+            }
+            if HostOS.OS == "darwin" && HostOS.Arch == "arm64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-macos-arm64.zip" {
+                return asset.BrowserDownloadURL, nil
+            }
+            if HostOS.OS == "windows" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-windows-amd64.zip" {
                 return asset.BrowserDownloadURL, nil
             }
         }
@@ -986,60 +991,206 @@ func GetDownloadURL(tool, hostArch string, latest Release) (string, error) {
     // case "":
     //     return latest.ZipballURL, nil
     }
+	fmt.Printf("Debug: No suitable asset found. Host OS: %s, Host Arch: %s, assets: %s  \n", HostOS.OS, HostOS.Arch, latest.Assets)
     return "", fmt.Errorf("no suitable asset found")
 }
 
-func fetchAndDownloadLatestVersionFromGitHub(tool, hostOS, hostArch string) (string, error) {
-    toolTmpDir := fmt.Sprintf("/tmp/%s/", tool)
-    var repo, toolFullPath string
-
+// FetchAndDownloadLatestVersionFromGitHub fetches the latest release from GitHub and downloads the tool
+func FetchAndDownloadLatestVersionFromGitHub(tool string) (string, string, error) {
+	// Create an OS-agnostic temp directory for the tool
+	toolTmpDir := filepath.Join(os.TempDir(), tool)
     if err := os.MkdirAll(toolTmpDir, os.ModePerm); err != nil {
-        return "", fmt.Errorf("error while creating tmp dir: %v", err)
+        return "", "", fmt.Errorf("error while creating tmp dir: %v", err)
     }
 
+	var repo, toolFullPath string
     switch tool {
-    case "kube-bench":
-        repo = "aquasecurity/kube-bench"
-        toolFullPath = filepath.Join(toolTmpDir, tool+".tar.gz")
-    case "kubiscan":
-        repo = "cyberark/KubiScan"
-        toolFullPath = filepath.Join(toolTmpDir, tool+".zip")
+	case "cloudfox":
+		repo = "BishopFox/cloudfox"
+		toolFullPath = filepath.Join(toolTmpDir, tool+".zip")					
     }
 
-    resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo))
+    assetResp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo))
     if err != nil {
-        return "", fmt.Errorf("error while fetching latest release: %v", err)
+        return "", "", fmt.Errorf("error while fetching latest release: %v", err)
     }
-    defer resp.Body.Close()
+    defer assetResp.Body.Close()
 
     var latestReleaseData Release
-    if err := json.NewDecoder(resp.Body).Decode(&latestReleaseData); err != nil {
-        return "", fmt.Errorf("error decoding latest release data: %v", err)
+    if err := json.NewDecoder(assetResp.Body).Decode(&latestReleaseData); err != nil {
+        return "", "", fmt.Errorf("error decoding latest release data: %v", err)
     }
 
-    downloadURL, err := getDownloadURL(tool, hostOS, hostArch, latestReleaseData)
+    downloadURL, err := GetDownloadURL(tool, latestReleaseData)
     if err != nil {
-        return "", fmt.Errorf("error getting download URL: %v", err)
+        return "", "", fmt.Errorf("error getting download URL: %v", err)
     }
 
-    cmd := exec.Command("wget", "-P", toolTmpDir, downloadURL, "-O", toolFullPath)
-    if err := cmd.Run(); err != nil {
-        return "", fmt.Errorf("error downloading file: %v", err)
-    }
+	PrintCustomBiColourMsg("yellow", "cyan", "[!] Suitable URL found for '", tool, "' for OS ", HostOS.OS, " and arch ", HostOS.Arch, ": ", downloadURL)
 
-    return toolFullPath, nil
+    // Making the tool download OS-agnostic, instead of using wget
+	out, err := os.Create(toolFullPath)
+	if err != nil {
+		return "", "", fmt.Errorf("error creating file: %v", err)
+	}
+	defer out.Close()
+
+	// Get the data
+	downloadResp, err := http.Get(downloadURL)
+	if err != nil {
+		return "", "", fmt.Errorf("error downloading file: %v", err)
+	}
+	defer downloadResp.Body.Close()
+
+	// Write the data to the file
+	_, err = io.Copy(out, downloadResp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("error writing to file: %v", err)
+	}
+
+    return toolTmpDir, toolFullPath, nil
 }
 
-func main() {
-    tool := "kube-bench" // or "kubiscan"
-    hostOS := "Linux"    // or "darwin"
-    hostArch := "amd64"  // or "arm64"
-
-    toolPath, err := fetchAndDownloadLatestVersionFromGitHub(tool, hostOS, hostArch)
+// Unzip extracts files from zip archives
+func Unzip(src, dest string) (string, error) {
+    r, err := zip.OpenReader(src)
     if err != nil {
-        fmt.Println("Error:", err)
-        return
+        return "", err
+    }
+    defer r.Close()
+	
+	var fpath string
+    for _, f := range r.File {
+		fpath = filepath.Join(dest, f.Name)
+        if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+            return "", fmt.Errorf("illegal file path: %s", fpath)
+        }
+
+        if f.FileInfo().IsDir() {
+			_, err = CustomMkdir(fpath); if err != nil { return "", err }
+            continue
+        }
+
+        if _, err = CustomMkdir(filepath.Dir(fpath)); err != nil { return "", err }
+
+        outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+        if err != nil {
+            return "", err
+        }
+
+        rc, err := f.Open()
+        if err != nil {
+            return "", err
+        }
+
+        _, err = io.Copy(outFile, rc)
+
+        outFile.Close()
+        rc.Close()
+
+        if err != nil {
+            return "", err
+        }
+    }
+    return fpath, nil
+}
+
+func InstallBinary(tmpDirToolPath string) (string, error) {
+    // Determine the destination path based on the operating system
+	binaryName := filepath.Base(tmpDirToolPath)
+	
+    var destPath string
+    switch HostOS.OS {
+    case "windows":
+        destPath = filepath.Join(os.Getenv("ProgramFiles"), binaryName)
+    case "darwin", "linux":
+        destPath = fmt.Sprintf("%s/%s", filepath.Join("/usr/local/bin"), binaryName)
+    default:
+        return "", fmt.Errorf("unsupported operating system to install binary: %s/%s. Please open PR or let me know to fix it", HostOS.OS, HostOS.Arch)
     }
 
-    fmt.Println("Downloaded tool path:", toolPath)
+    // Move the binary to the destination path
+    if err := os.Rename(tmpDirToolPath, destPath); err != nil {
+        fmt.Println("Error moving binary to PATH. Maybe you need sudo?:", err)
+        return "", fmt.Errorf("error moving binary to PATH: %v", err)
+    }
+
+    // Make the binary executable (only needed for Unix-like systems)
+    if HostOS.OS == "darwin" || HostOS.OS == "linux" {
+        if err := os.Chmod(destPath, 0755); err != nil {
+            fmt.Println("Error setting executable permissions:", err)
+            return "", fmt.Errorf("error setting executable permissions: %v", err)
+        }
+    }
+
+	return destPath, nil
+}
+
+func DownloadFromGithubAndInstall(tool string) (string, error) {
+	tempDirPath, toolFullPath, err := FetchAndDownloadLatestVersionFromGitHub(tool)
+	if err != nil {
+		PrintCustomBiColourMsg("red", "cyan", "[-]", fmt.Sprintf("%s not found. Please install %s manually: %v", tool, tool, err))
+		return "", fmt.Errorf("error downloading tool from github")
+	}
+
+	PrintCustomBiColourMsg("green", "cyan", "[+] Successfully downloaded ", tool, " to ", toolFullPath)
+
+	// Unzip the file
+	extractedFilePath, err := Unzip(toolFullPath, tempDirPath) 
+	if err != nil {
+		fmt.Println("Error unzipping file:", err)
+		return "", fmt.Errorf("error unzipping tool: %v", err)
+	}
+
+	PrintCustomBiColourMsg("green", "cyan", "[+] Successfully unzipped ", tool, " to ", extractedFilePath)
+	
+	// Install it
+	binaryPath, err := InstallBinary(extractedFilePath)
+	if err != nil {
+		return "", fmt.Errorf("error installing %s: %v", tool, err)
+	}
+
+	PrintCustomBiColourMsg("green", "cyan", "[+] Successfully installed ", tool, " in path directory: ", binaryPath)
+
+	return binaryPath, nil
+}
+
+func CheckAdminPrivileges(cloudOrInfra string) {
+	switch cloudOrInfra {
+	case "cloud":
+		switch HostOS.OS {
+		case "windows":
+			// Check for administrative privileges on Windows
+			cmd := exec.Command("powershell", "-Command", "[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)")
+			output, err := cmd.Output()
+			if err != nil || string(output) != "True\n" {
+				ErrorMsg("Windows detected. If the program fails, please, run it as administrator so logic like tools installation doesn't fail!")
+			}
+		case "linux", "darwin":
+			// Check for root privileges on Unix-like systems
+			if os.Geteuid() != 0 {
+				ErrorMsg("Please run me as root so the tools don't fail!")
+				os.Exit(99)
+			}
+		default:
+			ErrorMsg("Unsupported operating system")
+			os.Exit(99)
+		}
+	case "infra":
+		switch HostOS.OS {
+		case "windows":
+			// Check for administrative privileges on Windows
+			ErrorMsg("Windows detected. For now running the infra section of Enumeraga in Windows isn't supported. Should you wish to contribute or formally request it, please get in touch or open a PR.")
+			os.Exit(99)	
+		}
+		case "linux", "darwin":
+			// Check for root privileges on Unix-like systems
+			if os.Geteuid() != 0 {
+				ErrorMsg("Please run me as root so the tools don't fail!")
+				os.Exit(99)
+			}
+		default:
+			ErrorMsg("Unsupported operating system")
+			os.Exit(99)
+		}
 }

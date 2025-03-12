@@ -92,11 +92,8 @@ func Run(OptBrute, OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool
 		}
 	}
 
-	// Check 3: am I groot?!
-	if os.Geteuid() != 0 {
-		utils.ErrorMsg("Please run the infra part as root so nmap doesn't fail!")
-		os.Exit(99)
-	}
+	// Check 3: I AM GROOT!!!!
+	utils.CheckAdminPrivileges("infra")
 
 	// Check 4: key tools exist in the system
 	if !*OptQuiet && !*OptNmapOnly {
@@ -118,11 +115,8 @@ func Run(OptBrute, OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool
 	// Call check 6
 	checkSix(OptOutput, OptQuiet, OptVVerbose)
 
-	// Call check 7
-	//checkSeven()
-
 	// Check 8: Determine whether it is a single target or multi-target and return number of lines
-	return checkEight(OptTarget)
+	return checkSeven(OptTarget)
 
 	// End of checks
 }
@@ -150,15 +144,8 @@ func checkSix(OptOutput *string, OptQuiet, OptVVerbose *bool) {
 	}
 }
 
-// checkSeven checks processor's architecture to weed out tools that aren't currently supported on Aarch64
-//func checkSeven() {
-//	if runtime.GOARCH == "arm64" {
-//		Arm64 = true
-//	}
-//}
-
-// checkEight finishes this section by returning number of lines if multi-target or 0 if single-target
-func checkEight(OptTarget *string) int {
+// checkSeven finishes this section by returning number of lines if multi-target or 0 if single-target
+func checkSeven(OptTarget *string) int {
 	targetInput := net.ParseIP(*OptTarget)
 	if targetInput.To4() == nil {
 		// Multi-target
