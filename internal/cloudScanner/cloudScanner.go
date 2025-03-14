@@ -13,7 +13,7 @@ func Run(provider string, OptVVerbose *bool) {
 	if err != nil {
 		utils.ErrorMsg(err)
 	}
-	fmt.Println(utils.Cyan("[*] Debug -> providerDir = ", providerDir))
+	fmt.Println(utils.Debug("[?] Debug -> providerDir = ", providerDir))
 
 	// Launch scoutsuite's function inside commands.
 	//TODO: think: change to goroutine??? Probs too much smashing the cloud provider??
@@ -38,7 +38,7 @@ func runTool(tool, provider, path string, OptVVerbose *bool) {
 	if err != nil {
 		utils.ErrorMsg(err)
 	}
-	
+
 	// Change to internal/commands
 	toolErr := commands.PrepCloudTool(tool, path, provider, OptVVerbose)
 	if toolErr != nil {

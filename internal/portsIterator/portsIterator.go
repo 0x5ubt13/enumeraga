@@ -80,7 +80,6 @@ func http() {
 	commands.CallIndividualPortScanner(utils.Target, "80,443,8080", dir+"http_scan", checks.OptVVerbose)
 
 	// Port 80:
-
 	// WordPress on port 80
 	commands.CallWPEnumeration(fmt.Sprintf("https://%s:80", utils.Target), dir, "80", checks.OptVVerbose)
 
@@ -435,7 +434,10 @@ func nfs() {
 
 	// Mkdir and mount, to mount every found drive with showmount
 	mountDir := fmt.Sprintf("%s%s", dir, "mounted_NFS_contents/")
-	utils.CustomMkdir(mountDir)
+	_, err := utils.CustomMkdir(mountDir)
+	if err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error creating dir: %v", err))
+	}
 
 	showmountOut, err := exec.Command("bash", "-c", fmt.Sprintf("cat %sshowmount.out", dir)).Output()
 	if err != nil {
@@ -448,7 +450,10 @@ func nfs() {
 		}
 	}
 	for _, dirToMount := range dirsToMount {
-		utils.CustomMkdir(fmt.Sprintf("%s%s/", mountDir, dirToMount))
+		_, err := utils.CustomMkdir(fmt.Sprintf("%s%s/", mountDir, dirToMount))
+		if err != nil {
+			utils.ErrorMsg(fmt.Sprintf("Error creating dir: %v", err))
+		}
 		mountCmd := exec.Command("bash", "-c", fmt.Sprintf("mount -t nfs %s:/%s %s -o nolock,vers=3,tcp,timeo=300", utils.Target, dirToMount, mountDir))
 		if err := mountCmd.Run(); err != nil {
 			panic(err)

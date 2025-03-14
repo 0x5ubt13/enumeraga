@@ -50,9 +50,6 @@ var (
 
 	// Adding placeholder for OptVhost
 	// OptVhost = getopt.StringLong("", '', "", "")
-
-	// Arm64 determines if software like odat, not currently available for aarch64
-	//Arm64 bool
 )
 
 // Run pre-flight checks and return total lines if multi-target
@@ -73,7 +70,7 @@ func Run() int {
 		cloud.Run(OptOutput, OptHelp, OptQuiet, OptVVerbose)
 	case "i", "in", "inf", "infr", "infra":
 		// Infra checks now moved to internal/infra/infra.go
-		return infra.Run(OptBrute, OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose, OptOutput, OptTopPorts, OptRange, OptTarget)
+		return infra.Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose, OptOutput, OptTarget)
 
 	default:
 		utils.ErrorMsg("You need to choose between `enumeraga infra` or `enumeraga cloud`")

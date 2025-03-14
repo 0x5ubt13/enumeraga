@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -16,25 +15,23 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Ullaakut/nmap/v3"
-
 	"github.com/fatih/color"
-	zglob "github.com/mattn/go-zglob"
+	"github.com/mattn/go-zglob"
 )
 
-// HostOS is a struct that holds the OS and architecture of the host to identify the correct tools to install
+// Host is a struct that holds the OS and architecture of the host to identify the correct tools to install
 type Host struct {
-	OS  string
+	OS   string
 	Arch string
 }
 
 // Declare global variables available throughout Enumeraga
 var (
 	HostOS = Host{
-		OS: runtime.GOOS,
+		OS:   runtime.GOOS,
 		Arch: runtime.GOARCH,
 	}
 
@@ -74,46 +71,6 @@ var (
 
 	// Wg sync: Define a WaitGroup to generate goroutines
 	Wg sync.WaitGroup
-
-	// Taking away the getopt vars from utils so infra and cloud don't overlap
-	//// Declare global flags and have getopt return pointers to the values.
-	//// DEV: initialising vars only once they have been implemented/ported in the code
-	//// optAgain 	= getopt.BoolLong("again", 'a', "Repeat the scan and compare with initial ports discovered.")
-	//
-	//// OptBrute Activates all fuzzing and bruteforce in the script
-	//OptBrute = getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforce in the tool.")
-	//
-	//// Specify custom DNS servers.
-	//// Default option: -n
-	//// OptDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
-	//
-	//// OptHelp displays help dialogue and exit
-	//OptHelp = getopt.BoolLong("help", 'h', "Display this help and exit.")
-	//
-	//// OptInstall Only try to install pre-requisite tools and exit
-	//OptInstall = getopt.BoolLong("install", 'i', "Only try to install pre-requisite tools and exit.")
-	//
-	//// OptOutput selects a different base folder for the output
-	//// Default option: "/tmp/enumeraga_output"
-	//OptOutput = getopt.StringLong("output", 'o', "/tmp/enumeraga_output", "Select a different base folder for the output.")
-	//
-	//// OptTopPorts runs port sweep with nmap and the flag --top-ports=<your input>
-	//OptTopPorts = getopt.StringLong("top-ports", 'p', "", "Run port sweep with nmap and the flag --top-ports=<your input>")
-	//
-	//// OptQuiet makes the tool not print the banner and decreases the overall verbosity
-	//OptQuiet = getopt.BoolLong("quiet", 'q', "Don't print the banner and decrease overall verbosity.")
-	//
-	//// OptRange specifies a CIDR range to use tools for whole subnets
-	//OptRange = getopt.StringLong("range", 'r', "", "Specify a CIDR range to use tools for whole subnets.")
-	//
-	//// OptTarget specifies a single IP target or a file with a list of IPs.
-	//OptTarget = getopt.StringLong("target", 't', "", "Specify target single IP / List of IPs file.")
-	//
-	//// OptVVerbose floods your terminal with plenty of verbosity!
-	//OptVVerbose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
-
-	// Adding placeholder for OptVhost
-	// OptVhost = getopt.StringLong("", '', "", "")
 
 	BaseDir      string
 	Target       string
@@ -219,7 +176,6 @@ func ProtocolDetected(protocol, baseDir string) string {
 	if err != nil {
 		ErrorMsg(fmt.Sprintf("Error creating protocol directory: %v", err))
 	}
-	CustomMkdir(protocolDir)
 
 	return protocolDir
 }
@@ -393,69 +349,6 @@ func CheckToolExists(tool string) bool {
 	return lookPatherr == nil
 }
 
-// LookForTool looks in the system for a tool that hasn't been found with CheckToolExists and returns its locations
-func LookForTool(tool string) ([]string, error) {
-	var out []string
-
-	// TODO: Optimise as it's currently taking ages to run.
-	// TODO: Check first if tool exists like with `which`, if not then run the below
-
-	// filepath.Walk needs for a function to be called as second argument
-	err := filepath.Walk("/", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// Ignore error if it's an open permission denied error such as find / -n <tool> 2>/dev/null
-			var pathErr *os.PathError
-			if errors.As(err, &pathErr) && errors.Is(syscall.EACCES, pathErr.Err) {
-				// Ignore permission errors
-				return nil
-			}
-			return err
-		}
-
-		if !info.IsDir() && info.Name() == tool {
-			out = append(out, path)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(out) > 0 {
-		return out, nil
-	}
-
-	return nil, nil
-}
-
-// LookForVenv looks for virtual environments for tools written in Python, so that a new one is not created.
-func LookForVenv(toolPaths []string) string {
-	possiblePaths := [][]string{
-		{"venv", "bin"},
-		{"venv", "bin", "activate"},
-		{"activate"},
-		{"bin", "activate"},
-		{"venv", "Scripts"}, // Windows
-	}
-
-	for _, toolPath := range toolPaths {
-		for _, possiblePath := range possiblePaths {
-			// Ugly hack to construct this string correctly. TODO: improve this code
-			nextPath := filepath.Join(append([]string{filepath.Dir(toolPath)}, possiblePath...)...)
-
-			if _, err := os.Stat(nextPath); err == nil {
-				fmt.Println("DEBUG: Virtual environment found at:", nextPath)
-				return nextPath
-			}
-		}
-
-	}
-
-	return "not found"
-}
-
 // Separate function to add key tools
 func getKeyTools() []string {
 	return []string{
@@ -487,17 +380,14 @@ func getKeyTools() []string {
 
 func getKeyCloudTools() []string {
 	return []string{
-		//"prowler",
-		"scoutsuite",
-		//"cloudfox",
+		"prowler",    // (https://github.com/prowler-cloud/prowler)
+		"scoutsuite", // (https://github.com/nccgroup/scoutsuite)
+		"cloudfox",   // (https://github.com/BishopFox/cloudfox)
 		/*
-			- Prowler (https://github.com/prowler-cloud/prowler)
-			- Scoutsuite (https://github.com/nccgroup/scoutsuite)
-			- CloudFox (https://github.com/BishopFox/cloudfox)
-				Note: it'd be good if pmapper was installed alongside cloudfox, with their integration it could also have it generate the default privesc query and images as output
-			- Pmapper (https://github.com/nccgroup/PMapper)
-			- Steampipe (https://github.com/turbot/steampipe)
-			- Powerpipe (https://github.com/turbot/powerpipe)
+			Note: it'd be good if pmapper was installed alongside cloudfox, with their integration it could also have it generate the default privesc query and images as output
+				- Pmapper (https://github.com/nccgroup/PMapper)
+				- Steampipe (https://github.com/turbot/steampipe)
+				- Powerpipe (https://github.com/turbot/powerpipe)
 		*/
 	}
 }
@@ -505,7 +395,7 @@ func getKeyCloudTools() []string {
 // InstallMissingTools instructs the program to try and install tools that are absent from the pentesting distro.
 // Case 'c' installs key cloud tools
 // Case 'i' installs key infra tools
-func InstallMissingTools(kind rune, optInstall *bool, OptVVerbose *bool) {
+func InstallMissingTools(kind rune, optInstall *bool) {
 	if *optInstall {
 		fmt.Println(Cyan("[*] Install flag detected. Aborting other checks and running pre-requisites check.\n"))
 	}
@@ -553,14 +443,15 @@ func InstallMissingTools(kind rune, optInstall *bool, OptVVerbose *bool) {
 		}
 	}
 
-	// Install all those that are missing
-	if kind == 'c' {
-		// Cloud tools only use pip (so far), so any distro would do
-		for _, tool := range missingTools {
-			InstallMissingCloudTool(tool)
-		}
-		return
-	}
+	// TODO: Logic to implement `--install` flag later on for the cloud part
+	//// Install all those that are missing
+	//if kind == 'c' {
+	//	// Cloud tools only use pip (so far), so any distro would do
+	//	for _, tool := range missingTools {
+	//		InstallMissingCloudTool(tool)
+	//	}
+	//	return
+	//}
 
 	compatibilityErr := isCompatibleDistro()
 	if compatibilityErr != nil {
@@ -573,14 +464,6 @@ func InstallMissingTools(kind rune, optInstall *bool, OptVVerbose *bool) {
 			Updated = true
 		}
 		AptGetInstallCmd(tool)
-	}
-}
-
-// InstallMissingCloudTool tries to install any missing cloud tool
-func InstallMissingCloudTool(tool string) {
-	// Check that the tools need pip
-	if tool == "scoutsuite" || tool == "prowler" {
-		pipInstallCmd(tool)
 	}
 }
 
@@ -609,26 +492,20 @@ func printOSCPConsentNotGiven(tool string) {
 
 // AptGetUpdateCmd runs the apt-get update command
 func AptGetUpdateCmd() {
-	PrintCustomBiColourMsg("yellow", "cyan", "[!] Running ", "apt-get update", "...")
+	fmt.Printf("%s %s%s ", Yellow("[!] Running"), Cyan("apt-get update"), Yellow("..."))
 	update := exec.Command("apt-get", "update")
 
 	// Redirect the command's error output to the standard output in terminal
 	update.Stderr = os.Stderr
 
-	//// Only print to stdout if very verbose flag
-	//if OptVVerbose {
-	//	fmt.Println(Cyan("[*] Debug -> printing apt-get update's output ------"))
-	//	update.Stdout = os.Stdout
-	//}
-
 	// Run the command
 	updateErr := update.Run()
 	if updateErr != nil {
-		ErrorMsg(fmt.Sprintf("Debug - Error running apt-get update: %v\n", updateErr))
+		ErrorMsg(fmt.Sprintf("[?] Debug -> Error running apt-get update: %v\n", updateErr))
 		return
 	}
 
-	fmt.Println(Green("Done!"))
+	fmt.Printf("%s\n", Green("Done!"))
 }
 
 // AptGetInstallCmd runs the apt-get install <tool> command
@@ -660,10 +537,6 @@ func AptGetInstallCmd(tool string) {
 
 	aptGetInstallErr := aptGetInstall.Run()
 	if aptGetInstallErr != nil {
-		//if *OptVVerbose {
-		//	fmt.Printf("Debug - Error executing apt-get: %v\n", aptGetInstallErr)
-		//}
-
 		// Notify of enum4linux-ng as it's not currently in the official kali repo
 		if tool == "enum4linux-ng" {
 			installErr := installEnum4linuxNg()
@@ -701,12 +574,6 @@ func gitCloneCmd(repoName, repoUrl string) error {
 	// Redirect the command's error output to the standard output in terminal
 	gitClone.Stderr = os.Stderr
 
-	// Only print to stdout if debugging
-	//if *OptVVerbose {
-	//	fmt.Println(Cyan("[*] Very verbose -> printing git clone's output ------"))
-	//	gitClone.Stdout = os.Stdout
-	//}
-
 	// Run the command
 	gitCloneErr := gitClone.Run()
 	if gitCloneErr != nil {
@@ -729,12 +596,6 @@ func pipInstallCmd(pipPackage ...string) error {
 	// Redirect the command's error output to the standard output in terminal
 	pipInstall.Stderr = os.Stderr
 
-	// Only print to stdout if very verbose
-	//if *OptVVerbose {
-	//	fmt.Println(Cyan("[*] Very verbose -> printing pip install output ------"))
-	//	pipInstall.Stdout = os.Stdout
-	//}
-
 	// Run the command
 	pipInstallErr := pipInstall.Run()
 	if pipInstallErr != nil {
@@ -750,12 +611,6 @@ func runChmod(command ...string) error {
 
 	// Redirect the command's error output to the standard output in terminal
 	cmd.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	//if *OptVVerbose {
-	//	fmt.Println(Cyan("[*] Very verbose -> printing cmd's output ------"))
-	//	cmd.Stdout = os.Stdout
-	//}
 
 	// Run cmd
 	cmdErr := cmd.Run()
@@ -913,6 +768,8 @@ func PrintCustomBiColourMsg(dominantColour, secondaryColour string, text ...stri
 				fmt.Printf("%s", Red(str))
 			case "cyan":
 				fmt.Printf("%s", Cyan(str))
+			case "magenta":
+				fmt.Printf("%s", Debug(str))
 			}
 			continue
 		}
@@ -932,196 +789,210 @@ func PrintCustomBiColourMsg(dominantColour, secondaryColour string, text ...stri
 	fmt.Printf("\n")
 }
 
-func DownloadFile(fileToDownload, url string) error {
-	// Create the file
-	out, err := os.Create(fileToDownload)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	// Get the data
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Write the body to file
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 type Asset struct {
-    BrowserDownloadURL string `json:"browser_download_url"`
-    Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	Name               string `json:"name"`
 }
 
 type Release struct {
-    Assets []Asset `json:"assets"`
-    ZipballURL string `json:"zipball_url"`
+	Assets     []Asset `json:"assets"`
+	ZipballURL string  `json:"zipball_url"`
 }
 
 // GetDownloadURL returns the download URL for the tool according to the user's host OS and architecture
 func GetDownloadURL(tool string, latest Release) (string, error) {
-    switch tool {
-    case "cloudfox":
-        for _, asset := range latest.Assets {
-            if HostOS.OS == "linux" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-linux-amd64.zip" {
-                return asset.BrowserDownloadURL, nil
-            }
-            if HostOS.OS == "linux" && HostOS.Arch == "386" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-linux-386.zip" {
-                return asset.BrowserDownloadURL, nil
-            }
-            if HostOS.OS == "darwin" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-macos-amd64.zip" {
-                return asset.BrowserDownloadURL, nil
-            }
-            if HostOS.OS == "darwin" && HostOS.Arch == "arm64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-macos-arm64.zip" {
-                return asset.BrowserDownloadURL, nil
-            }
-            if HostOS.OS == "windows" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-windows-amd64.zip" {
-                return asset.BrowserDownloadURL, nil
-            }
-        }
-	// Any other tool that needs downloading from GitHub can be added below:
-    // case "":
-    //     return latest.ZipballURL, nil
-    }
-	fmt.Printf("Debug: No suitable asset found. Host OS: %s, Host Arch: %s, assets: %s  \n", HostOS.OS, HostOS.Arch, latest.Assets)
-    return "", fmt.Errorf("no suitable asset found")
+	switch tool {
+	case "cloudfox":
+		for _, asset := range latest.Assets {
+			if HostOS.OS == "linux" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-linux-amd64.zip" {
+				return asset.BrowserDownloadURL, nil
+			}
+			if HostOS.OS == "linux" && HostOS.Arch == "386" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-linux-386.zip" {
+				return asset.BrowserDownloadURL, nil
+			}
+			if HostOS.OS == "darwin" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-macos-amd64.zip" {
+				return asset.BrowserDownloadURL, nil
+			}
+			if HostOS.OS == "darwin" && HostOS.Arch == "arm64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-macos-arm64.zip" {
+				return asset.BrowserDownloadURL, nil
+			}
+			if HostOS.OS == "windows" && HostOS.Arch == "amd64" && filepath.Ext(asset.Name) == ".zip" && asset.Name == "cloudfox-windows-amd64.zip" {
+				return asset.BrowserDownloadURL, nil
+			}
+		}
+		// Any other tool that needs downloading from GitHub can be added below:
+		// case "":
+		//     return return asset.BrowserDownloadURL, nil
+	}
+
+	PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> No suitable asset found. Host OS: ", HostOS.OS, " | Host Arch: ", HostOS.Arch, " | Assets: ", fmt.Sprintf("%v", latest.Assets))
+	return "", fmt.Errorf("no suitable asset found")
+}
+
+func DownloadFromGithub(toolFullPath, downloadURL string) error {
+	// Making the tool download OS-agnostic, instead of using wget
+	out, err := os.Create(toolFullPath)
+	if err != nil {
+		return fmt.Errorf("error creating file: %v", err)
+	}
+	defer func(out *os.File) {
+		err := out.Close()
+		if err != nil {
+			ErrorMsg("error closing file")
+		}
+	}(out)
+
+	// Get the data
+	downloadResp, err := http.Get(downloadURL)
+	if err != nil {
+		return fmt.Errorf("error downloading file: %v", err)
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			ErrorMsg(fmt.Sprintf("Error closing the request body: %v", err))
+		}
+	}(downloadResp.Body)
+
+	// Write the data to the file
+	_, err = io.Copy(out, downloadResp.Body)
+	if err != nil {
+		return fmt.Errorf("error writing to file: %v", err)
+	}
+
+	return nil
 }
 
 // FetchAndDownloadLatestVersionFromGitHub fetches the latest release from GitHub and downloads the tool
 func FetchAndDownloadLatestVersionFromGitHub(tool string) (string, string, error) {
 	// Create an OS-agnostic temp directory for the tool
 	toolTmpDir := filepath.Join(os.TempDir(), tool)
-    if err := os.MkdirAll(toolTmpDir, os.ModePerm); err != nil {
-        return "", "", fmt.Errorf("error while creating tmp dir: %v", err)
-    }
+	if err := os.MkdirAll(toolTmpDir, os.ModePerm); err != nil {
+		return "", "", fmt.Errorf("error while creating tmp dir: %v", err)
+	}
 
 	var repo, toolFullPath string
-    switch tool {
+	switch tool {
 	case "cloudfox":
 		repo = "BishopFox/cloudfox"
-		toolFullPath = filepath.Join(toolTmpDir, tool+".zip")					
-    }
+		toolFullPath = filepath.Join(toolTmpDir, tool+".zip")
+	}
 
-    assetResp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo))
-    if err != nil {
-        return "", "", fmt.Errorf("error while fetching latest release: %v", err)
-    }
-    defer assetResp.Body.Close()
+	assetResp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo))
+	if err != nil {
+		return "", "", fmt.Errorf("error while fetching latest release: %v", err)
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			ErrorMsg(fmt.Sprintf("Error closing the request body: %v", err))
+		}
+	}(assetResp.Body)
 
-    var latestReleaseData Release
-    if err := json.NewDecoder(assetResp.Body).Decode(&latestReleaseData); err != nil {
-        return "", "", fmt.Errorf("error decoding latest release data: %v", err)
-    }
+	var latestReleaseData Release
+	if err := json.NewDecoder(assetResp.Body).Decode(&latestReleaseData); err != nil {
+		return "", "", fmt.Errorf("error decoding latest release data: %v", err)
+	}
 
-    downloadURL, err := GetDownloadURL(tool, latestReleaseData)
-    if err != nil {
-        return "", "", fmt.Errorf("error getting download URL: %v", err)
-    }
+	downloadURL, err := GetDownloadURL(tool, latestReleaseData)
+	if err != nil {
+		return "", "", fmt.Errorf("error getting download URL: %v", err)
+	}
 
 	PrintCustomBiColourMsg("yellow", "cyan", "[!] Suitable URL found for '", tool, "' for OS ", HostOS.OS, " and arch ", HostOS.Arch, ": ", downloadURL)
 
-    // Making the tool download OS-agnostic, instead of using wget
-	out, err := os.Create(toolFullPath)
+	err = DownloadFromGithub(toolFullPath, downloadURL)
 	if err != nil {
-		return "", "", fmt.Errorf("error creating file: %v", err)
-	}
-	defer out.Close()
-
-	// Get the data
-	downloadResp, err := http.Get(downloadURL)
-	if err != nil {
-		return "", "", fmt.Errorf("error downloading file: %v", err)
-	}
-	defer downloadResp.Body.Close()
-
-	// Write the data to the file
-	_, err = io.Copy(out, downloadResp.Body)
-	if err != nil {
-		return "", "", fmt.Errorf("error writing to file: %v", err)
+		return "", "", err
 	}
 
-    return toolTmpDir, toolFullPath, nil
+	return toolTmpDir, toolFullPath, nil
 }
 
 // Unzip extracts files from zip archives
 func Unzip(src, dest string) (string, error) {
-    r, err := zip.OpenReader(src)
-    if err != nil {
-        return "", err
-    }
-    defer r.Close()
-	
+	r, err := zip.OpenReader(src)
+	if err != nil {
+		return "", err
+	}
+	defer func(r *zip.ReadCloser) {
+		err := r.Close()
+		if err != nil {
+			ErrorMsg(fmt.Sprintf("Error closing the zip reader: %v", err))
+		}
+	}(r)
+
 	var fpath string
-    for _, f := range r.File {
+	for _, f := range r.File {
 		fpath = filepath.Join(dest, f.Name)
-        if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
-            return "", fmt.Errorf("illegal file path: %s", fpath)
-        }
+		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return "", fmt.Errorf("illegal file path: %s", fpath)
+		}
 
-        if f.FileInfo().IsDir() {
-			_, err = CustomMkdir(fpath); if err != nil { return "", err }
-            continue
-        }
+		if f.FileInfo().IsDir() {
+			_, err = CustomMkdir(fpath)
+			if err != nil {
+				return "", err
+			}
+			continue
+		}
 
-        if _, err = CustomMkdir(filepath.Dir(fpath)); err != nil { return "", err }
+		if _, err = CustomMkdir(filepath.Dir(fpath)); err != nil {
+			return "", err
+		}
 
-        outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
-        if err != nil {
-            return "", err
-        }
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return "", err
+		}
 
-        rc, err := f.Open()
-        if err != nil {
-            return "", err
-        }
+		rc, err := f.Open()
+		if err != nil {
+			return "", err
+		}
 
-        _, err = io.Copy(outFile, rc)
+		_, err = io.Copy(outFile, rc)
 
-        outFile.Close()
-        rc.Close()
+		err = outFile.Close()
+		if err != nil {
+			return "", err
+		}
 
-        if err != nil {
-            return "", err
-        }
-    }
-    return fpath, nil
+		err = rc.Close()
+		if err != nil {
+			return "", err
+		}
+	}
+	return fpath, nil
 }
 
 func InstallBinary(tmpDirToolPath string) (string, error) {
-    // Determine the destination path based on the operating system
+	// Determine the destination path based on the operating system
 	binaryName := filepath.Base(tmpDirToolPath)
-	
-    var destPath string
-    switch HostOS.OS {
-    case "windows":
-        destPath = filepath.Join(os.Getenv("ProgramFiles"), binaryName)
-    case "darwin", "linux":
-        destPath = fmt.Sprintf("%s/%s", filepath.Join("/usr/local/bin"), binaryName)
-    default:
-        return "", fmt.Errorf("unsupported operating system to install binary: %s/%s. Please open PR or let me know to fix it", HostOS.OS, HostOS.Arch)
-    }
 
-    // Move the binary to the destination path
-    if err := os.Rename(tmpDirToolPath, destPath); err != nil {
-        fmt.Println("Error moving binary to PATH. Maybe you need sudo?:", err)
-        return "", fmt.Errorf("error moving binary to PATH: %v", err)
-    }
+	var destPath string
+	switch HostOS.OS {
+	case "windows":
+		destPath = filepath.Join(os.Getenv("ProgramFiles"), binaryName)
+	case "darwin", "linux":
+		destPath = fmt.Sprintf("%s/%s", filepath.Join("/usr/local/bin"), binaryName)
+	default:
+		return "", fmt.Errorf("unsupported operating system to install binary: %s/%s. Please open PR or let me know to fix it", HostOS.OS, HostOS.Arch)
+	}
 
-    // Make the binary executable (only needed for Unix-like systems)
-    if HostOS.OS == "darwin" || HostOS.OS == "linux" {
-        if err := os.Chmod(destPath, 0755); err != nil {
-            fmt.Println("Error setting executable permissions:", err)
-            return "", fmt.Errorf("error setting executable permissions: %v", err)
-        }
-    }
+	// Move the binary to the destination path
+	if err := os.Rename(tmpDirToolPath, destPath); err != nil {
+		fmt.Println("Error moving binary to PATH. Maybe you need sudo?:", err)
+		return "", fmt.Errorf("error moving binary to PATH: %v", err)
+	}
+
+	// Make the binary executable (only needed for Unix-like systems)
+	if HostOS.OS == "darwin" || HostOS.OS == "linux" {
+		if err := os.Chmod(destPath, 0755); err != nil {
+			fmt.Println("Error setting executable permissions:", err)
+			return "", fmt.Errorf("error setting executable permissions: %v", err)
+		}
+	}
 
 	return destPath, nil
 }
@@ -1136,14 +1007,14 @@ func DownloadFromGithubAndInstall(tool string) (string, error) {
 	PrintCustomBiColourMsg("green", "cyan", "[+] Successfully downloaded ", tool, " to ", toolFullPath)
 
 	// Unzip the file
-	extractedFilePath, err := Unzip(toolFullPath, tempDirPath) 
+	extractedFilePath, err := Unzip(toolFullPath, tempDirPath)
 	if err != nil {
 		fmt.Println("Error unzipping file:", err)
 		return "", fmt.Errorf("error unzipping tool: %v", err)
 	}
 
 	PrintCustomBiColourMsg("green", "cyan", "[+] Successfully unzipped ", tool, " to ", extractedFilePath)
-	
+
 	// Install it
 	binaryPath, err := InstallBinary(extractedFilePath)
 	if err != nil {
@@ -1181,16 +1052,16 @@ func CheckAdminPrivileges(cloudOrInfra string) {
 		case "windows":
 			// Check for administrative privileges on Windows
 			ErrorMsg("Windows detected. For now running the infra section of Enumeraga in Windows isn't supported. Should you wish to contribute or formally request it, please get in touch or open a PR.")
-			os.Exit(99)	
-		}
-		case "linux", "darwin":
-			// Check for root privileges on Unix-like systems
-			if os.Geteuid() != 0 {
-				ErrorMsg("Please run me as root so the tools don't fail!")
-				os.Exit(99)
-			}
-		default:
-			ErrorMsg("Unsupported operating system")
 			os.Exit(99)
 		}
+	case "linux", "darwin":
+		// Check for root privileges on Unix-like systems
+		if os.Geteuid() != 0 {
+			ErrorMsg("Please run me as root so the tools don't fail!")
+			os.Exit(99)
+		}
+	default:
+		ErrorMsg("Unsupported operating system")
+		os.Exit(99)
+	}
 }

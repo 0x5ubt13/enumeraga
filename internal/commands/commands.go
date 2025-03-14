@@ -80,7 +80,7 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 			"-maxtime", "300",
 			"-maxtime-job", "300",
 		}
-		fmt.Println(utils.Debug("Debug: ffuf keywords command:", ffufArgs))
+		fmt.Println(utils.Debug("[?] Debug: ffuf keywords command:", ffufArgs))
 		ffufPath := fmt.Sprintf("%sffuf_keywords_80.out", caseDir)
 		runTool(ffufArgs, ffufPath, OptVVerbose)
 		return
@@ -157,12 +157,6 @@ func runTool(args []string, filePath string, OptVVerbose *bool) {
 		os.Exit(1)
 	}
 
-	//stderr, err := cmd.StderrPipe()
-	//if err != nil {
-	//	utils.ErrorMsg(fmt.Sprintf("failed to get stderr pipe: %v", err))
-	//	return
-	//}
-
 	// Create a file to write the output to
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -181,10 +175,6 @@ func runTool(args []string, filePath string, OptVVerbose *bool) {
 	if err := cmd.Start(); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("%s%s", "Error starting command:", err))
 	}
-
-	//// Copy the output to stdout and stderr
-	//go io.Copy(os.Stdout, stdout)
-	//go io.Copy(os.Stderr, stderr)
 
 	// This goroutine will capture and write the command's output to a file
 	go func(OptVVerbose *bool) {
@@ -219,7 +209,10 @@ func RunRangeTools(targetRange string, OptVVerbose *bool, OptOutput *string) {
 
 	// Make CIDR dir
 	cidrDir := fmt.Sprintf("%s/%s_range_enum/", *OptOutput, strings.Replace(targetRange, "/", "_", 1))
-	utils.CustomMkdir(cidrDir)
+	_, err := utils.CustomMkdir(cidrDir)
+	if err != nil {
+		utils.ErrorMsg("error trying to make dir")
+	}
 
 	// Get wordlists for the range
 	utils.GetWordlists(OptVVerbose)
@@ -428,62 +421,48 @@ func CallFullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
    |  Cloud enumeration commands  |
    -------------------------------- */
 
-// Use pipx for all python packages
-// func installWithPipx(tool string) error {
-// 	if !utils.CheckToolExists("pipx") {
-// 		fmt.Println("Installing pipx")
-// 		utils.AptGetUpdateCmd()
-// 		utils.AptGetInstallCmd("pipx")
-// 	}
-// 	command := fmt.Sprintf("pipx install %s", tool)
-// 	cmd := exec.Command("/bin/sh", "-c", command)
-// 	cmd.Stdout = os.Stdout
-// 	cmd.Stderr = os.Stderr
-// 	return cmd.Run()
-// }
-
 // InstallWithPipxOSAgnostic installs a pipx in any supported OS
 func InstallWithPipxOSAgnostic(tool string) error {
 	// Check pipx is not there in the first place just in case
-    if !utils.CheckToolExists("pipx") {
-        fmt.Println("Installing pipx")
+	if !utils.CheckToolExists("pipx") {
+		fmt.Println("Installing pipx")
 
-        switch utils.HostOS.OS {
-        case "windows":
-            // Use PowerShell to install pipx on Windows
-            cmd := exec.Command("powershell", "-Command", "iwr https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py; python get-pip.py; pip install pipx; pipx ensurepath")
-            cmd.Stdout = os.Stdout
-            cmd.Stderr = os.Stderr
-            if err := cmd.Run(); err != nil {
-                return fmt.Errorf("error installing pipx on Windows: %v", err)
-            }
-        case "darwin":
-            // Use Homebrew to install pipx on macOS
-            cmd := exec.Command("/bin/sh", "-c", "brew install pipx")
-            cmd.Stdout = os.Stdout
-            cmd.Stderr = os.Stderr
-            if err := cmd.Run(); err != nil {
-                return fmt.Errorf("error installing pipx on macOS: %v", err)
-            }
-        case "linux":
-            // Use apt-get to install pipx on Linux
-            utils.AptGetUpdateCmd()
-            utils.AptGetInstallCmd("pipx")
-        default:
-            return fmt.Errorf("unsupported operating system")
-        }
-    }
+		switch utils.HostOS.OS {
+		case "windows":
+			// Use PowerShell to install pipx on Windows
+			cmd := exec.Command("powershell", "-Command", "iwr https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py; python get-pip.py; pip install pipx; pipx ensurepath")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("error installing pipx on Windows: %v", err)
+			}
+		case "darwin":
+			// Use Homebrew to install pipx on macOS
+			cmd := exec.Command("/bin/sh", "-c", "brew install pipx")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("error installing pipx on macOS: %v", err)
+			}
+		case "linux":
+			// Use apt-get to install pipx on Linux
+			utils.AptGetUpdateCmd()
+			utils.AptGetInstallCmd("pipx")
+		default:
+			return fmt.Errorf("unsupported operating system")
+		}
+	}
 
-    command := fmt.Sprintf("pipx install %s", tool)
-    var cmd *exec.Cmd
-    if utils.HostOS.OS == "windows" {
-        cmd = exec.Command("powershell", "-Command", command)
-    } else {
-        cmd = exec.Command("/bin/sh", "-c", command)
-    }
-    cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
-    return cmd.Run()
+	command := fmt.Sprintf("pipx install %s", tool)
+	var cmd *exec.Cmd
+	if utils.HostOS.OS == "windows" {
+		cmd = exec.Command("powershell", "-Command", command)
+	} else {
+		cmd = exec.Command("/bin/sh", "-c", command)
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // PrepCloudTool preps the program to run a cloud tool
@@ -534,7 +513,11 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 	// Run the tool
 	toolOutput := fmt.Sprintf("%soutput.out", filePath)
 	// Ensure path exists
-	utils.CustomMkdir(filePath)
+	_, err := utils.CustomMkdir(filePath)
+	if err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error creating custom dir %s: %v", filePath, err))
+	}
+
 	cmd := strings.Split(commandToRun, " ")
 	runCloudTool(cmd, toolOutput, OptVVerbose)
 
@@ -546,10 +529,10 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	tool := args[0]
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
-	
-	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Debug -> About to run ", tool, " against ", cmdArgs[0], " using the following command: ", strings.Join(args, " "))
+
+	utils.PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> About to run ", tool, " against ", cmdArgs[0], " using the following command: ", strings.Join(args, " "))
 	announceCloudTool(tool)
-	
+
 	cmd := exec.Command(tool, cmdArgs...)
 
 	// Create a pipe to capture the command's output
@@ -575,7 +558,9 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
-			utils.ErrorMsg(fmt.Sprintf("Error closing file: %s", err))
+			if *OptVVerbose {
+				utils.ErrorMsg(fmt.Sprintf("Error closing file: %s", err))
+			}
 		}
 	}(file)
 
@@ -585,8 +570,23 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	}
 
 	// Copy the output to stdout and stderr
-	go io.Copy(os.Stdout, stdout)
-	go io.Copy(os.Stderr, stderr)
+	go func() {
+		_, err := io.Copy(os.Stdout, stdout)
+		if err != nil {
+			if *OptVVerbose {
+				utils.ErrorMsg(fmt.Sprintf("Error trying to copy stdout: %v", err))
+			}
+		}
+	}()
+
+	go func() {
+		_, err := io.Copy(os.Stderr, stderr)
+		if err != nil {
+			if *OptVVerbose {
+				utils.ErrorMsg(fmt.Sprintf("Error trying to copy stderr: %v", err))
+			}
+		}
+	}()
 
 	// This goroutine will capture and write the command's output to a file
 	go func() {

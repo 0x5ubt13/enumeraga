@@ -16,8 +16,6 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 	// Cloud flow must end when this Run function finishes
 	defer os.Exit(0)
 
-	// Parse optional arguments
-	//flag.Parse()
 	// Parse optional cloud arguments, getting rid of the `enumeraga cloud` args
 	os.Args = os.Args[2:]
 	getopt.Parse()
@@ -43,7 +41,7 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 	// Check 2: Args passed fine?
 	if len(os.Args) == 0 {
 		utils.ErrorMsg("No arguments were provided.")
-		fmt.Println(utils.Cyan("[*] Debug -> %v args passed: %v", len(os.Args), os.Args))
+		fmt.Println(utils.Debug("[?] Debug -> %v args passed: %v", len(os.Args), os.Args))
 		getopt.Usage()
 		utils.PrintCloudUsageExamples()
 		os.Exit(1)
