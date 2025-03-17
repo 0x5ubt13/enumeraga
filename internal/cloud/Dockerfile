@@ -1,5 +1,5 @@
 # Use a Debian base image
-FROM debian:stable-slim
+FROM continuumio/miniconda3
 LABEL authors="0x5ubt13"
 
 # Install necessary dependencies
@@ -30,13 +30,17 @@ RUN curl --version && \
     python3 --version && \
     pipx --version && \
     brew --version && \
-    git --version
+    git --version && \
+    conda --version
 
 # Install Python packages via pipx
 RUN pipx install scoutsuite prowler
 
 # Install Homebrew packages
 RUN brew install cloudfox
+
+RUN conda create -n pmapper && \
+    /bin/bash -c "source activate pmapper && pip install principalmapper"
 
 # Set your working directory
 WORKDIR /app

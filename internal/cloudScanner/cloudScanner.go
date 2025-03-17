@@ -20,7 +20,7 @@ func Run(provider string, OptVVerbose *bool) {
 	runTool("scoutsuite", provider, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
 	runTool("prowler", provider, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
 	runTool("cloudfox", provider, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
-	// commands.Pmapper()
+	runTool("pmapper", provider, fmt.Sprintf("%spmapper/", providerDir), OptVVerbose)
 	// commands.Steampipe()
 	// commands.Powerpipe()
 	// if GCP:

@@ -505,6 +505,8 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 		} else {
 			commandToRun = fmt.Sprintf("cloudfox %s all-checks", provider)
 		}
+	case "pmapper":
+		commandToRun = fmt.Sprintf("source activate pmapper && pmapper %s", provider)
 	default:
 		// Case not registered, try and run it anyway see what could go wrong
 		commandToRun = fmt.Sprintf("%s %s", tool, provider)

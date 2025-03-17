@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/html"
 	"github.com/Ullaakut/nmap/v3"
 	"github.com/fatih/color"
 	"github.com/mattn/go-zglob"
@@ -829,6 +830,23 @@ func GetDownloadURL(tool string, latest Release) (string, error) {
 	return "", fmt.Errorf("no suitable asset found")
 }
 
+func DownloadFileFromURL(url string, filepath string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
 func DownloadFromGithub(toolFullPath, downloadURL string) error {
 	// Making the tool download OS-agnostic, instead of using wget
 	out, err := os.Create(toolFullPath)
@@ -952,6 +970,9 @@ func Unzip(src, dest string) (string, error) {
 		}
 
 		_, err = io.Copy(outFile, rc)
+		if err != nil {
+			return "", err
+		}
 
 		err = outFile.Close()
 		if err != nil {
@@ -1024,6 +1045,103 @@ func DownloadFromGithubAndInstall(tool string) (string, error) {
 	PrintCustomBiColourMsg("green", "cyan", "[+] Successfully installed ", tool, " in path directory: ", binaryPath)
 
 	return binaryPath, nil
+}
+
+// getLatestCondaVersion fetches the latest Conda version from the official Miniconda repository
+func getLatestCondaVersion() (string, error) {
+    url := "https://repo.anaconda.com/miniconda/"
+    resp, err := http.Get(url)
+    if err != nil {
+        return "", err
+    }
+    defer resp.Body.Close()
+
+    tokenizer := html.NewTokenizer(resp.Body)
+    for {
+        tokenType := tokenizer.Next()
+        if tokenType == html.ErrorToken {
+            return "", fmt.Errorf("latest Conda version for %s %s not found. Please install conda manually: %s", HostOS.OS, HostOS.Arch, tokenizer.Err())
+        }
+        token := tokenizer.Token()
+        if tokenType == html.StartTagToken && token.Data == "a" {
+			PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> ", fmt.Sprintf("%v\n", token))
+            for _, attr := range token.Attr {
+				PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> ", attr.Key, " -> ", attr.Val)
+				// Linux x86_64
+                if HostOS.OS == "linux" && HostOS.Arch == "amd64" && attr.Key == "href" && attr.Val == "Miniconda3-latest-Linux-x86_64.sh" {
+                    return url + attr.Val, nil
+                }
+
+				// MacOSX arm64
+				if HostOS.OS == "darwin" && HostOS.Arch == "arm64" && attr.Key == "href" && attr.Val == "Miniconda3-latest-MacOSX-arm64.sh" {
+					return url + attr.Val, nil
+				}
+
+				// MacOSX amd64
+				if HostOS.OS == "darwin" && HostOS.Arch == "amd64" && attr.Key == "href" && attr.Val == "Miniconda3-latest-MacOSX-x86_64.sh" {
+					return url + attr.Val, nil
+				}
+
+				// Windows x86_64
+				if HostOS.OS == "windows" && HostOS.Arch == "amd64" && attr.Key == "href" && attr.Val == "Miniconda3-latest-Windows-x86_64.exe" {
+					return url + attr.Val, nil
+				}
+			}
+		}
+	}
+}
+
+func InstallConda() error {
+    latestVersionURL, err := getLatestCondaVersion()
+    if err != nil {
+        ErrorMsg(fmt.Sprintf("Error fetching latest Conda version: %v", err))
+        return err
+    }
+    fmt.Println("Found latest Conda installer version for host OS:", latestVersionURL)
+
+	// Create an OS-agnostic temp directory for the tool
+	toolTmpDir := filepath.Join(os.TempDir(), "conda")
+	if err := os.MkdirAll(toolTmpDir, os.ModePerm); err != nil {
+		return fmt.Errorf("error while creating tmp dir: %v", err)
+	}
+
+	fileName := strings.Split(latestVersionURL, "/")[len(strings.Split(latestVersionURL, "/"))-1]
+	tmpFilePath := toolTmpDir + "/" + fileName
+    err = DownloadFileFromURL(latestVersionURL, tmpFilePath)
+    if err != nil {
+        ErrorMsg(fmt.Sprintf("Error downloading file: %v", err))
+        return fmt.Errorf("error downloading Conda installer: %v", err)
+    }
+    fmt.Println("Downloaded file to:", toolTmpDir)
+	PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> Downloaded file to: ", tmpFilePath)
+
+	if HostOS.OS == "windows" {
+		fmt.Println("Please run the installer manually. It can be found at:", tmpFilePath)
+		return nil
+	}
+
+	// Set executable permission
+    err = os.Chmod(tmpFilePath, 0755)
+    if err != nil {
+        fmt.Println("Error setting executable permission:", err)
+        return err
+    }
+    fmt.Println("Executable permission set for:", tmpFilePath)
+
+    // Run the binary
+    cmd := exec.Command(tmpFilePath)
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+    err = cmd.Run()
+    if err != nil {
+        fmt.Println("Error running binary:", err)
+        return err
+    }
+    fmt.Println("Binary executed successfully")
+
+	PrintCustomBiColourMsg("green", "cyan", "[+] Successfully installed ", "Conda", ".")
+	return nil
 }
 
 func CheckAdminPrivileges(cloudOrInfra string) {
