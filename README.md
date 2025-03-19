@@ -152,8 +152,6 @@ Docker image being prepared, aiming to be called like this:
 
     docker run gagarter/enumeraga:latest <arg1> <arg2> <arg3>
 
-Explanation: we use the -v flag to mount our local enumeraga binary into the container's /app directory.
-
 ## To Do
 
 ---

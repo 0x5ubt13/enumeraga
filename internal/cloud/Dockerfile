@@ -4,6 +4,7 @@ LABEL authors="0x5ubt13"
 
 # Install necessary dependencies
 RUN apt-get update && apt-get install -y \
+    bash \
     curl \
     wget \
     gnupg \
@@ -11,22 +12,47 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     git \
+    sudo \
     build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* && \
+    # Kinda defeating the best practices above, we need sudo later on
+	echo 'subtle ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+	# Create a non-privileged user that the app will run under.
+	# See https://docs.docker.com/go/dockerfile-user-best-practices/
+	adduser \
+    	--disabled-password \
+    	--gecos "" \
+    	--home "/home/subtle" \
+    	--shell "/bin/bash" \
+    	--uid 10001 \
+    	subtle
+
+
+
+# Changing into a non-root user to comply with homebrew
+USER subtle
+ENV PATH=/home/subtle/.local/bin:/home/subtle/.linuxbrew/bin:/home/subtle/.linuxbrew/sbin:/home/subtle/.local/bin:$PATH
 
 # Install pipx
-RUN python3 -m pip install --user pipx && \
-    python3 -m pipx ensurepath
+RUN pip install --upgrade pip && \
+    pip install --user pipx --break-system-packages
 
-# Add pipx to PATH
-ENV PATH="/root/.local/bin:${PATH}"
-
-# Install Homebrew (Linuxbrew)
-RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && \
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+# Create all needed directories for the tools
+RUN git clone https://github.com/Homebrew/brew ~/.linuxbrew/Homebrew && \
+    mkdir ~/.linuxbrew/bin && \
+	ln -s ../Homebrew/bin/brew ~/.linuxbrew/bin && \
+	eval $(~/.linuxbrew/bin/brew shellenv) && \
+	brew --version && \
+	mkdir ~/.kube/ && \
+	# Install needed cloud tools 
+	brew install \
+        cloudfox \
+		az \
+        awscli
 
 # Verify installations
 RUN curl --version && \
+    brew --version && \
     python3 --version && \
     pipx --version && \
     brew --version && \
@@ -36,19 +62,24 @@ RUN curl --version && \
 # Install Python packages via pipx
 RUN pipx install scoutsuite prowler
 
-# Install Homebrew packages
-RUN brew install cloudfox
+# Use conda for pmapper
+RUN conda create -n pmapper -y && \
+    conda init bash && \
+    /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate pmapper && pip install principalmapper"
 
-RUN conda create -n pmapper && \
-    /bin/bash -c "source activate pmapper && pip install principalmapper"
-
-# Set your working directory
 WORKDIR /app
 
+# Copy user configuration to root
+USER root
+RUN cp -r /home/subtle/.conda /root/ && \
+    cp -r /home/subtle/.local /root/
+
+USER subtle
+
 # Entrypoint script to handle arguments and output extraction
-COPY entrypoint.sh /app/entrypoint.sh
-COPY "../../releases/latest" /app/enumeraga
+COPY --chown=subtle:subtle entrypoint.sh /app/entrypoint.sh
+COPY --chown=subtle:subtle latest /app/enumeraga
 RUN chmod +x /app/entrypoint.sh /app/enumeraga
 
 # Define the entrypoint
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["sudo", "-E", "/app/entrypoint.sh"]
