@@ -74,12 +74,10 @@ USER root
 RUN cp -r /home/subtle/.conda /root/ && \
     cp -r /home/subtle/.local /root/
 
-USER subtle
-
 # Entrypoint script to handle arguments and output extraction
-COPY --chown=subtle:subtle entrypoint.sh /app/entrypoint.sh
-COPY --chown=subtle:subtle latest /app/enumeraga
+COPY entrypoint.sh /app/entrypoint.sh
+COPY latest /app/enumeraga
 RUN chmod +x /app/entrypoint.sh /app/enumeraga
 
 # Define the entrypoint
-ENTRYPOINT ["sudo", "-E", "/app/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]

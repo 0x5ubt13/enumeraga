@@ -501,15 +501,20 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 				return fmt.Errorf("error downloading cloudfox: %v", err)
 			}
 
-			commandToRun = fmt.Sprintf("%s %s all-checks", binaryPath, provider)
+			commandToRun = fmt.Sprintf("%s %s all-checks pmapper --pmapper-data-basepath", binaryPath, provider)
 		} else {
 			commandToRun = fmt.Sprintf("cloudfox %s all-checks", provider)
 		}
 	case "pmapper":
-		commandToRun = fmt.Sprintf("source activate pmapper && pmapper %s", provider)
+		if provider != "aws" {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
+			break
+		}
+
+		commandToRun = fmt.Sprintf("conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
 	default:
 		// Case not registered, try and run it anyway see what could go wrong
-		commandToRun = fmt.Sprintf("%s %s", tool, provider)
+		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
 	}
 
 	// Run the tool
