@@ -503,15 +503,22 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 
 			commandToRun = fmt.Sprintf("%s %s all-checks pmapper --pmapper-data-basepath", binaryPath, provider)
 		} else {
-			commandToRun = fmt.Sprintf("cloudfox %s all-checks", provider)
+			commandToRun = fmt.Sprintf("cloudfox %s all-checks --pmapper-data-basepath", provider)
 		}
+
 	case "pmapper":
 		if provider != "aws" {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
 			break
 		}
 
-		commandToRun = fmt.Sprintf("conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
+		// // Run conda init
+		// condaErr := exec.Command("conda", "init", "bash")
+		// if condaErr != nil {
+		// 	return fmt.Errorf("error running conda init: %v", condaErr)
+		// }
+
+		commandToRun = fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
 	default:
 		// Case not registered, try and run it anyway see what could go wrong
 		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
@@ -540,7 +547,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	utils.PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> About to run ", tool, " against ", cmdArgs[0], " using the following command: ", strings.Join(args, " "))
 	announceCloudTool(tool)
 
-	cmd := exec.Command(tool, cmdArgs...)
+	cmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s %v", tool, cmdArgs...))
 
 	// Create a pipe to capture the command's output
 	stdout, err := cmd.StdoutPipe()
@@ -613,8 +620,10 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 			if filePath != "/dev/null" {
 				fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
 			}
+			return
 		} else {
 			fmt.Println(utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
+			return
 		}
 	}
 

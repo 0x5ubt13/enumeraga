@@ -76,7 +76,7 @@ RUN cp -r /home/subtle/.conda /root/ && \
 
 # Entrypoint script to handle arguments and output extraction
 COPY entrypoint.sh /app/entrypoint.sh
-COPY latest /app/enumeraga
+COPY latestest /app/enumeraga
 RUN chmod +x /app/entrypoint.sh /app/enumeraga
 
 # Define the entrypoint

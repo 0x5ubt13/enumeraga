@@ -21,6 +21,7 @@ func Run(provider string, OptVVerbose *bool) {
 	runTool("prowler", provider, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
 	runTool("pmapper", provider, fmt.Sprintf("%spmapper/", providerDir), OptVVerbose)
 	runTool("cloudfox", provider, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
+	// runTool("cloudpeass, provider, fmt.Sprintf("%scloud_peass/", providerDir), OptVVerbose)")
 	// commands.Steampipe()
 	// commands.Powerpipe()
 	// if GCP:
