@@ -1,20 +1,32 @@
 # Use a Debian base image
-FROM continuumio/miniconda3
+FROM debian:stable-slim
 LABEL authors="0x5ubt13"
 
 # Install necessary dependencies
 RUN apt-get update && apt-get install -y \
     bash \
+    gnupg2 \
     curl \
     wget \
-    gnupg \
-    software-properties-common \
-    python3 \
-    python3-pip \
-    git \
+    ca-certificates \
+    apt-transport-https \
+    lsb-release \
+    gpg \
+    apt-utils \
     sudo \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/* && \
+    procps \
+    software-properties-common
+
+RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    apt-get update && apt-get install -y \
+        python3 \
+        python3-pip \
+        pipx \
+        git \
+        google-cloud-cli \
+        build-essential && \
+    rm -rf /var/lib/apt/lists/* && \
     # Kinda defeating the best practices above, we need sudo later on
 	echo 'subtle ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
 	# Create a non-privileged user that the app will run under.
@@ -27,56 +39,35 @@ RUN apt-get update && apt-get install -y \
     	--uid 10001 \
     	subtle
 
-
-
 # Changing into a non-root user to comply with homebrew
 USER subtle
 ENV PATH=/home/subtle/.local/bin:/home/subtle/.linuxbrew/bin:/home/subtle/.linuxbrew/sbin:/home/subtle/.local/bin:$PATH
-
-# Install pipx
-RUN pip install --upgrade pip && \
-    pip install --user pipx --break-system-packages
 
 # Create all needed directories for the tools
 RUN git clone https://github.com/Homebrew/brew ~/.linuxbrew/Homebrew && \
     mkdir ~/.linuxbrew/bin && \
 	ln -s ../Homebrew/bin/brew ~/.linuxbrew/bin && \
 	eval $(~/.linuxbrew/bin/brew shellenv) && \
-	brew --version && \
-	mkdir ~/.kube/ && \
 	# Install needed cloud tools 
 	brew install \
         cloudfox \
 		az \
-        awscli
-
-# Verify installations
-RUN curl --version && \
-    brew --version && \
-    python3 --version && \
-    pipx --version && \
-    brew --version && \
-    git --version && \
-    conda --version
+        awscli \
+        oci-cli
 
 # Install Python packages via pipx
-RUN pipx install scoutsuite prowler
+RUN pipx install prowler && pipx install scoutsuite
 
-# Use conda for pmapper
-RUN conda create -n pmapper -y && \
-    conda init bash && \
-    /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate pmapper && pip install principalmapper"
-
+# Install the latest version of Enumeraga
 WORKDIR /app
 
 # Copy user configuration to root
 USER root
-RUN cp -r /home/subtle/.conda /root/ && \
-    cp -r /home/subtle/.local /root/
+RUN cp -r /home/subtle/.local /root/
 
 # Entrypoint script to handle arguments and output extraction
 COPY entrypoint.sh /app/entrypoint.sh
-COPY latestest /app/enumeraga
+COPY latest /app/enumeraga
 RUN chmod +x /app/entrypoint.sh /app/enumeraga
 
 # Define the entrypoint

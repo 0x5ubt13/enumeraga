@@ -547,7 +547,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	utils.PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> About to run ", tool, " against ", cmdArgs[0], " using the following command: ", strings.Join(args, " "))
 	announceCloudTool(tool)
 
-	cmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s %v", tool, cmdArgs...))
+	cmd := exec.Command(tool, cmdArgs...)
 
 	// Create a pipe to capture the command's output
 	stdout, err := cmd.StdoutPipe()

@@ -150,7 +150,22 @@ New functionality currently being added to the tool - scan your cloud infrastruc
 
 Docker image being prepared, aiming to be called like this:
 
-    docker run gagarter/enumeraga:latest <arg1> <arg2> <arg3>
+    # For AWS:
+    docker run gagarter/enumeraga_cloud:latest \
+    -v ~/.aws:/root/.aws \
+    aws
+
+    # For Azure:
+    docker run gagarter/enumeraga_cloud:latest \
+    -v ~/.azure:/root/.azure
+    azure
+
+    # For GCP:
+    docker run gagarter/enumeraga_cloud:latest \
+    -v ~/.config/gcloud:/root/.config/gcloud \
+    gcp
+
+
 
 ## To Do
 

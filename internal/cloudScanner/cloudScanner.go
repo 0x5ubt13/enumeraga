@@ -19,8 +19,8 @@ func Run(provider string, OptVVerbose *bool) {
 	//TODO: think: change to goroutine??? Probs too much smashing the cloud provider??
 	runTool("scoutsuite", provider, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
 	runTool("prowler", provider, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
-	runTool("pmapper", provider, fmt.Sprintf("%spmapper/", providerDir), OptVVerbose)
 	runTool("cloudfox", provider, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
+	// runTool("cloudsplaining, provider, fmt.Sprintf("%scloud_peass/", providerDir), OptVVerbose)") // https://github.com/salesforce/cloudsplaining
 	// runTool("cloudpeass, provider, fmt.Sprintf("%scloud_peass/", providerDir), OptVVerbose)")
 	// commands.Steampipe()
 	// commands.Powerpipe()
@@ -29,6 +29,9 @@ func Run(provider string, OptVVerbose *bool) {
 	// if AWS:
 	// commands.Pacu()???
 
+	// Leaving nmapper out for now	
+	// runTool("pmapper", provider, fmt.Sprintf("%spmapper/", providerDir), OptVVerbose)
+	
 	os.Exit(0)
 }
 
