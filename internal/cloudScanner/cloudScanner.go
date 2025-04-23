@@ -21,15 +21,19 @@ func Run(provider string, OptVVerbose *bool) {
 	runTool("prowler", provider, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
 	runTool("cloudfox", provider, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
 	// runTool("cloudsplaining, provider, fmt.Sprintf("%scloud_peass/", providerDir), OptVVerbose)") // https://github.com/salesforce/cloudsplaining
+	
+	// Tried AWSPeass.py and while it's great, I need to figure out how to run it programatically as it prompts for input from time to time
 	// runTool("cloudpeass, provider, fmt.Sprintf("%scloud_peass/", providerDir), OptVVerbose)")
+
 	// commands.Steampipe()
+	
 	// commands.Powerpipe()
 	// if GCP:
 	// commands.GCPwn()
 	// if AWS:
 	// commands.Pacu()???
 
-	// Leaving nmapper out for now	
+	// Leaving pmapper out for now as I can't manage to make conda work inside a container and pmapper needs python 3.8
 	// runTool("pmapper", provider, fmt.Sprintf("%spmapper/", providerDir), OptVVerbose)
 	
 	os.Exit(0)
