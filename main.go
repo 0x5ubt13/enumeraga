@@ -103,6 +103,11 @@ func sweepPorts() ([]nmap.Host, []nmap.Host) {
 
 // Run all phases of scanning using a single target
 func singleTarget(target string, baseFilePath string) error {
+	// Clean up trailing not alphanumeric characters in target
+	target = strings.TrimFunc(target, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	
 	utils.Target = target
 
 	// Make base dir for the target
@@ -184,6 +189,13 @@ func multiTarget(targetsFile *string) {
 
 	for i := 0; i < lines; i++ {
 		target := targets[i]
+
+		// Clean up trailing not alphanumeric characters in target
+		target = strings.TrimFunc(target, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+		})
+
+		// Launch enumeration for the target
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Attacking target ", fmt.Sprint(i+1), " of ", fmt.Sprint(lines), ": ", target)
 		err := singleTarget(target, targetsBaseFilePath)
 		if err != nil {
