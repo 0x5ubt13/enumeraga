@@ -481,7 +481,12 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 		}
 
 		// TODO: add flags to pass azure creds?
-		commandToRun = fmt.Sprintf("scout %s --no-browser", provider)
+		switch provider {
+		case "azure":
+			commandToRun = fmt.Sprintf("scout %s --no-browser --cli --logfile %s/scout_log", provider, filePath)
+		default:
+			commandToRun = fmt.Sprintf("scout %s --no-browser --logfile %s/scout_log", provider, filePath)
+		}
 
 	case "prowler":
 		if !utils.CheckToolExists("prowler") {
@@ -491,7 +496,7 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 				return err
 			}
 		}
-		commandToRun = fmt.Sprintf("prowler %s", provider)
+		commandToRun = fmt.Sprintf("prowler %s -o %s", provider, filePath)
 
 	case "cloudfox":
 		if !utils.CheckToolExists("cloudfox") {
@@ -501,24 +506,26 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 				return fmt.Errorf("error downloading cloudfox: %v", err)
 			}
 
-			commandToRun = fmt.Sprintf("%s %s all-checks pmapper --pmapper-data-basepath", binaryPath, provider)
+			// commandToRun = fmt.Sprintf("%s %s all-checks pmapper --pmapper-data-basepath", binaryPath, provider)  // Leaving pmapper out for now as I can't manage to make conda work inside a container and pmapper needs python 3.8
+			commandToRun = fmt.Sprintf("%s %s all-checks -o %s", binaryPath, provider, filePath)
 		} else {
-			commandToRun = fmt.Sprintf("cloudfox %s all-checks --pmapper-data-basepath", provider)
+			// commandToRun = fmt.Sprintf("cloudfox %s all-checks --pmapper-data-basepath", provider) // Leaving pmapper out for now as I can't manage to make conda work inside a container and pmapper needs python 3.8
+			commandToRun = fmt.Sprintf("cloudfox %s all-checks -o %s", provider, filePath)
 		}
 
-	case "pmapper":
-		if provider != "aws" {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
-			break
-		}
+	// case "pmapper":  // struggling to make pmapper work inside a container due to conda issues. Leaving it out for now
+	// 	if provider != "aws" {
+	// 		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
+	// 		break
+	// 	}
 
-		// // Run conda init
-		// condaErr := exec.Command("conda", "init", "bash")
-		// if condaErr != nil {
-		// 	return fmt.Errorf("error running conda init: %v", condaErr)
-		// }
+	// 	// // Run conda init
+	// 	// condaErr := exec.Command("conda", "init", "bash")
+	// 	// if condaErr != nil {
+	// 	// 	return fmt.Errorf("error running conda init: %v", condaErr)
+	// 	// }
 
-		commandToRun = fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
+	// 	commandToRun = fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
 	default:
 		// Case not registered, try and run it anyway see what could go wrong
 		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
