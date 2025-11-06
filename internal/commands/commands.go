@@ -2,15 +2,22 @@ package commands
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
+	"github.com/0x5ubt13/enumeraga/internal/config"
 	"github.com/0x5ubt13/enumeraga/internal/scans"
+	"github.com/0x5ubt13/enumeraga/internal/types"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
+	"github.com/xuri/excelize/v2"
 )
 
 // WPEnumeration provides enumeration for WordPress
@@ -481,12 +488,7 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 		}
 
 		// TODO: add flags to pass azure creds?
-		switch provider {
-		case "azure":
-			commandToRun = fmt.Sprintf("scout %s --no-browser --cli --logfile %s/scout_log", provider, filePath)
-		default:
-			commandToRun = fmt.Sprintf("scout %s --no-browser --logfile %s/scout_log", provider, filePath)
-		}
+		commandToRun = fmt.Sprintf("scout %s --no-browser", provider)
 
 	case "prowler":
 		if !utils.CheckToolExists("prowler") {
@@ -496,7 +498,7 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 				return err
 			}
 		}
-		commandToRun = fmt.Sprintf("prowler %s -o %s", provider, filePath)
+		commandToRun = fmt.Sprintf("prowler %s", provider)
 
 	case "cloudfox":
 		if !utils.CheckToolExists("cloudfox") {
@@ -506,26 +508,24 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 				return fmt.Errorf("error downloading cloudfox: %v", err)
 			}
 
-			// commandToRun = fmt.Sprintf("%s %s all-checks pmapper --pmapper-data-basepath", binaryPath, provider)  // Leaving pmapper out for now as I can't manage to make conda work inside a container and pmapper needs python 3.8
-			commandToRun = fmt.Sprintf("%s %s all-checks -o %s", binaryPath, provider, filePath)
+			commandToRun = fmt.Sprintf("%s %s all-checks", binaryPath, provider)
 		} else {
-			// commandToRun = fmt.Sprintf("cloudfox %s all-checks --pmapper-data-basepath", provider) // Leaving pmapper out for now as I can't manage to make conda work inside a container and pmapper needs python 3.8
-			commandToRun = fmt.Sprintf("cloudfox %s all-checks -o %s", provider, filePath)
+			commandToRun = fmt.Sprintf("cloudfox %s all-checks", provider)
 		}
 
-	// case "pmapper":  // struggling to make pmapper work inside a container due to conda issues. Leaving it out for now
-	// 	if provider != "aws" {
-	// 		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
-	// 		break
-	// 	}
+	case "pmapper":
+		if provider != "aws" {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
+			break
+		}
 
-	// 	// // Run conda init
-	// 	// condaErr := exec.Command("conda", "init", "bash")
-	// 	// if condaErr != nil {
-	// 	// 	return fmt.Errorf("error running conda init: %v", condaErr)
-	// 	// }
+		// // Run conda init
+		// condaErr := exec.Command("conda", "init", "bash")
+		// if condaErr != nil {
+		// 	return fmt.Errorf("error running conda init: %v", condaErr)
+		// }
 
-	// 	commandToRun = fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
+		commandToRun = fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
 	default:
 		// Case not registered, try and run it anyway see what could go wrong
 		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
@@ -635,4 +635,404 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	}
 
 	printToolSuccess(command, tool, filePath)
+}
+
+// RunCloudScan orchestrates the cloud security scanning
+func RunCloudScan(cfg *config.CloudConfig) error {
+	findings := make([]types.Finding, 0)
+
+	for _, provider := range cfg.Providers {
+		// Run tools concurrently if enabled
+		if cfg.Concurrent {
+			results := make(chan types.ScanResult)
+
+			if cfg.ScoutSuiteEnabled {
+				go func() {
+					result := runScoutSuite(provider, cfg)
+					results <- result
+				}()
+			}
+
+			if cfg.ProwlerEnabled {
+				go func() {
+					result := runProwler(provider, cfg)
+					results <- result
+				}()
+			}
+
+			// Collect results
+			for i := 0; i < len(cfg.Providers); i++ {
+				result := <-results
+				if result.Error != nil {
+					utils.ErrorMsg(fmt.Sprintf("Error running %s for %s: %v",
+						result.Tool, result.Provider, result.Error))
+					continue
+				}
+				findings = append(findings, result.Findings...)
+			}
+		}
+	}
+
+	// Generate report
+	return generateReport(findings, cfg)
+}
+
+func runScoutSuite(provider string, cfg *config.CloudConfig) types.ScanResult {
+	announceCloudTool("ScoutSuite")
+
+	// Prepare output directory
+	outputDir := fmt.Sprintf("%s/scoutsuite_%s", cfg.OutputPath, provider)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return types.ScanResult{
+			Provider: provider,
+			Tool:     "ScoutSuite",
+			Error:    fmt.Errorf("failed to create output directory: %v", err),
+		}
+	}
+
+	// Prepare command arguments
+	args := []string{
+		"scout",
+		provider,
+		"--format", "json",
+		"--report-dir", outputDir,
+		"--no-browser",
+	}
+
+	// Add provider-specific arguments
+	switch provider {
+	case "aws":
+		if cfg.AWSProfile != "" {
+			args = append(args, "--profile", cfg.AWSProfile)
+		}
+	case "azure":
+		if cfg.AzureSubscription != "" {
+			args = append(args, "--subscription", cfg.AzureSubscription)
+		}
+	case "gcp":
+		if cfg.GCPProject != "" {
+			args = append(args, "--project", cfg.GCPProject)
+		}
+	}
+
+	// Run ScoutSuite
+	cmd := exec.Command(args[0], args[1:]...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return types.ScanResult{
+			Provider:  provider,
+			Tool:      "ScoutSuite",
+			RawOutput: string(output),
+			Error:     fmt.Errorf("ScoutSuite failed: %v", err),
+		}
+	}
+
+	// Parse results
+	findings, err := parseScoutSuiteResults(outputDir)
+	if err != nil {
+		return types.ScanResult{
+			Provider:  provider,
+			Tool:      "ScoutSuite",
+			RawOutput: string(output),
+			Error:     fmt.Errorf("failed to parse ScoutSuite results: %v", err),
+		}
+	}
+
+	return types.ScanResult{
+		Provider:  provider,
+		Tool:      "ScoutSuite",
+		Findings:  findings,
+		RawOutput: string(output),
+	}
+}
+
+func runProwler(provider string, cfg *config.CloudConfig) types.ScanResult {
+	announceCloudTool("Prowler")
+
+	// Prepare output directory
+	outputDir := fmt.Sprintf("%s/prowler_%s", cfg.OutputPath, provider)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return types.ScanResult{
+			Provider: provider,
+			Tool:     "Prowler",
+			Error:    fmt.Errorf("failed to create output directory: %v", err),
+		}
+	}
+
+	// Prepare command arguments
+	outputFile := fmt.Sprintf("%s/prowler_report.json", outputDir)
+	args := []string{
+		"prowler",
+		provider,
+		"-M", "json",
+		"-o", outputFile,
+		"--no-banner",
+	}
+
+	// Add provider-specific arguments
+	switch provider {
+	case "aws":
+		if cfg.AWSProfile != "" {
+			args = append(args, "-p", cfg.AWSProfile)
+		}
+	case "azure":
+		if cfg.AzureSubscription != "" {
+			args = append(args, "-s", cfg.AzureSubscription)
+		}
+	case "gcp":
+		if cfg.GCPProject != "" {
+			args = append(args, "-P", cfg.GCPProject)
+		}
+	}
+
+	// Run Prowler
+	cmd := exec.Command(args[0], args[1:]...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return types.ScanResult{
+			Provider:  provider,
+			Tool:      "Prowler",
+			RawOutput: string(output),
+			Error:     fmt.Errorf("Prowler failed: %v", err),
+		}
+	}
+
+	// Parse results
+	findings, err := parseProwlerResults(outputFile)
+	if err != nil {
+		return types.ScanResult{
+			Provider:  provider,
+			Tool:      "Prowler",
+			RawOutput: string(output),
+			Error:     fmt.Errorf("failed to parse Prowler results: %v", err),
+		}
+	}
+
+	return types.ScanResult{
+		Provider:  provider,
+		Tool:      "Prowler",
+		Findings:  findings,
+		RawOutput: string(output),
+	}
+}
+
+func parseScoutSuiteResults(outputDir string) ([]types.Finding, error) {
+	// Read ScoutSuite's JSON report
+	reportFile := filepath.Join(outputDir, "scoutsuite-report", "report.json")
+	data, err := os.ReadFile(reportFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read ScoutSuite report: %v", err)
+	}
+
+	// Parse JSON
+	var report struct {
+		Findings map[string]map[string]interface{} `json:"findings"`
+	}
+	if err := json.Unmarshal(data, &report); err != nil {
+		return nil, fmt.Errorf("failed to parse ScoutSuite JSON: %v", err)
+	}
+
+	// Convert to our Finding type
+	var findings []types.Finding
+	for service, serviceFindings := range report.Findings {
+		for id, data := range serviceFindings {
+			finding := types.Finding{
+				ID:          id,
+				Service:     service,
+				Tool:        "ScoutSuite",
+				Severity:    mapScoutSuiteSeverity(data),
+				Resource:    getStringValue(data, "resource"),
+				Description: getStringValue(data, "description"),
+				Remediation: getStringValue(data, "remediation"),
+				RawData:     data,
+			}
+			findings = append(findings, finding)
+		}
+	}
+
+	return findings, nil
+}
+
+func parseProwlerResults(filePath string) ([]types.Finding, error) {
+	// Read Prowler's JSON report
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read Prowler report: %v", err)
+	}
+
+	// Parse JSON
+	var prowlerFindings []struct {
+		Status      string `json:"Status"`
+		ServiceName string `json:"ServiceName"`
+		ResourceID  string `json:"ResourceId"`
+		Message     string `json:"Message"`
+		Severity    string `json:"Severity"`
+		Risk        string `json:"Risk"`
+		Remediation string `json:"Remediation"`
+	}
+	if err := json.Unmarshal(data, &prowlerFindings); err != nil {
+		return nil, fmt.Errorf("failed to parse Prowler JSON: %v", err)
+	}
+
+	// Convert to our Finding type
+	var findings []types.Finding
+	for _, pf := range prowlerFindings {
+		finding := types.Finding{
+			Service:     pf.ServiceName,
+			Tool:        "Prowler",
+			Severity:    mapProwlerSeverity(pf.Severity),
+			Resource:    pf.ResourceID,
+			Description: pf.Message,
+			Remediation: pf.Remediation,
+			RawData:     pf,
+		}
+		findings = append(findings, finding)
+	}
+
+	return findings, nil
+}
+
+func mapScoutSuiteSeverity(data interface{}) types.Severity {
+	if m, ok := data.(map[string]interface{}); ok {
+		if level, ok := m["level"].(string); ok {
+			switch strings.ToLower(level) {
+			case "critical":
+				return types.Critical
+			case "high":
+				return types.High
+			case "medium":
+				return types.Medium
+			case "low":
+				return types.Low
+			}
+		}
+	}
+	return types.Info
+}
+
+func mapProwlerSeverity(severity string) types.Severity {
+	switch strings.ToUpper(severity) {
+	case "CRITICAL":
+		return types.Critical
+	case "HIGH":
+		return types.High
+	case "MEDIUM":
+		return types.Medium
+	case "LOW":
+		return types.Low
+	default:
+		return types.Info
+	}
+}
+
+func getStringValue(data interface{}, key string) string {
+	if m, ok := data.(map[string]interface{}); ok {
+		if val, ok := m[key].(string); ok {
+			return val
+		}
+	}
+	return ""
+}
+
+func generateReport(findings []types.Finding, cfg *config.CloudConfig) error {
+	f := excelize.NewFile()
+	defer func() {
+		if err := f.Close(); err != nil {
+			utils.ErrorMsg(fmt.Sprintf("Error closing Excel file: %v", err))
+		}
+	}()
+
+	// Remove default Sheet1
+	f.DeleteSheet("Sheet1")
+
+	// Sort findings by provider and severity
+	sort.Slice(findings, func(i, j int) bool {
+		if findings[i].Provider != findings[j].Provider {
+			return findings[i].Provider < findings[j].Provider
+		}
+		return string(findings[i].Severity) < string(findings[j].Severity)
+	})
+
+	// Group findings by provider
+	providerFindings := make(map[string][]types.Finding)
+	for _, finding := range findings {
+		providerFindings[finding.Provider] = append(providerFindings[finding.Provider], finding)
+	}
+
+	// Create summary sheet
+	createSummarySheet(f, providerFindings)
+
+	// Create provider-specific sheets
+	for provider, findings := range providerFindings {
+		createProviderSheet(f, provider, findings)
+	}
+
+	// Generate output filename with timestamp
+	timestamp := time.Now().Format("20060102_150405")
+	outputPath := fmt.Sprintf("%s/cloud_security_scan_%s.xlsx", cfg.OutputPath, timestamp)
+
+	// Save the Excel file
+	if err := f.SaveAs(outputPath); err != nil {
+		return fmt.Errorf("error saving Excel file: %v", err)
+	}
+
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Report generated successfully: ", outputPath)
+	return nil
+}
+
+func createSummarySheet(f *excelize.File, providerFindings map[string][]types.Finding) {
+	sheetName := "Summary"
+	f.NewSheet(sheetName)
+
+	// Set headers
+	headers := []string{"Provider", "Critical", "High", "Medium", "Low", "Info", "Total"}
+	for i, header := range headers {
+		cell := fmt.Sprintf("%c1", 'A'+i)
+		f.SetCellValue(sheetName, cell, header)
+	}
+
+	// Add provider summaries
+	row := 2
+	for provider, findings := range providerFindings {
+		severityCounts := countSeverities(findings)
+		total := len(findings)
+
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), provider)
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), severityCounts[types.Critical])
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), severityCounts[types.High])
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), severityCounts[types.Medium])
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), severityCounts[types.Low])
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), severityCounts[types.Info])
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), total)
+		row++
+	}
+}
+
+func createProviderSheet(f *excelize.File, provider string, findings []types.Finding) {
+	f.NewSheet(provider)
+
+	// Set headers
+	headers := []string{"Severity", "Service", "Resource", "Description", "Remediation"}
+	for i, header := range headers {
+		cell := fmt.Sprintf("%c1", 'A'+i)
+		f.SetCellValue(provider, cell, header)
+	}
+
+	// Add findings
+	for i, finding := range findings {
+		row := i + 2
+		f.SetCellValue(provider, fmt.Sprintf("A%d", row), finding.Severity)
+		f.SetCellValue(provider, fmt.Sprintf("B%d", row), finding.Service)
+		f.SetCellValue(provider, fmt.Sprintf("C%d", row), finding.Resource)
+		f.SetCellValue(provider, fmt.Sprintf("D%d", row), finding.Description)
+		f.SetCellValue(provider, fmt.Sprintf("E%d", row), finding.Remediation)
+	}
+}
+
+func countSeverities(findings []types.Finding) map[types.Severity]int {
+	counts := make(map[types.Severity]int)
+	for _, finding := range findings {
+		counts[finding.Severity]++
+	}
+	return counts
 }

@@ -444,16 +444,6 @@ func InstallMissingTools(kind rune, optInstall *bool) {
 		}
 	}
 
-	// TODO: Logic to implement `--install` flag later on for the cloud part
-	//// Install all those that are missing
-	//if kind == 'c' {
-	//	// Cloud tools only use pip (so far), so any distro would do
-	//	for _, tool := range missingTools {
-	//		InstallMissingCloudTool(tool)
-	//	}
-	//	return
-	//}
-
 	compatibilityErr := isCompatibleDistro()
 	if compatibilityErr != nil {
 		os.Exit(3)
@@ -517,10 +507,6 @@ func AptGetInstallCmd(tool string) {
 	if tool == "finger" {
 		tool = "nfs-common"
 	}
-
-	// if tool == "seclists" {
-	// 	tool = "nfs-common"
-	// }
 
 	if tool == "msfconsole" {
 		tool = "metasploit-framework"
@@ -628,12 +614,6 @@ func runLn(command ...string) error {
 
 	// Redirect the command's error output to the standard output in terminal
 	cmd.Stderr = os.Stderr
-
-	// Only print to stdout if debugging
-	//if *OptVVerbose {
-	//	fmt.Println(Cyan("[*] Very verbose -> printing ln's output ------"))
-	//	cmd.Stdout = os.Stdout
-	//}
 
 	// Run cmd
 	cmdErr := cmd.Run()
@@ -1159,7 +1139,7 @@ func CheckAdminPrivileges(cloudOrInfra string) {
 			// Check for root privileges on Unix-like systems
 			if os.Geteuid() != 0 {
 				ErrorMsg("Please run me as root so the tools don't fail!")
-				os.Exit(99)
+				// os.Exit(99)
 			}
 		default:
 			ErrorMsg("Unsupported operating system")
@@ -1176,7 +1156,7 @@ func CheckAdminPrivileges(cloudOrInfra string) {
 		// Check for root privileges on Unix-like systems
 		if os.Geteuid() != 0 {
 			ErrorMsg("Please run me as root so the tools don't fail!")
-			os.Exit(99)
+			// os.Exit(99)
 		}
 	default:
 		ErrorMsg("Unsupported operating system")
