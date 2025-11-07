@@ -793,7 +793,7 @@ func runProwler(provider string, cfg *config.CloudConfig) types.ScanResult {
 			Provider:  provider,
 			Tool:      "Prowler",
 			RawOutput: string(output),
-			Error:     fmt.Errorf("Prowler failed: %v", err),
+			Error:     fmt.Errorf("prowler failed: %v", err),
 		}
 	}
 
