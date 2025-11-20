@@ -15,9 +15,9 @@ RUN apt update && apt install -y \
 
 # Install Python-based tools
 RUN apt update && apt install -y \
-    ssh-audit wafw00f whatweb testssl.sh python3-impacket odat
+    ssh-audit wafw00f whatweb testssl.sh python3-impacket odat \
+    && apt clean
 
-    
 # Add missing infra tools
 RUN apt update && apt install -y \
     ident-user-enum \

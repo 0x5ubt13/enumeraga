@@ -346,8 +346,22 @@ func OSCPConsent(tool string) rune {
 
 // CheckToolExists checks that the tool exists with exec.LookPath (equivalent to `which <tool>`)
 func CheckToolExists(tool string) bool {
-	_, lookPatherr := exec.LookPath(tool)
-	return lookPatherr == nil
+	var lookPathErr error
+	// Edge case for testssl tool
+	if tool == "testssl.sh" {
+		tool = "testssl"
+		_, lookPathErr = exec.LookPath(tool)
+		if lookPathErr == nil {
+			return true
+		}
+		tool = "testssl.sh"
+		_, lookPathErr = exec.LookPath(tool)
+		return lookPathErr == nil
+	}
+
+	// General case
+	_, lookPathErr = exec.LookPath(tool)
+	return lookPathErr == nil
 }
 
 // Separate function to add key tools
