@@ -473,7 +473,7 @@ func InstallWithPipxOSAgnostic(tool string) error {
 }
 
 // PrepCloudTool preps the program to run a cloud tool
-func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
+func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool, cfg *config.CloudConfig) error {
 	var commandToRun string
 
 	// Get name of the tool first
@@ -487,8 +487,10 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 			}
 		}
 
+		extraFlags := "--no-browser --cli"
+
 		// TODO: add flags to pass azure creds?
-		commandToRun = fmt.Sprintf("scout %s --no-browser", provider)
+		commandToRun = fmt.Sprintf("scout %s %s --report-dir %s", provider, extraFlags, filePath)
 
 	case "prowler":
 		if !utils.CheckToolExists("prowler") {
@@ -501,18 +503,32 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 		commandToRun = fmt.Sprintf("prowler %s", provider)
 
 	case "cloudfox":
+		// Check cloudfox is present and install if it isn't
+		binaryPath := ""
+		var err error = nil
 		if !utils.CheckToolExists("cloudfox") {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-] CloudFox ", "not found. Attempting to download it now from GitHub...")
-			binaryPath, err := utils.DownloadFromGithubAndInstall("cloudfox")
+			binaryPath, err = utils.DownloadFromGithubAndInstall("cloudfox")
 			if err != nil {
 				return fmt.Errorf("error downloading cloudfox: %v", err)
 			}
-
-			commandToRun = fmt.Sprintf("%s %s all-checks", binaryPath, provider)
-		} else {
-			commandToRun = fmt.Sprintf("cloudfox %s all-checks", provider)
+		}
+		
+		if binaryPath == "" {
+			binaryPath = "cloudfox"
 		}
 
+		switch provider {
+		case "aws":
+			commandToRun = fmt.Sprintf("%s aws all scan --outdir %s --output json", binaryPath, filePath)
+		
+		case "azure":
+			commandToRun = fmt.Sprintf("%s azure whoami --outdir %s --output json", binaryPath, filePath)
+			commandToRun = fmt.Sprintf("%s azure inventory --tenant %s --subscription %s --outdir %s --output json", binaryPath, cfg.AzureTenantID, cfg.AzureSubscriptionID, filePath)
+			commandToRun = fmt.Sprintf("%s azure rbac --tenant %s --subscription %s --outdir %s --output json", binaryPath, cfg.AzureTenantID, cfg.AzureSubscriptionID, filePath)
+			commandToRun = fmt.Sprintf("%s azure storage --tenant %s --subscription %s --outdir %s --output json", binaryPath, cfg.AzureTenantID, cfg.AzureSubscriptionID, filePath)
+			commandToRun = fmt.Sprintf("%s azure vms --tenant %s --subscription %s --outdir %s --output json", binaryPath, cfg.AzureTenantID, cfg.AzureSubscriptionID, filePath)
+		}
 	case "pmapper":
 		if provider != "aws" {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")

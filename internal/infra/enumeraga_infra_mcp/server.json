@@ -1,0 +1,22 @@
+{
+  "name": "Enumeraga Infra Python MCP Server",
+  "tools": [
+    {
+      "name": "enumeraga",
+      "description": "Run Enumeraga with dynamic flags and parameters, output saved to ./results",
+      "command": "python enumeraga_infra_mcp.py",
+      "parameters": {
+        "flags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Flags to pass to Enumeraga (e.g. -b, --quiet, -p 100)"
+        },
+        "parameters": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional parameters (e.g. target IPs, CIDR ranges)"
+        }
+      }
+    }
+  ] 
+}
