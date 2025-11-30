@@ -708,7 +708,7 @@ func GetWordlists(optVVerbose *bool) {
 	DirListMedium = dirListMediumSlice[0]
 
 	// Locate the "darkweb2017-top1000.txt" file
-	DarkwebTop1000Slice, err := zglob.Glob("/usr/share/seclists/Passwords/darkweb2017-top100.txt")
+	DarkwebTop1000Slice, err := zglob.Glob("/usr/share/seclists/Passwords/darkweb2017-top1000.txt")
 	if err != nil {
 		log.Fatalf("Error locating 'darkweb2017-top1000.txt': %v\n", err)
 	}
@@ -733,7 +733,7 @@ func GetWordlists(optVVerbose *bool) {
 	if err != nil {
 		log.Fatalf("Error locating 'SNMP/snmp.txt': %v\n", err)
 	}
-	SnmpList := snmpListSlice[0]
+	SnmpList = snmpListSlice[0]
 
 	if *optVVerbose {
 		fmt.Println("Located Files:")

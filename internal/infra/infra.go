@@ -101,7 +101,7 @@ func checkSix(OptOutput *string, OptQuiet, OptVVerbose *bool) {
 // checkSeven finishes this section by returning number of lines if multi-target or 0 if single-target
 func checkSeven(OptTarget *string) int {
 	targetInput := net.ParseIP(*OptTarget)
-	if targetInput.To4() == nil {
+	if targetInput == nil || targetInput.To4() == nil {
 		// Multi-target. Check file exists and get lines
 		_, totalLines := utils.ReadTargetsFile(OptTarget)
 		return totalLines

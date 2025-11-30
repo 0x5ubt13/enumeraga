@@ -71,7 +71,8 @@ func SlowerTcpPortSweep(target string, OptVVerbose *bool) []nmap.Host {
 		log.Fatalf("unable to run nmap scan: %v", err)
 	}
 
-	utils.TimesSwept = 0
+	// No current functionality for this. Leaving here for potential future use.
+	// utils.TimesSwept = 0
 
 	return result.Hosts
 }

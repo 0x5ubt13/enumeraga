@@ -43,7 +43,7 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, 
 	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
 	curlOutput, _ := curl.Output()
 
-	// grep 'wp-content'
+	// grep 'tomcat'
 	if !strings.Contains(strings.ToLower(string(curlOutput)), "tomcat") {
 		return
 	}
@@ -51,7 +51,7 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, 
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "Tomcat detected. Running", "Gobuster", "...")
 
 	// Run Gobuster
-	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "u", fmt.Sprintf("%s:%s", target, port), "-w", utils.DirListMedium}
+	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "-u", fmt.Sprintf("%s:%s", target, port), "-w", utils.DirListMedium}
 	gobusterPath := fmt.Sprintf("%stomcat_gobuster.out", caseDir)
 	CallRunTool(gobusterArgs, gobusterPath, OptVVerbose)
 
@@ -183,15 +183,13 @@ func runTool(args []string, filePath string, OptVVerbose *bool) {
 		utils.ErrorMsg(fmt.Sprintf("%s%s", "Error starting command:", err))
 	}
 
-	// This goroutine will capture and write the command's output to a file
-	go func(OptVVerbose *bool) {
-		_, err := io.Copy(file, stdout)
-		if err != nil {
-			if *OptVVerbose {
-				utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
-			}
+	// Capture and write the command's output to a file synchronously
+	_, err = io.Copy(file, stdout)
+	if err != nil {
+		if *OptVVerbose {
+			utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
 		}
-	}(OptVVerbose)
+	}
 
 	// Wait for the command to complete
 	if err := cmd.Wait(); err != nil {
@@ -362,7 +360,7 @@ func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 	go func(args []string, filePath string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
 
-		go runTool(args, filePath, OptVVerbose)
+		runTool(args, filePath, OptVVerbose)
 	}(args, filePath, OptVVerbose)
 }
 
@@ -606,12 +604,14 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		utils.ErrorMsg(fmt.Sprintf("%s%s", "Error starting command:", err))
 	}
 
-	// Copy the output to stdout and stderr
+	// Use MultiWriter to copy stdout to both console and file simultaneously
+	multiWriter := io.MultiWriter(os.Stdout, file)
+
 	go func() {
-		_, err := io.Copy(os.Stdout, stdout)
+		_, err := io.Copy(multiWriter, stdout)
 		if err != nil {
 			if *OptVVerbose {
-				utils.ErrorMsg(fmt.Sprintf("Error trying to copy stdout: %v", err))
+				utils.ErrorMsg(fmt.Sprintf("Error copying stdout for tool %s: %v", tool, err))
 			}
 		}
 	}()
@@ -620,17 +620,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		_, err := io.Copy(os.Stderr, stderr)
 		if err != nil {
 			if *OptVVerbose {
-				utils.ErrorMsg(fmt.Sprintf("Error trying to copy stderr: %v", err))
-			}
-		}
-	}()
-
-	// This goroutine will capture and write the command's output to a file
-	go func() {
-		_, err := io.Copy(file, stdout)
-		if err != nil {
-			if *OptVVerbose {
-				utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
+				utils.ErrorMsg(fmt.Sprintf("Error copying stderr: %v", err))
 			}
 		}
 	}()
@@ -661,8 +651,10 @@ func RunCloudScan(cfg *config.CloudConfig) error {
 		// Run tools concurrently if enabled
 		if cfg.Concurrent {
 			results := make(chan types.ScanResult)
+			toolsLaunched := 0
 
 			if cfg.ScoutSuiteEnabled {
+				toolsLaunched++
 				go func() {
 					result := runScoutSuite(provider, cfg)
 					results <- result
@@ -670,14 +662,15 @@ func RunCloudScan(cfg *config.CloudConfig) error {
 			}
 
 			if cfg.ProwlerEnabled {
+				toolsLaunched++
 				go func() {
 					result := runProwler(provider, cfg)
 					results <- result
 				}()
 			}
 
-			// Collect results
-			for i := 0; i < len(cfg.Providers); i++ {
+			// Collect results based on how many tools were actually launched
+			for i := 0; i < toolsLaunched; i++ {
 				result := <-results
 				if result.Error != nil {
 					utils.ErrorMsg(fmt.Sprintf("Error running %s for %s: %v",

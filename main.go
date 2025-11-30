@@ -133,12 +133,12 @@ func singleTarget(target string, baseFilePath string) error {
 
 	// Introducing a control to repeat the scan in case there are no ports or there is only one port open
 	// Do it only once
-	if len(openPorts) >= 1 && utils.TimesSwept == 1 {
+	if len(openPorts) <= 1 && utils.TimesSwept == 1 {
 		sweptHostTcp, sweptHostUdp := sweepPorts()
 		openPortsSliceSecondTry := utils.GetOpenPortsSlice(sweptHostTcp, sweptHostUdp)
 
 		if len(openPortsSliceSecondTry) > len(openPortsSlice) {
-			openPorts = utils.RemoveDuplicates(strings.Join(openPortsSlice, ","))
+			openPorts = utils.RemoveDuplicates(strings.Join(openPortsSliceSecondTry, ","))
 			utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] No further ports were found in the second slow run for target '", target, "'.")
 		}
 	}
