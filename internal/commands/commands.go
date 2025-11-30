@@ -524,10 +524,10 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool, cfg *conf
 		
 		case "azure":
 			commandToRun = fmt.Sprintf("%s azure whoami --outdir %s --output json", binaryPath, filePath)
-			commandToRun = fmt.Sprintf("%s azure inventory --tenant %s --subscription %s --outdir %s --output json", binaryPath, cfg.AzureTenantID, cfg.AzureSubscriptionID, filePath)
-			commandToRun = fmt.Sprintf("%s azure rbac --tenant %s --subscription %s --outdir %s --output json", binaryPath, cfg.AzureTenantID, cfg.AzureSubscriptionID, filePath)
-			commandToRun = fmt.Sprintf("%s azure storage --tenant %s --subscription %s --outdir %s --output json", binaryPath, cfg.AzureTenantID, cfg.AzureSubscriptionID, filePath)
-			commandToRun = fmt.Sprintf("%s azure vms --tenant %s --subscription %s --outdir %s --output json", binaryPath, cfg.AzureTenantID, cfg.AzureSubscriptionID, filePath)
+			commandToRun = fmt.Sprintf("%s azure inventory --subscription %s --outdir %s --output json", binaryPath, cfg.AzureSubscriptionID, filePath)
+			commandToRun = fmt.Sprintf("%s azure rbac --subscription %s --outdir %s --output json", binaryPath, cfg.AzureSubscriptionID, filePath)
+			commandToRun = fmt.Sprintf("%s azure storage --subscription %s --outdir %s --output json", binaryPath, cfg.AzureSubscriptionID, filePath)
+			commandToRun = fmt.Sprintf("%s azure vms --subscription %s --outdir %s --output json", binaryPath, cfg.AzureSubscriptionID, filePath)
 		}
 	case "pmapper":
 		if provider != "aws" {
