@@ -12,13 +12,10 @@ type CloudConfig struct {
 	ReportFormat string // "xlsx", "json", etc.
 
 	// Provider settings
-	Provider              string
-	AWSProfile            string
-	AzureSubscriptionName string 
-	AzureSubscriptionID   string
-	AzureTenantName       string
-	AzureTenantID		  string
-	GCPProject            string
+	Providers         []string
+	AWSProfile        string
+	AzureSubscription string
+	GCPProject        string
 
 	// Runtime settings
 	Concurrent     bool

@@ -474,7 +474,8 @@ func nfs() {
 
 	showmountOut, err := exec.Command("bash", "-c", fmt.Sprintf("cat %sshowmount.out", dir)).Output()
 	if err != nil {
-		panic(err)
+		utils.ErrorMsg(fmt.Sprintf("Error reading showmount output: %v. NFS enumeration may be incomplete.", err))
+		return
 	}
 	dirsToMount := []string{}
 	for _, line := range strings.Split(string(showmountOut), "\n") {
@@ -482,20 +483,37 @@ func nfs() {
 			dirsToMount = append(dirsToMount, strings.Split(line, " ")[0])
 		}
 	}
+
+	if len(dirsToMount) == 0 {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] No NFS shares found to mount on target '", utils.Target, "'")
+		return
+	}
+
+	mountedDirs := []string{}
 	for _, dirToMount := range dirsToMount {
-		_, err := utils.CustomMkdir(fmt.Sprintf("%s%s/", mountDir, dirToMount))
+		localMountPath := fmt.Sprintf("%s%s/", mountDir, strings.ReplaceAll(dirToMount, "/", "_"))
+		_, err := utils.CustomMkdir(localMountPath)
 		if err != nil {
-			utils.ErrorMsg(fmt.Sprintf("Error creating dir: %v", err))
+			utils.ErrorMsg(fmt.Sprintf("Error creating dir for NFS mount: %v", err))
+			continue
 		}
-		mountCmd := exec.Command("bash", "-c", fmt.Sprintf("mount -t nfs %s:/%s %s -o nolock,vers=3,tcp,timeo=300", utils.Target, dirToMount, mountDir))
+		mountCmd := exec.Command("bash", "-c", fmt.Sprintf("mount -t nfs %s:%s %s -o nolock,vers=3,tcp,timeo=300", utils.Target, dirToMount, localMountPath))
 		if err := mountCmd.Run(); err != nil {
-			panic(err)
+			utils.ErrorMsg(fmt.Sprintf("Error mounting NFS share %s: %v. Continuing with other shares...", dirToMount, err))
+			continue
 		}
+		mountedDirs = append(mountedDirs, localMountPath)
+		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully mounted NFS share '", dirToMount, "' to '", localMountPath, "'")
+	}
+
+	if len(mountedDirs) == 0 {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] No NFS shares could be mounted on target '", utils.Target, "'")
+		return
 	}
 
 	treeCmd := exec.Command("bash", "-c", fmt.Sprintf("tree %s >> %snfs_mounts.tree 2>&1", mountDir, mountDir))
 	if err := treeCmd.Run(); err != nil {
-		panic(err)
+		utils.ErrorMsg(fmt.Sprintf("Error running tree command: %v. Skipping tree output.", err))
 	}
 
 	utils.WriteTextToFile(fmt.Sprintf("%scleanup_readme.txt", mountDir), fmt.Sprintf("To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n", mountDir))

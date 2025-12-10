@@ -101,12 +101,21 @@ func checkSix(OptOutput *string, OptQuiet, OptVVerbose *bool) {
 // checkSeven finishes this section by returning number of lines if multi-target or 0 if single-target
 func checkSeven(OptTarget *string) int {
 	targetInput := net.ParseIP(*OptTarget)
-	if targetInput == nil || targetInput.To4() == nil {
-		// Multi-target. Check file exists and get lines
-		_, totalLines := utils.ReadTargetsFile(OptTarget)
-		return totalLines
+
+	// Check if it's a valid IP address (IPv4 or IPv6)
+	if targetInput != nil {
+		// Valid IP - single target mode
+		return 0
 	}
 
-	// Return 0 if not multi-target
-	return 0
+	// Not a valid IP - assume it's a targets file
+	// Validate file exists before attempting to read
+	if err := utils.ValidateFilePath(*OptTarget); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Target validation failed: %v", err))
+		os.Exit(1)
+	}
+
+	// Multi-target. Check file exists and get lines
+	_, totalLines := utils.ReadTargetsFile(OptTarget)
+	return totalLines
 }

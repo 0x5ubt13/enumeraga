@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -95,6 +96,85 @@ func PrintBanner() {
 	fmt.Printf("%s%s%s\n", Yellow(" _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ "), Cyan("/ /_/ / "), Yellow("_  ___ |"))
 	fmt.Printf("%s%s%s\n", Yellow(" /_____/  /_/ /_/\\__,_/ /_/ /_/ /_/\\___//_/    /_/  |_"), Cyan("\\____/  "), Yellow("/_/  |_|"))
 	fmt.Printf("%s\n\n", Green("                            by 0x5ubt13"))
+}
+
+// ValidateIP checks if the provided string is a valid IPv4 or IPv6 address
+func ValidateIP(ip string) error {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return fmt.Errorf("invalid IP address: %s", ip)
+	}
+	return nil
+}
+
+// ValidateCIDR checks if the provided string is a valid CIDR notation
+func ValidateCIDR(cidr string) error {
+	_, _, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return fmt.Errorf("invalid CIDR range: %s - %v", cidr, err)
+	}
+	return nil
+}
+
+// ValidatePort checks if the provided port number is valid (1-65535)
+func ValidatePort(port string) error {
+	portNum, err := strconv.Atoi(port)
+	if err != nil {
+		return fmt.Errorf("invalid port number: %s - not a number", port)
+	}
+	if portNum < 1 || portNum > 65535 {
+		return fmt.Errorf("invalid port number: %d - must be between 1 and 65535", portNum)
+	}
+	return nil
+}
+
+// ValidatePorts checks if the provided comma-separated port list is valid
+func ValidatePorts(ports string) error {
+	portList := strings.Split(ports, ",")
+	for _, port := range portList {
+		port = strings.TrimSpace(port)
+		if port == "" {
+			continue
+		}
+		// Handle port ranges like "1-100"
+		if strings.Contains(port, "-") {
+			rangeParts := strings.Split(port, "-")
+			if len(rangeParts) != 2 {
+				return fmt.Errorf("invalid port range format: %s", port)
+			}
+			if err := ValidatePort(rangeParts[0]); err != nil {
+				return err
+			}
+			if err := ValidatePort(rangeParts[1]); err != nil {
+				return err
+			}
+			start, _ := strconv.Atoi(rangeParts[0])
+			end, _ := strconv.Atoi(rangeParts[1])
+			if start > end {
+				return fmt.Errorf("invalid port range: %s - start port greater than end port", port)
+			}
+		} else {
+			if err := ValidatePort(port); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// ValidateFilePath checks if the provided file path exists and is readable
+func ValidateFilePath(path string) error {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("file does not exist: %s", path)
+	}
+	if err != nil {
+		return fmt.Errorf("error accessing file: %s - %v", path, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("path is a directory, not a file: %s", path)
+	}
+	return nil
 }
 
 func PrintInfraUsageExamples() {
@@ -346,22 +426,8 @@ func OSCPConsent(tool string) rune {
 
 // CheckToolExists checks that the tool exists with exec.LookPath (equivalent to `which <tool>`)
 func CheckToolExists(tool string) bool {
-	var lookPathErr error
-	// Edge case for testssl tool
-	if tool == "testssl.sh" {
-		tool = "testssl"
-		_, lookPathErr = exec.LookPath(tool)
-		if lookPathErr == nil {
-			return true
-		}
-		tool = "testssl.sh"
-		_, lookPathErr = exec.LookPath(tool)
-		return lookPathErr == nil
-	}
-
-	// General case
-	_, lookPathErr = exec.LookPath(tool)
-	return lookPathErr == nil
+	_, lookPatherr := exec.LookPath(tool)
+	return lookPatherr == nil
 }
 
 // Separate function to add key tools
@@ -1162,18 +1228,21 @@ func CheckAdminPrivileges(cloudOrInfra string) {
 	case "infra":
 		switch HostOS.OS {
 		case "windows":
-			// Check for administrative privileges on Windows
+			// Windows not supported for infra scanning
 			ErrorMsg("Windows detected. For now running the infra section of Enumeraga in Windows isn't supported. Should you wish to contribute or formally request it, please get in touch or open a PR.")
 			os.Exit(99)
-		}
-	case "linux", "darwin":
-		// Check for root privileges on Unix-like systems
-		if os.Geteuid() != 0 {
-			ErrorMsg("Please run me as root so the tools don't fail!")
-			// os.Exit(99)
+		case "linux", "darwin":
+			// Check for root privileges on Unix-like systems
+			if os.Geteuid() != 0 {
+				ErrorMsg("Please run me as root so the tools don't fail!")
+				// os.Exit(99)
+			}
+		default:
+			ErrorMsg("Unsupported operating system")
+			os.Exit(99)
 		}
 	default:
-		ErrorMsg("Unsupported operating system")
+		ErrorMsg(fmt.Sprintf("Unknown mode: %s. Expected 'cloud' or 'infra'", cloudOrInfra))
 		os.Exit(99)
 	}
 }

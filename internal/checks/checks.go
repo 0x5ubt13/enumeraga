@@ -2,13 +2,11 @@ package checks
 
 import (
 	"fmt"
-	"os"
-	"strings"
-
 	"github.com/0x5ubt13/enumeraga/internal/cloud"
 	"github.com/0x5ubt13/enumeraga/internal/infra"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/pborman/getopt/v2"
+	"os"
 )
 
 var (
@@ -65,7 +63,7 @@ func Run() int {
 		os.Exit(1)
 	}
 
-	switch strings.TrimSpace(strings.ToLower(os.Args[1])) {
+	switch os.Args[1] {
 	case "c", "cl", "clo", "clou", "cloud":
 		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting Cloud checks phase"), utils.Cyan(" ----------"))
 
