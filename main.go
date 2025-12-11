@@ -106,9 +106,14 @@ func sweepPorts() ([]nmap.Host, []nmap.Host) {
 func singleTarget(target string, baseFilePath string) error {
 	// Clean up trailing not alphanumeric characters in target
 	target = strings.TrimFunc(target, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '.' && r != '-'
 	})
-	
+
+	// Validate target is not empty after trimming
+	if target == "" {
+		return fmt.Errorf("target is empty after sanitization")
+	}
+
 	utils.Target = target
 
 	// Make base dir for the target
@@ -134,18 +139,22 @@ func singleTarget(target string, baseFilePath string) error {
 	// Introducing a control to repeat the scan in case there are no ports or there is only one port open
 	// Do it only once
 	if len(openPorts) <= 1 && utils.TimesSwept == 1 {
-		sweptHostTcp, sweptHostUdp := sweepPorts()
-		openPortsSliceSecondTry := utils.GetOpenPortsSlice(sweptHostTcp, sweptHostUdp)
+		sweptHostTcpSecond, sweptHostUdpSecond := sweepPorts()
+		openPortsSliceSecondTry := utils.GetOpenPortsSlice(sweptHostTcpSecond, sweptHostUdpSecond)
 
 		if len(openPortsSliceSecondTry) > len(openPortsSlice) {
 			openPorts = utils.RemoveDuplicates(strings.Join(openPortsSliceSecondTry, ","))
+			utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] More ports found in the second slow run for target '", target, "'.")
+		} else {
 			utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] No further ports were found in the second slow run for target '", target, "'.")
 		}
 	}
 
 	if len(openPorts) > 0 {
 		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Open ports for target '", target, "' : ", openPorts)
-		utils.WritePortsToFile(targetPath, openPorts, target)
+		if _, err := utils.WritePortsToFile(targetPath, openPorts, target); err != nil {
+			utils.ErrorMsg(fmt.Sprintf("Failed to write ports to file: %v", err))
+		}
 
 		// Launch main aggressive nmap scan in parallel that covers all open ports found
 		outFile := targetPath + "aggressive_scan"
@@ -193,8 +202,14 @@ func multiTarget(targetsFile *string) {
 
 		// Clean up trailing not alphanumeric characters in target
 		target = strings.TrimFunc(target, func(r rune) bool {
-			return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+			return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '.' && r != '-'
 		})
+
+		// Skip empty targets after sanitization
+		if target == "" {
+			utils.PrintCustomBiColourMsg("yellow", "red", "[!] Skipping empty target at line ", fmt.Sprint(i+1))
+			continue
+		}
 
 		// Launch enumeration for the target
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Attacking target ", fmt.Sprint(i+1), " of ", fmt.Sprint(lines), ": ", target)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/utils"
@@ -380,9 +381,10 @@ func IndividualPortScanner(target, port, outFile string, OptVVerbose *bool) {
 		log.Fatalf("unable to create nmap scanner individualPortScanner: %s %s %s %v", target, port, outFile, err)
 	}
 
+	var lapsedMutex sync.Mutex
 	lapsed := 0
 	ticker := time.NewTicker(1 * time.Minute)
-	done := make(chan bool)
+	done := make(chan bool, 1) // Buffered to prevent goroutine leak
 
 	go func(OptVVerbose *bool) {
 		for {
@@ -392,11 +394,15 @@ func IndividualPortScanner(target, port, outFile string, OptVVerbose *bool) {
 					fmt.Println(utils.Debug("Very verbose - ticker.C contents:", t))
 				}
 
+				lapsedMutex.Lock()
 				lapsed++
-				if lapsed == 1 {
+				currentLapsed := lapsed
+				lapsedMutex.Unlock()
+
+				if currentLapsed == 1 {
 					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan still running against port(s) '", port, "' on target '", target, "'. Time lapsed: '", "1", "' minute. Please wait...")
 				} else {
-					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan still running against port(s) '", port, "' on target '", target, "'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
+					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Individual protocol nmap scan still running against port(s) '", port, "' on target '", target, "'. Time lapsed: '", strconv.Itoa(currentLapsed), "' minutes. Please wait...")
 				}
 			case <-done:
 				return
@@ -410,7 +416,11 @@ func IndividualPortScanner(target, port, outFile string, OptVVerbose *bool) {
 	}
 
 	ticker.Stop()
-	done <- true
+	select {
+	case done <- true:
+	default:
+		// Goroutine already exited, don't block
+	}
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! Nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
 	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(outFile+".nmap"))
@@ -439,9 +449,10 @@ func FullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
 		log.Fatalf("unable to create nmap scanner fullAggressiveScan: %v", err)
 	}
 
+	var lapsedMutex sync.Mutex
 	lapsed := 0
 	ticker := time.NewTicker(1 * time.Minute)
-	done := make(chan bool)
+	done := make(chan bool, 1) // Buffered to prevent goroutine leak
 
 	go func(OptVVerbose *bool) {
 		for {
@@ -451,11 +462,15 @@ func FullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
 					fmt.Println(utils.Debug("Very verbose - ticker.C contents:", t))
 				}
 
+				lapsedMutex.Lock()
 				lapsed++
-				if lapsed == 1 {
+				currentLapsed := lapsed
+				lapsedMutex.Unlock()
+
+				if currentLapsed == 1 {
 					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Main nmap scan still running against all open ports on target '", target, "'. Time lapsed: '", "1", "' minute. Please wait...")
 				} else {
-					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Main nmap scan still running against all open ports on target '", target, "'. Time lapsed: '", strconv.Itoa(lapsed), "' minutes. Please wait...")
+					utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Main nmap scan still running against all open ports on target '", target, "'. Time lapsed: '", strconv.Itoa(currentLapsed), "' minutes. Please wait...")
 				}
 			case <-done:
 				return
@@ -469,7 +484,11 @@ func FullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
 	}
 
 	ticker.Stop()
-	done <- true
+	select {
+	case done <- true:
+	default:
+		// Goroutine already exited, don't block
+	}
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggressive nmap", " against all open ports on target '", target, "' finished successfully")
 	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(outFile+".nmap"))

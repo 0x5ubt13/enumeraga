@@ -231,12 +231,21 @@ func ErrorMsg(errMsg any) {
 func ReadTargetsFile(optTarget *string) ([]string, int) {
 	data, err := os.ReadFile(*optTarget)
 	if err != nil {
-		panic(err)
+		ErrorMsg(fmt.Sprintf("Failed to read targets file: %v", err))
+		return nil, 0
 	}
 
 	// Get lines
 	lines := strings.Split(string(data), "\n")
-	return lines, len(lines) - 1
+	// Filter out empty lines
+	nonEmptyLines := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+		if trimmedLine != "" {
+			nonEmptyLines = append(nonEmptyLines, trimmedLine)
+		}
+	}
+	return nonEmptyLines, len(nonEmptyLines)
 }
 
 // CustomMkdir checks first if it is possible to create new dir, and send custom msg if not.
@@ -261,48 +270,45 @@ func ProtocolDetected(protocol, baseDir string) string {
 	return protocolDir
 }
 
-func WriteTextToFile(filePath string, message string) {
+func WriteTextToFile(filePath string, message string) error {
 	// Open file
 	f, err := os.Create(filePath)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
 	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-			fmt.Println(Red("[-] Error closing file:", err))
+		if closeErr := f.Close(); closeErr != nil {
+			ErrorMsg(fmt.Sprintf("Error closing file %s: %v", filePath, closeErr))
 		}
 	}(f)
 
 	// Write to it
-	_, err2 := fmt.Fprintln(f, message)
-	if err2 != nil {
-		log.Fatal(err2)
+	if _, err := fmt.Fprintln(f, message); err != nil {
+		return fmt.Errorf("failed to write to file %s: %w", filePath, err)
 	}
+	return nil
 }
 
-func WritePortsToFile(filePath string, ports string, host string) string {
+func WritePortsToFile(filePath string, ports string, host string) (string, error) {
 	// Open file
 	fileName := fmt.Sprintf("%sopen_ports.txt", filePath)
 	f, err := os.Create(fileName)
 	if err != nil {
-		log.Fatal(err)
+		return "", fmt.Errorf("failed to create ports file %s: %w", fileName, err)
 	}
 	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-			fmt.Println(Red("[-] Error closing file:", err))
+		if closeErr := f.Close(); closeErr != nil {
+			ErrorMsg(fmt.Sprintf("Error closing file %s: %v", fileName, closeErr))
 		}
 	}(f)
 
 	// Write to it
-	_, err2 := fmt.Fprintln(f, ports)
-	if err2 != nil {
-		log.Fatal(err2)
+	if _, err := fmt.Fprintln(f, ports); err != nil {
+		return "", fmt.Errorf("failed to write ports to file %s: %w", fileName, err)
 	}
 	PrintCustomBiColourMsg("green", "yellow", "[+] Successfully written open ports for host '", host, "' to file '", fileName, "'")
 
-	return ports
+	return ports, nil
 }
 
 // FinishLine finishes the main flow with time tracker and prints a couple nice messages to the terminal

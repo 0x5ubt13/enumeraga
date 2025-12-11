@@ -7,7 +7,7 @@
 [![GoDoc](https://godoc.org/github.com/0x5ubt13/enumeraga?status.svg)](https://godoc.org/github.com/0x5ubt13/enumeraga)
 ![License](https://img.shields.io/github/license/0x5ubt13/enumeraga?color=blue)
 
-Automatic multiprocess Linux CLI tool that aims for a quick enumeration wrapping pentesting tools. Scan your target in 20 seconds! This is an attempt to develop a rich tool that leverages the nice features Go has to offer. Containerised version coming soon :eyes:
+Automatic multiprocess Linux CLI tool that aims for a quick enumeration wrapping pentesting tools. Scan your target in 20 seconds! This is an attempt to develop a rich tool that leverages the nice features Go has to offer. Now available in containerised versions for both infrastructure and cloud scanning!
 
 ![Enumeraga demo gif](./img/enumeraga_demo_gif_v0.1.4-beta.gif)
 
@@ -26,7 +26,7 @@ Give `Enumeraga` either a single IP address or a file containing a list of IPs. 
     ┌──(root㉿SubtleLabs)-[~]
     └─# enumeraga -h
 
-                                                          v0.1.14-beta
+                                                          v0.2.0-beta
      __________                                    ______________________
      ___  ____/__________  ________ __________________    |_  ____/__    |
      __  __/  __  __ \  / / /_  __ `__ \  _ \_  ___/_  /| |  / __ __  /| |
@@ -75,9 +75,50 @@ Make sure you have Go installed first! (In Kali, `apt-get update && apt-get inst
     go build -o enumeraga main.go
     ./enumeraga -h
 
-### Containerised version
+### Containerised version - Infrastructure Scanning
 
-    Containerised version coming soon!!!
+Build and run the infrastructure scanner in a container:
+
+    # Build the image
+    docker build -t gagarter/enumeraga_infra .
+
+    # Run against a single target
+    docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99
+
+    # Run with bruteforce enabled
+    docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 -b
+
+    # Run against targets from a file
+    docker run --network host -v ./output:/tmp/enumeraga_output -v ./targets.txt:/targets.txt gagarter/enumeraga_infra -t /targets.txt
+
+**Note:** The `--network host` flag is required for nmap scans to work properly.
+
+### Containerised version - Cloud Scanning
+
+Build and run the cloud scanner in a container:
+
+    # Build the image (MUST run from repo root)
+    docker build -f internal/cloud/Dockerfile -t gagarter/enumeraga_cloud .
+
+    # Run against AWS (mount AWS credentials)
+    docker run -v ~/.aws:/root/.aws -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud aws
+
+    # Run against Azure (mount Azure credentials)
+    docker run -v ~/.azure:/root/.azure -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud azure
+
+    # Run against GCP (mount GCP credentials)
+    docker run -v ~/.config/gcloud:/root/.config/gcloud -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud gcp
+
+    # Using a specific version tag
+    docker run -v ~/.aws:/root/.aws -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud:v2.0.0 aws
+
+**Key points for cloud scanning:**
+- Mount the appropriate credentials directory for your target cloud provider
+- Mount an output directory to persist scan results: `-v ./output:/tmp/enumeraga_output`
+- Supports AWS, Azure, GCP, OCI, AliCloud, and DigitalOcean
+- All standard enumeraga flags can be passed after the cloud provider argument
+
+For more info on the Cloud scanner, please see the section [Enumeraga Cloud](#enumeraga-cloud) below.
 
 ## Disclaimer
 
@@ -146,25 +187,35 @@ Besides from the above 29 tools, there are many more included in GNU/Linux doing
 
 ## Enumeraga Cloud
 
-New functionality currently being added to the tool - scan your cloud infrastructure!!
+Scan your cloud infrastructure with automated security tools! Enumeraga Cloud supports multiple cloud service providers and wraps popular cloud security scanning tools including ScoutSuite, Prowler, and CloudFox. More tools coming soon!
 
-Docker image being prepared, aiming to be called like this:
+**Supported Cloud Providers:**
+- AWS (Amazon Web Services)
+- Azure (Microsoft Azure)
+- GCP (Google Cloud Platform)
+- OCI (Oracle Cloud Infrastructure)
+- Aliyun (Alibaba Cloud)
+- DigitalOcean
 
-    # For AWS:
-    docker run gagarter/enumeraga_cloud:latest \
-    -v ~/.aws:/root/.aws \
-    aws
+**Usage:**
 
-    # For Azure:
-    docker run gagarter/enumeraga_cloud:latest \
-    -v ~/.azure:/root/.azure
-    azure
+See the [Containerised version - Cloud Scanning](#containerised-version---cloud-scanning) section above for detailed Docker usage instructions.
 
-    # For GCP:
-    docker run gagarter/enumeraga_cloud:latest \
-    -v ~/.config/gcloud:/root/.config/gcloud \
-    gcp
+For native execution (requires Go):
 
+    # Build the binary
+    go build -o enumeraga main.go
+
+    # Scan AWS
+    ./enumeraga cloud aws
+
+    # Scan Azure
+    ./enumeraga cloud azure
+
+    # Scan GCP
+    ./enumeraga cloud gcp
+
+Results are saved to `/tmp/enumeraga_output` by default, or specify a custom location with the `-o` flag (not valid for the Docker container option, use a volume mount instead).
 
 
 ## To Do
@@ -188,9 +239,9 @@ Enumeraga:
 - [x] Rewrite in modules to enable `go get`
 - [x] Add cool GitHub badges
 - [x] Work on getting maintainability rate up to A
+- [x] Containerise
 - [ ] Test thoroughly
 - [ ] Release v1.0
-- [ ] Containerise
 - [ ] Add a flag to pass `vhosts` and functionality to use them
 - [ ] Rewrite the `enum4linux-ng` installing function to avoid installing `pip` and dependencies as `root`
 - [ ] Link each wrapped tool on README to their official repos

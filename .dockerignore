@@ -1,0 +1,48 @@
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+enumeraga
+enumeraga_test
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Documentation (except README)
+*.md
+!README.md
+
+# Test files
+*_test.go
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Output directories
+output/
+/tmp/enumeraga_output/

@@ -81,7 +81,7 @@ func http() {
 
 	// Port 80:
 	// WordPress on port 80
-	commands.CallWPEnumeration(fmt.Sprintf("https://%s:80", utils.Target), dir, "80", checks.OptVVerbose)
+	commands.CallWPEnumeration(fmt.Sprintf("http://%s:80", utils.Target), dir, "80", checks.OptVVerbose)
 
 	// Nikto on port 80
 	nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", utils.Target)}
@@ -121,7 +121,7 @@ func http() {
 	commands.CallRunTool(nikto443Args, nikto443Path, checks.OptVVerbose)
 
 	// Wafw00f on port 443
-	wafw00f443Args := []string{"wafw00f", "-v", fmt.Sprintf("http://%s:443", utils.Target)}
+	wafw00f443Args := []string{"wafw00f", "-v", fmt.Sprintf("https://%s:443", utils.Target)}
 	wafw00f443Path := fmt.Sprintf("%swafw00f_443.out", dir)
 	commands.CallRunTool(wafw00f443Args, wafw00f443Path, checks.OptVVerbose)
 
@@ -148,10 +148,10 @@ func http() {
 	// Port 8080
 
 	// WordPress on port 8080
-	commands.CallWPEnumeration(fmt.Sprintf("https://%s:8080", utils.Target), dir, "8080", checks.OptVVerbose)
+	commands.CallWPEnumeration(fmt.Sprintf("http://%s:8080", utils.Target), dir, "8080", checks.OptVVerbose)
 
 	// Tomcat
-	commands.CallTomcatEnumeration(utils.Target, fmt.Sprintf("https://%s:8080/docs", utils.Target), dir, "8080", checks.OptBrute, checks.OptVVerbose)
+	commands.CallTomcatEnumeration(utils.Target, fmt.Sprintf("http://%s:8080/docs", utils.Target), dir, "8080", checks.OptBrute, checks.OptVVerbose)
 }
 
 // Enumerate Kerberos Protocol (88/TCP)
@@ -167,7 +167,9 @@ func kerberos() {
 	nmap -p 88 \ 
 	--script=krb5-enum-users \
 	--script-args krb5-enum-users.realm=\"{Domain_Name}\" \\\n,userdb={Big_Userlist} \\\n{IP}"`
-	utils.WriteTextToFile(filePath, message)
+	if err := utils.WriteTextToFile(filePath, message); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Failed to write kerberos commands file: %v", err))
+	}
 }
 
 // Enumerate Internet Message Access Protocol (110,143,993,995/TCP)
@@ -355,7 +357,9 @@ func ldap() {
 5. For LDAPS (port 636), use:
    ldapsearch -x -H ldaps://%s -b "DC=example,DC=com"
 `, ldapSearchPath, utils.Target, utils.Target, utils.Target, utils.Target, utils.Target, utils.Target)
-	utils.WriteTextToFile(filePath, message)
+	if err := utils.WriteTextToFile(filePath, message); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Failed to write LDAP enumeration tips file: %v", err))
+	}
 }
 
 // Enumerate Berkeley R-services (512-514/TCP)
@@ -385,7 +389,9 @@ func rservices() {
 	Tip: Enumerate NFS, etc on the utils.Target server for /home/user/.rhosts and /etc/hosts.equiv files to use with rlogin, rsh and rexec.
 	If found, use the following command:
 	rlogin "utils.Target" -l "found_user"`
-	utils.WriteTextToFile(filePath, message)
+	if err := utils.WriteTextToFile(filePath, message); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Failed to write r-services enumeration tips file: %v", err))
+	}
 }
 
 // Enumerate Intelligent Platform Management Interface Protocol (623/TCP)
@@ -417,7 +423,9 @@ func rsync() {
 	filePath := dir + "next_steps_tip.txt"
 	message := `Tip: If nc's output has a drive in it after enumerating the version, for example 'dev', your natural following step should be:
 	"rsync -av --list-only rsync://${utils.Target}/dev"`
-	utils.WriteTextToFile(filePath, message)
+	if err := utils.WriteTextToFile(filePath, message); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Failed to write rsync enumeration tips file: %v", err))
+	}
 }
 
 // Enumerate Microsoft's SQL Server (1433/TCP)
@@ -516,7 +524,9 @@ func nfs() {
 		utils.ErrorMsg(fmt.Sprintf("Error running tree command: %v. Skipping tree output.", err))
 	}
 
-	utils.WriteTextToFile(fmt.Sprintf("%scleanup_readme.txt", mountDir), fmt.Sprintf("To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n", mountDir))
+	if err := utils.WriteTextToFile(fmt.Sprintf("%scleanup_readme.txt", mountDir), fmt.Sprintf("To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n", mountDir)); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Failed to write NFS cleanup readme: %v", err))
+	}
 }
 
 // Enumerate MySQL server (3306/TCP)

@@ -17,6 +17,7 @@ func Run(provider string, OptVVerbose *bool) {
 
 	// Launch scoutsuite's function inside commands.
 	//TODO: think: change to goroutine??? Probs too much smashing the cloud provider??
+	// Add more tools here, then complete switch case in commands.PrepCloudTool()
 	runTool("scoutsuite", provider, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
 	runTool("prowler", provider, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
 	runTool("cloudfox", provider, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)

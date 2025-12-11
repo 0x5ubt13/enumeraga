@@ -24,7 +24,13 @@ import (
 func WPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
 	// Identify WordPress: Run curl
 	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
-	curlOutput, _ := curl.Output()
+	curlOutput, err := curl.Output()
+	if err != nil {
+		if *OptVVerbose {
+			utils.ErrorMsg(fmt.Sprintf("Failed to curl target for WordPress detection: %v", err))
+		}
+		return
+	}
 
 	// grep 'wp-content'
 	if !strings.Contains(string(curlOutput), "wp-content") {
@@ -41,7 +47,13 @@ func WPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
 func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, OptVVerbose *bool) {
 	// Identify Tomcat: Run curl
 	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
-	curlOutput, _ := curl.Output()
+	curlOutput, err := curl.Output()
+	if err != nil {
+		if *OptVVerbose {
+			utils.ErrorMsg(fmt.Sprintf("Failed to curl target for Tomcat detection: %v", err))
+		}
+		return
+	}
 
 	// grep 'tomcat'
 	if !strings.Contains(strings.ToLower(string(curlOutput)), "tomcat") {
@@ -180,7 +192,8 @@ func runTool(args []string, filePath string, OptVVerbose *bool) {
 
 	// Start the command asynchronously in a goroutine
 	if err := cmd.Start(); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("%s%s", "Error starting command:", err))
+		utils.ErrorMsg(fmt.Sprintf("Error starting command %s: %v", tool, err))
+		return
 	}
 
 	// Capture and write the command's output to a file synchronously
@@ -477,6 +490,7 @@ func InstallWithPipxOSAgnostic(tool string) error {
 }
 
 // PrepCloudTool preps the program to run a cloud tool
+// To add more cloud enumeration capabilities, add new switch cases here
 func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 	var commandToRun string
 
@@ -492,7 +506,7 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 		}
 
 		// TODO: add flags to pass azure creds?
-		commandToRun = fmt.Sprintf("scout %s --no-browser", provider)
+		commandToRun = fmt.Sprintf("scout %s --no-browser --report-dir %s", provider, filePath)
 
 	case "prowler":
 		if !utils.CheckToolExists("prowler") {
@@ -502,7 +516,7 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 				return err
 			}
 		}
-		commandToRun = fmt.Sprintf("prowler %s", provider)
+		commandToRun = fmt.Sprintf("prowler %s -o %s", provider, filePath)
 
 	case "cloudfox":
 		if !utils.CheckToolExists("cloudfox") {
@@ -512,9 +526,9 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 				return fmt.Errorf("error downloading cloudfox: %v", err)
 			}
 
-			commandToRun = fmt.Sprintf("%s %s all-checks", binaryPath, provider)
+			commandToRun = fmt.Sprintf("%s %s all-checks --outdir %s", binaryPath, provider, filePath)
 		} else {
-			commandToRun = fmt.Sprintf("cloudfox %s all-checks", provider)
+			commandToRun = fmt.Sprintf("cloudfox %s all-checks --outdir %s", provider, filePath)
 		}
 
 	case "pmapper":
@@ -591,7 +605,8 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 
 	// Start the command asynchronously in a goroutine
 	if err := cmd.Start(); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("%s%s", "Error starting command:", err))
+		utils.ErrorMsg(fmt.Sprintf("Error starting command %s: %v", tool, err))
+		return
 	}
 
 	// Use MultiWriter to copy stdout to both console and file simultaneously

@@ -24,3 +24,8 @@ go.work
 .idea/*
 .vscode/*
 docker_build_test.sh
+docker_infra_build_test.sh
+
+# Documentation (except README)
+*.md
+!README.md

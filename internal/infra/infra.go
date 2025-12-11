@@ -2,10 +2,11 @@ package infra
 
 import (
 	"fmt"
-	"github.com/0x5ubt13/enumeraga/internal/utils"
-	"github.com/pborman/getopt/v2"
 	"net"
 	"os"
+
+	"github.com/0x5ubt13/enumeraga/internal/utils"
+	"github.com/pborman/getopt/v2"
 )
 
 func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutput, OptTarget *string) int {
@@ -25,7 +26,7 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 	// Check 1: Args passed fine?
 	if len(os.Args) == 1 {
 		utils.ErrorMsg("No arguments were provided.")
-		getopt.Usage()
+		printInfraUsage()
 		utils.PrintInfraUsageExamples()
 		os.Exit(1)
 	}
@@ -35,7 +36,7 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 		if !*OptQuiet {
 			fmt.Println(utils.Cyan("[*] Help flag detected. Aborting other checks and printing usage.\n"))
 		}
-		getopt.Usage()
+		printInfraUsage()
 		utils.PrintInfraUsageExamples()
 		os.Exit(0)
 	}
@@ -73,6 +74,23 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 	return checkSeven(OptTarget)
 
 	// End of checks
+}
+
+// printInfraUsage prints only the infra-relevant flags, not cloud flags
+func printInfraUsage() {
+	fmt.Println("Usage: enumeraga infra [OPTIONS]")
+	fmt.Println("\nOptions:")
+	fmt.Println("  -b, --brute          Activate all fuzzing and bruteforce in the tool")
+	fmt.Println("  -h, --help           Display this help and exit")
+	fmt.Println("  -i, --install        Only try to install pre-requisite tools and exit")
+	fmt.Println("  -n, --nmap-only      Activate nmap scans only and ignore all other tools")
+	fmt.Println("  -o, --output DIR     Select a different base folder for output (default: /tmp/enumeraga_output)")
+	fmt.Println("  -p, --top-ports N    Run port sweep with nmap --top-ports=N")
+	fmt.Println("  -q, --quiet          Don't print the banner and decrease overall verbosity")
+	fmt.Println("  -r, --range CIDR     Specify a CIDR range to use tools for whole subnets")
+	fmt.Println("  -t, --target TARGET  Specify target single IP / List of IPs file (required)")
+	fmt.Println("  -V, --vv             Flood your terminal with plenty of verbosity!")
+	fmt.Println()
 }
 
 // checkFive ensures there's a valid target
