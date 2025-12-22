@@ -233,7 +233,7 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string, 
 	done <- true
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(outFile+".nmap"))
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "\tShortcut: less -R '", outFile+".nmap", "'")
 }
 
 // IndividualPortScannerWithNSEScriptsAndScriptArgs runs Nmap scan with NSE scripts and NSE script arguments
@@ -294,7 +294,7 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 	done <- true
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(outFile+".nmap"))
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "\tShortcut: less -R '", outFile+".nmap", "'")
 }
 
 // IndividualUDPPortScannerWithNSEScripts runs a UDP Nmap scan with NSE scripts
@@ -355,7 +355,7 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 	done <- true
 
 	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! UDP scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(outFile+".nmap"))
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "\tShortcut: less -R '", outFile+".nmap", "'")
 }
 
 // IndividualPortScanner runs a simple Nmap scan
@@ -421,9 +421,6 @@ func IndividualPortScanner(target, port, outFile string, OptVVerbose *bool) {
 	default:
 		// Goroutine already exited, don't block
 	}
-
-	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! Nmap scan against port(s) '", port, "' on target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(outFile+".nmap"))
 }
 
 // FullAggressiveScan runs main aggressive scan for all open ports on the target
@@ -489,7 +486,4 @@ func FullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
 	default:
 		// Goroutine already exited, don't block
 	}
-
-	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! ", "Main aggressive nmap", " against all open ports on target '", target, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less"), utils.Cyan(outFile+".nmap"))
 }

@@ -21,6 +21,7 @@ func Run(provider string, OptVVerbose *bool) {
 	runTool("scoutsuite", provider, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
 	runTool("prowler", provider, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
 	runTool("cloudfox", provider, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
+	runTool("kubenumerate", provider, fmt.Sprintf("%skubenumerate/", providerDir), OptVVerbose)
 	// runTool("cloudsplaining, provider, fmt.Sprintf("%scloud_peass/", providerDir), OptVVerbose)") // https://github.com/salesforce/cloudsplaining
 	
 	// Tried AWSPeass.py and while it's great, I need to figure out how to run it programatically as it prompts for input from time to time

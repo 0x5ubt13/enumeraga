@@ -74,6 +74,9 @@ var (
 	// Wg sync: Define a WaitGroup to generate goroutines
 	Wg sync.WaitGroup
 
+	// ToolRegistry tracks all enumeration tools and their progress
+	ToolRegistry *ToolTracker
+
 	BaseDir      string
 	Target       string
 	Version      string
@@ -87,6 +90,10 @@ var (
 	VisitedWinRM bool
 	VisitedFTP   bool
 )
+
+func init() {
+	ToolRegistry = NewToolTracker()
+}
 
 func PrintBanner() {
 	fmt.Printf("\n%s\n", Cyan("                                                     ", Version))
@@ -105,6 +112,56 @@ func ValidateIP(ip string) error {
 		return fmt.Errorf("invalid IP address: %s", ip)
 	}
 	return nil
+}
+
+// ResolveHostToIP resolves a hostname or URL to an IP address
+// It accepts domain names (example.com), URLs (http://example.com), and already-valid IPs
+// Returns the resolved IP address or error if resolution fails
+func ResolveHostToIP(host string) (string, error) {
+	// First, try to parse as IP address - if it's already an IP, return it
+	if ip := net.ParseIP(host); ip != nil {
+		return host, nil
+	}
+
+	// Remove common URL schemes if present (http://, https://, etc.)
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimPrefix(host, "https://")
+	host = strings.TrimPrefix(host, "ftp://")
+
+	// Remove path components if URL contains them
+	if idx := strings.Index(host, "/"); idx != -1 {
+		host = host[:idx]
+	}
+
+	// Remove port if present
+	if idx := strings.Index(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+
+	// Try to parse again after cleanup - maybe it was a URL with an IP
+	if ip := net.ParseIP(host); ip != nil {
+		return host, nil
+	}
+
+	// Perform DNS lookup
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve hostname %s: %v", host, err)
+	}
+
+	if len(ips) == 0 {
+		return "", fmt.Errorf("no IP addresses found for hostname: %s", host)
+	}
+
+	// Return the first IPv4 address found, or first IPv6 if no IPv4 exists
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			return ipv4.String(), nil
+		}
+	}
+
+	// If no IPv4 found, return first IPv6
+	return ips[0].String(), nil
 }
 
 // ValidateCIDR checks if the provided string is a valid CIDR notation
@@ -459,7 +516,7 @@ func getKeyTools() []string {
 		"seclists",
 		"smbclient",
 		"ssh-audit",
-		"testssl.sh",
+		"testssl",
 		"wafw00f",
 		"whatweb",
 	}

@@ -126,7 +126,17 @@ func checkSeven(OptTarget *string) int {
 		return 0
 	}
 
-	// Not a valid IP - assume it's a targets file
+	// Not a valid IP - try to resolve as hostname/URL
+	resolvedIP, err := utils.ResolveHostToIP(*OptTarget)
+	if err == nil {
+		// Successfully resolved hostname to IP
+		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Resolved hostname '", *OptTarget, "' to IP: ", resolvedIP)
+		// Update OptTarget to use the resolved IP for scanning
+		*OptTarget = resolvedIP
+		return 0
+	}
+
+	// Not a valid IP or hostname - assume it's a targets file
 	// Validate file exists before attempting to read
 	if err := utils.ValidateFilePath(*OptTarget); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Target validation failed: %v", err))

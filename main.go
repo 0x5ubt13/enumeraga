@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"time"
 	"unicode"
@@ -47,6 +48,9 @@ func main() {
 
 	// Wait for goroutines to finish to terminate the program
 	utils.Wg.Wait()
+
+	// Print final tool execution summary
+	utils.ToolRegistry.PrintFinalSummary()
 }
 
 // Check whether a target CIDR range has been passed to Enumeraga
@@ -126,7 +130,7 @@ func singleTarget(target string, baseFilePath string) error {
 	}
 
 	// Perform ports sweep
-	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Sweeping TCP and UDP ports on target '", target, "'...")
+	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Sweeping TCP and UDP ports on target '", target, "', please wait...")
 	sweptHostTcp, sweptHostUdp := sweepPorts()
 
 	// Save open ports in dedicated slice
@@ -202,7 +206,7 @@ func multiTarget(targetsFile *string) {
 
 		// Clean up trailing not alphanumeric characters in target
 		target = strings.TrimFunc(target, func(r rune) bool {
-			return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '.' && r != '-'
+			return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '.' && r != '-' && r != ':'
 		})
 
 		// Skip empty targets after sanitization
@@ -211,14 +215,30 @@ func multiTarget(targetsFile *string) {
 			continue
 		}
 
+		// Try to resolve hostname/URL to IP if it's not already an IP
+		resolvedTarget := target
+		if ip := strings.TrimSpace(target); ip != "" {
+			// Check if it's not already an IP address
+			if net.ParseIP(ip) == nil {
+				// Try to resolve as hostname/URL
+				if resolvedIP, err := utils.ResolveHostToIP(ip); err == nil {
+					utils.PrintCustomBiColourMsg("green", "cyan", "[+] Resolved hostname '", target, "' to IP: ", resolvedIP)
+					resolvedTarget = resolvedIP
+				} else {
+					utils.PrintCustomBiColourMsg("red", "yellow", "[-] Failed to resolve hostname '", target, "': ", err.Error())
+					continue
+				}
+			}
+		}
+
 		// Launch enumeration for the target
-		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Attacking target ", fmt.Sprint(i+1), " of ", fmt.Sprint(lines), ": ", target)
-		err := singleTarget(target, targetsBaseFilePath)
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Attacking target ", fmt.Sprint(i+1), " of ", fmt.Sprint(lines), ": ", resolvedTarget)
+		err := singleTarget(resolvedTarget, targetsBaseFilePath)
 		if err != nil {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-] No open ports were found in host '", target, "'. Aborting the rest of scans for this host")
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] No open ports were found in host '", resolvedTarget, "'. Aborting the rest of scans for this host")
 			continue
 		}
 
-		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", target, "' were successfully parsed.")
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", resolvedTarget, "' were successfully parsed.")
 	}
 }

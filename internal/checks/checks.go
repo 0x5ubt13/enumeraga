@@ -55,7 +55,7 @@ var (
 // Run pre-flight checks and return total lines if multi-target
 func Run() int {
 	// Set current version
-	utils.Version = "v0.2.0-beta"
+	utils.Version = "v0.2.1-beta"
 
 	// Check if infra flow or cloud flow apply
 	if len(os.Args) < 2 {

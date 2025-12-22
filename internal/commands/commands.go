@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/config"
@@ -124,34 +126,54 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 }
 
 func printToolSuccess(command, tool, filePath string) {
+	completed, total := utils.ToolRegistry.GetProgress()
+	runningTools := utils.ToolRegistry.GetRunningTools()
+
+	progressStr := fmt.Sprintf("[%d/%d]", completed, total)
+
 	if strings.Contains(command, "80") {
-		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 80", tool), "' finished successfully")
-		fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
-		return
+		utils.PrintCustomBiColourMsg("green", "cyan",
+			fmt.Sprintf("%s [+] Done! '%s on port 80' finished successfully",
+				progressStr, tool))
+	} else if strings.Contains(command, "443") {
+		utils.PrintCustomBiColourMsg("green", "cyan",
+			fmt.Sprintf("%s [+] Done! '%s on port 443' finished successfully",
+				progressStr, tool))
+	} else {
+		utils.PrintCustomBiColourMsg("green", "cyan",
+			fmt.Sprintf("%s [+] Done! '%s' finished successfully",
+				progressStr, tool))
 	}
 
-	if strings.Contains(command, "443") {
-		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", fmt.Sprintf("%s on port 443", tool), "' finished successfully")
-		fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
-		return
-	}
+	utils.PrintCustomBiColourMsg("yellow", "cyan",
+		fmt.Sprintf("    Shortcut: less -R '%s'", filePath))
 
-	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
-	fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
+	if len(runningTools) > 0 && len(runningTools) <= 10 {
+		utils.PrintCustomBiColourMsg("cyan", "white",
+			fmt.Sprintf("    Still running: %s", strings.Join(runningTools, ", ")))
+	} else if len(runningTools) > 10 {
+		utils.PrintCustomBiColourMsg("cyan", "white",
+			fmt.Sprintf("    Still running: %d tools", len(runningTools)))
+	}
 }
 
 // Handle messages for HTTP tools to avoid confusion
 func announceTool(command, tool string) {
+	total := utils.ToolRegistry.GetTotal()
+	running := len(utils.ToolRegistry.GetRunningTools())
+
 	if strings.Contains(command, "80") {
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Running '", fmt.Sprintf("%s on port 80", tool), "' and sending it to the background")
-	}
-
-	if strings.Contains(command, "443") {
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Running '", fmt.Sprintf("%s on port 443", tool), "' and sending it to the background")
-	}
-
-	if !strings.Contains(command, "80") && !strings.Contains(command, "443") {
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Running '", tool, "' and sending it to the background")
+		utils.PrintCustomBiColourMsg("yellow", "cyan",
+			fmt.Sprintf("[!] Running '%s on port 80' (%d tools total, %d running)",
+				tool, total, running))
+	} else if strings.Contains(command, "443") {
+		utils.PrintCustomBiColourMsg("yellow", "cyan",
+			fmt.Sprintf("[!] Running '%s on port 443' (%d tools total, %d running)",
+				tool, total, running))
+	} else {
+		utils.PrintCustomBiColourMsg("yellow", "cyan",
+			fmt.Sprintf("[!] Running '%s' (%d tools total, %d running)",
+				tool, total, running))
 	}
 }
 
@@ -169,10 +191,16 @@ func runTool(args []string, filePath string, OptVVerbose *bool) {
 
 	cmd := exec.Command(tool, cmdArgs...)
 
-	// Create a pipe to capture the command's output
+	// Create pipes to capture the command's output
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating stdout pipe: %s", err))
+		os.Exit(1)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error creating stderr pipe: %s", err))
 		os.Exit(1)
 	}
 
@@ -196,24 +224,44 @@ func runTool(args []string, filePath string, OptVVerbose *bool) {
 		return
 	}
 
-	// Capture and write the command's output to a file synchronously
-	_, err = io.Copy(file, stdout)
-	if err != nil {
-		if *OptVVerbose {
-			utils.ErrorMsg(fmt.Sprintf("Error copying output for tool %s: %s", tool, err))
+	// Capture stdout and stderr concurrently to prevent blocking
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Capture and write the command's stdout to a file
+	go func() {
+		defer wg.Done()
+		_, err := io.Copy(file, stdout)
+		if err != nil {
+			if *OptVVerbose {
+				utils.ErrorMsg(fmt.Sprintf("Error copying stdout for tool %s: %s", tool, err))
+			}
 		}
-	}
+	}()
+
+	// Discard stderr to prevent buffer blocking (tools often write progress to stderr)
+	go func() {
+		defer wg.Done()
+		_, err := io.Copy(io.Discard, stderr)
+		if err != nil {
+			if *OptVVerbose {
+				utils.ErrorMsg(fmt.Sprintf("Error discarding stderr for tool %s: %s", tool, err))
+			}
+		}
+	}()
+
+	// Wait for output capture to complete
+	wg.Wait()
 
 	// Wait for the command to complete
 	if err := cmd.Wait(); err != nil {
 		if tool == "nikto" || tool == "fping" {
 			// Nikto and fping don't have a clean exit
-			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
-			if filePath != "/dev/null" {
-				fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
-			}
+			printToolSuccess(command, tool, filePath)
+			return
 		} else {
 			fmt.Println(utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
+			return
 		}
 	}
 
@@ -327,7 +375,7 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 		return
 	}
 
-	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Positive Match! IPs vulnerable to ", "EternalBlue", " !\n\tShortcut: '", fmt.Sprintf("less -R %s", confirmedFile), "'")
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] Positive Match! IPs vulnerable to ", "EternalBlue", " !\n\tShortcut: '", fmt.Sprintf("less -R '%s'", confirmedFile), "'")
 }
 
 // Goroutine for eternalBlueSweepCheck()
@@ -342,103 +390,198 @@ func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, 
 }
 
 func CallWPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
+	toolName := fmt.Sprintf("wpscan on port %s", port)
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(targetUrl, caseDir, port string, OptVVerbose *bool) {
+	go func(targetUrl, caseDir, port string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
+		success := true
+		defer func() {
+			utils.ToolRegistry.CompleteTool(name, success)
+		}()
 
+		utils.ToolRegistry.StartTool(name)
 		WPEnumeration(targetUrl, caseDir, port, OptVVerbose)
-	}(targetUrl, caseDir, port, OptVVerbose)
+	}(targetUrl, caseDir, port, OptVVerbose, toolName)
 }
 
 func CallTomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool) {
+	toolName := fmt.Sprintf("tomcat enumeration on port %s", port)
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool) {
+	go func(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
+		success := true
+		defer func() {
+			utils.ToolRegistry.CompleteTool(name, success)
+		}()
 
+		utils.ToolRegistry.StartTool(name)
 		tomcatEnumeration(target, targetUrl, caseDir, port, OptBrute, OptVVerbose)
-	}(target, targetUrl, caseDir, port, OptBrute, OptVVerbose)
+	}(target, targetUrl, caseDir, port, OptBrute, OptVVerbose, toolName)
 }
 
 // CallRunCewlandFfufKeywords is a Goroutine for runCewlandFfufKeywords()
 func CallRunCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
+	toolName := fmt.Sprintf("cewl/ffuf keywords on port %s", port)
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, caseDir, port string, OptVVerbose *bool) {
+	go func(target, caseDir, port string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
+		success := true
+		defer func() {
+			utils.ToolRegistry.CompleteTool(name, success)
+		}()
 
+		utils.ToolRegistry.StartTool(name)
 		runCewlandFfufKeywords(target, caseDir, port, OptVVerbose)
-	}(target, caseDir, port, OptVVerbose)
+	}(target, caseDir, port, OptVVerbose, toolName)
+}
+
+// extractPortFromPath extracts port number from file path for tool naming
+func extractPortFromPath(filePath string) string {
+	if strings.Contains(filePath, "_80.out") || strings.Contains(filePath, "/80/") {
+		return "80"
+	} else if strings.Contains(filePath, "_443.out") || strings.Contains(filePath, "/443/") {
+		return "443"
+	} else if strings.Contains(filePath, "_8080.out") || strings.Contains(filePath, "/8080/") {
+		return "8080"
+	} else if strings.Contains(filePath, "_8443.out") || strings.Contains(filePath, "/8443/") {
+		return "8443"
+	}
+	// Try to extract port from path pattern like "tool_PORT.out"
+	parts := strings.Split(filepath.Base(filePath), "_")
+	if len(parts) >= 2 {
+		portStr := strings.TrimSuffix(parts[len(parts)-1], ".out")
+		if _, err := strconv.Atoi(portStr); err == nil {
+			return portStr
+		}
+	}
+	return "unknown"
 }
 
 // CallRunTool is a Goroutine for runTool()
 func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
+	toolName := args[0]
+	port := extractPortFromPath(filePath)
+	if port != "unknown" {
+		toolName = fmt.Sprintf("%s on port %s", args[0], port)
+	}
+
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(args []string, filePath string, OptVVerbose *bool) {
+	go func(args []string, filePath string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
+		success := true
+		defer func() {
+			utils.ToolRegistry.CompleteTool(name, success)
+		}()
 
+		utils.ToolRegistry.StartTool(name)
 		runTool(args, filePath, OptVVerbose)
-	}(args, filePath, OptVVerbose)
+	}(args, filePath, OptVVerbose, toolName)
 }
 
 // CallIndividualPortScannerWithNSEScripts is a Goroutine for individualPortScannerWithNSEScripts()
 func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts string, OptVVerbose *bool) {
+	toolName := fmt.Sprintf("nmap NSE on port %s", port)
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, port, outFile, scripts string, OptVVerbose *bool) {
+	go func(target, port, outFile, scripts string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
+		success := true
+		defer func() {
+			utils.ToolRegistry.CompleteTool(name, success)
+		}()
 
+		utils.ToolRegistry.StartTool(name)
 		scans.IndividualPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
-	}(target, port, outFile, scripts, OptVVerbose)
+		printToolSuccess(port, "nmap NSE", outFile+".nmap")
+	}(target, port, outFile, scripts, OptVVerbose, toolName)
 }
 
 // CallIndividualPortScannerWithNSEScriptsAndScriptArgs is a Goroutine for scans.IndividualPortScannerWithNSEScriptsAndScriptArgs()
 func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string, OptVVerbose *bool) {
+	toolName := fmt.Sprintf("nmap NSE with args on port %s", port)
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, port, outFile, scripts string, scriptArgs map[string]string, OptVVerbose *bool) {
+	go func(target, port, outFile, scripts string, scriptArgs map[string]string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
+		success := true
+		defer func() {
+			utils.ToolRegistry.CompleteTool(name, success)
+		}()
 
+		utils.ToolRegistry.StartTool(name)
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
 		scans.IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs, OptVVerbose)
-	}(target, port, outFile, scripts, scriptArgs, OptVVerbose)
+		printToolSuccess(port, "nmap NSE with args", outFile+".nmap")
+	}(target, port, outFile, scripts, scriptArgs, OptVVerbose, toolName)
 }
 
 // CallIndividualUDPPortScannerWithNSEScripts is a Goroutine for scans.IndividualUDPPortScannerWithNSEScripts()
 func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string, OptVVerbose *bool) {
+	toolName := fmt.Sprintf("nmap UDP on port %s", port)
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, port, outFile, scripts string, OptVVerbose *bool) {
+	go func(target, port, outFile, scripts string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
+		success := true
+		defer func() {
+			utils.ToolRegistry.CompleteTool(name, success)
+		}()
 
+		utils.ToolRegistry.StartTool(name)
 		scans.IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
-	}(target, port, outFile, scripts, OptVVerbose)
+		printToolSuccess(port, "nmap UDP", outFile+".nmap")
+	}(target, port, outFile, scripts, OptVVerbose, toolName)
 }
 
 // CallIndividualPortScanner is a Goroutine for scans.IndividualPortScanner()
 func CallIndividualPortScanner(target, port, outFile string, OptVVerbose *bool) {
+	toolName := fmt.Sprintf("nmap on port %s", port)
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, port, outFile string, OptVVerbose *bool) {
+	go func(target, port, outFile string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
+		success := true
+		defer func() {
+			utils.ToolRegistry.CompleteTool(name, success)
+		}()
 
+		utils.ToolRegistry.StartTool(name)
 		scans.IndividualPortScanner(target, port, outFile, OptVVerbose)
-	}(target, port, outFile, OptVVerbose)
+		printToolSuccess(port, "nmap", outFile+".nmap")
+	}(target, port, outFile, OptVVerbose, toolName)
 }
 
 // CallFullAggressiveScan is a Goroutine for scans.FullAggressiveScan()
 func CallFullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
+	toolName := "nmap full aggressive scan"
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, ports, outFile string, OptVVerbose *bool) {
+	go func(target, ports, outFile string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
+		success := true
+		defer func() {
+			utils.ToolRegistry.CompleteTool(name, success)
+		}()
 
+		utils.ToolRegistry.StartTool(name)
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on'", target, "' and sending it to the background")
 		ports = ports + ",1337" // Adding one likely closed port for OS fingerprinting purposes
 		scans.FullAggressiveScan(target, ports, outFile, OptVVerbose)
-	}(target, ports, outFile, OptVVerbose)
+		printToolSuccess("", "nmap full aggressive", outFile+".nmap")
+	}(target, ports, outFile, OptVVerbose, toolName)
 }
 
 /* --------------------------------
@@ -544,6 +687,12 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 		// }
 
 		commandToRun = fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
+	case "kubenumerate":
+		if provider != "k8s" {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " Kubenumerate ", "must be run with the", " k8s ", "flag. Skipping it...")
+			break
+		}
+		commandToRun = fmt.Sprintf("python3 kubenumerate.py -o %s", filePath)
 	default:
 		// Case not registered, try and run it anyway see what could go wrong
 		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
@@ -636,7 +785,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 			// Nikto and fping don't have a clean exit
 			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
 			if filePath != "/dev/null" {
-				fmt.Println(utils.Yellow("\tShortcut: less -R"), utils.Cyan(filePath))
+				utils.PrintCustomBiColourMsg("yellow", "cyan", "\tShortcut: less -R '", filePath, "'")
 			}
 			return
 		} else {

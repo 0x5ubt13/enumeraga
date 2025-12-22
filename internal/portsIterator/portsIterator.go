@@ -137,8 +137,10 @@ func http() {
 
 	// TestSSL on port 443
 	testssl := "testssl"
-	if utils.CheckToolExists("testssl.sh") {
+	if !utils.CheckToolExists("testssl") {
+		if utils.CheckToolExists("testssl.sh") {
 		testssl = "testssl.sh"
+		}
 	}
 
 	testsslArgs := []string{testssl, fmt.Sprintf("https://%s:443", utils.Target)}
