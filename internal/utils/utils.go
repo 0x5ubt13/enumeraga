@@ -418,8 +418,7 @@ func GetOpenPortsSlice(sweptHostTcp, sweptHostUdp []nmap.Host) []string {
 		}
 
 		for _, port := range host.Ports {
-			// Error below: String(port.State) not working for some reason, but linter saying use String(); therefore, using Sprintf regardless
-			if fmt.Sprintf("%s", port.State) == "open" {
+			if port.State.String() == "open" {
 				text := strconv.FormatUint(uint64(port.ID), 10)
 				openPortsSlice = append(openPortsSlice, text)
 			}
@@ -433,8 +432,7 @@ func GetOpenPortsSlice(sweptHostTcp, sweptHostUdp []nmap.Host) []string {
 		}
 
 		for _, port := range host.Ports {
-			// Error below: String(port.State) not working for some reason, but linter saying use String(); therefore, using Sprintf regardless
-			if fmt.Sprintf("%s", port.State) == "open" {
+			if port.State.String() == "open" {
 				text := strconv.FormatUint(uint64(port.ID), 10)
 				openPortsSlice = append(openPortsSlice, text)
 			}

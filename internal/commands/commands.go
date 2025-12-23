@@ -1106,7 +1106,7 @@ func generateReport(findings []types.Finding, cfg *config.CloudConfig) error {
 	}()
 
 	// Remove default Sheet1
-	f.DeleteSheet("Sheet1")
+	_ = f.DeleteSheet("Sheet1")
 
 	// Sort findings by provider and severity
 	sort.Slice(findings, func(i, j int) bool {
@@ -1145,13 +1145,13 @@ func generateReport(findings []types.Finding, cfg *config.CloudConfig) error {
 
 func createSummarySheet(f *excelize.File, providerFindings map[string][]types.Finding) {
 	sheetName := "Summary"
-	f.NewSheet(sheetName)
+	_, _ = f.NewSheet(sheetName)
 
 	// Set headers
 	headers := []string{"Provider", "Critical", "High", "Medium", "Low", "Info", "Total"}
 	for i, header := range headers {
 		cell := fmt.Sprintf("%c1", 'A'+i)
-		f.SetCellValue(sheetName, cell, header)
+		_ = f.SetCellValue(sheetName, cell, header)
 	}
 
 	// Add provider summaries
@@ -1160,35 +1160,35 @@ func createSummarySheet(f *excelize.File, providerFindings map[string][]types.Fi
 		severityCounts := countSeverities(findings)
 		total := len(findings)
 
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), provider)
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), severityCounts[types.Critical])
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), severityCounts[types.High])
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), severityCounts[types.Medium])
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), severityCounts[types.Low])
-		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), severityCounts[types.Info])
-		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), total)
+		_ = f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), provider)
+		_ = f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), severityCounts[types.Critical])
+		_ = f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), severityCounts[types.High])
+		_ = f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), severityCounts[types.Medium])
+		_ = f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), severityCounts[types.Low])
+		_ = f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), severityCounts[types.Info])
+		_ = f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), total)
 		row++
 	}
 }
 
 func createProviderSheet(f *excelize.File, provider string, findings []types.Finding) {
-	f.NewSheet(provider)
+	_, _ = f.NewSheet(provider)
 
 	// Set headers
 	headers := []string{"Severity", "Service", "Resource", "Description", "Remediation"}
 	for i, header := range headers {
 		cell := fmt.Sprintf("%c1", 'A'+i)
-		f.SetCellValue(provider, cell, header)
+		_ = f.SetCellValue(provider, cell, header)
 	}
 
 	// Add findings
 	for i, finding := range findings {
 		row := i + 2
-		f.SetCellValue(provider, fmt.Sprintf("A%d", row), finding.Severity)
-		f.SetCellValue(provider, fmt.Sprintf("B%d", row), finding.Service)
-		f.SetCellValue(provider, fmt.Sprintf("C%d", row), finding.Resource)
-		f.SetCellValue(provider, fmt.Sprintf("D%d", row), finding.Description)
-		f.SetCellValue(provider, fmt.Sprintf("E%d", row), finding.Remediation)
+		_ = f.SetCellValue(provider, fmt.Sprintf("A%d", row), finding.Severity)
+		_ = f.SetCellValue(provider, fmt.Sprintf("B%d", row), finding.Service)
+		_ = f.SetCellValue(provider, fmt.Sprintf("C%d", row), finding.Resource)
+		_ = f.SetCellValue(provider, fmt.Sprintf("D%d", row), finding.Description)
+		_ = f.SetCellValue(provider, fmt.Sprintf("E%d", row), finding.Remediation)
 	}
 }
 

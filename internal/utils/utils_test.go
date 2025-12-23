@@ -472,21 +472,21 @@ func TestWritePortsToFile(t *testing.T) {
 // BenchmarkValidateIP benchmarks IP validation
 func BenchmarkValidateIP(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ValidateIP("192.168.1.1")
+		_ = ValidateIP("192.168.1.1")
 	}
 }
 
 // BenchmarkResolveHostToIP benchmarks hostname resolution
 func BenchmarkResolveHostToIP(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ResolveHostToIP("127.0.0.1")
+		_, _ = ResolveHostToIP("127.0.0.1")
 	}
 }
 
 // BenchmarkValidateCIDR benchmarks CIDR validation
 func BenchmarkValidateCIDR(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ValidateCIDR("192.168.1.0/24")
+		_ = ValidateCIDR("192.168.1.0/24")
 	}
 }
 
