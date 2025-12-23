@@ -99,8 +99,8 @@ func http() {
 	commands.CallRunTool(whatWeb80Args, whatWeb80Path, checks.OptVVerbose)
 
 	// Dirsearch - Light dirbusting on port 80
-	dirsearch80Args := []string{"dirsearch", "-t", "10", "-q", "-u", fmt.Sprintf("http://%s:80", utils.Target)}
 	dirsearch80Path := fmt.Sprintf("%sdirsearch_80.out", dir)
+	dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s:80", utils.Target), "-o", dirsearch80Path}
 	commands.CallRunTool(dirsearch80Args, dirsearch80Path, checks.OptVVerbose)
 
 	if *checks.OptBrute {
@@ -131,8 +131,8 @@ func http() {
 	commands.CallRunTool(whatWeb443Args, whatWeb443Path, checks.OptVVerbose)
 
 	// Dirsearch - Light dirbusting on port 443
-	dirsearch443Args := []string{"dirsearch", "-t", "10", "-q", "-u", fmt.Sprintf("https://%s:443", utils.Target)}
 	dirsearch443Path := fmt.Sprintf("%sdirsearch_443.out", dir)
+	dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s:443", utils.Target), "-o", dirsearch443Path}
 	commands.CallRunTool(dirsearch443Args, dirsearch443Path, checks.OptVVerbose)
 
 	// TestSSL on port 443

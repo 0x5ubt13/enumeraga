@@ -257,7 +257,7 @@ func PrintCloudUsageExamples() {
 		"cyan", "yellow",
 		e, "aws\n ",
 		e, "gcp\n ",
-		e, "azure\n ",
+		e, "azure",
 	)
 }
 

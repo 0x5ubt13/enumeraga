@@ -105,7 +105,6 @@ func printCloudUsage() {
 	fmt.Println("  -o, --output DIR     Select a different base folder for output (default: /tmp/enumeraga_output)")
 	fmt.Println("  -q, --quiet          Don't print the banner and decrease overall verbosity")
 	fmt.Println("  -V, --vv             Flood your terminal with plenty of verbosity!")
-	fmt.Println()
 }
 
 // parseCSP parses the provider the user wants to enumerate
