@@ -48,8 +48,16 @@ ENV PATH="/root/go/bin:${PATH}"
 # This ensures local changes are included in the build
 COPY . .
 
-# Build Enumeraga binary
-RUN go build -o enumeraga main.go
+# Accept build arguments for version information
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+# Build Enumeraga binary with version info
+RUN go build -ldflags="-X github.com/0x5ubt13/enumeraga/internal/utils.Version=${VERSION} \
+    -X github.com/0x5ubt13/enumeraga/internal/utils.GitCommit=${GIT_COMMIT} \
+    -X github.com/0x5ubt13/enumeraga/internal/utils.BuildDate=${BUILD_DATE}" \
+    -o enumeraga main.go
 
 # Copy and setup entrypoint script
 COPY entrypoint-infra.sh /opt/enumeraga/entrypoint.sh

@@ -26,6 +26,7 @@ go.work
 docker_build_test.sh
 docker_infra_build_test.sh
 
-# Documentation (except README)
+# Documentation (except README and VERSIONING)
 *.md
 !README.md
+!VERSIONING.md

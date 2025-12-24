@@ -79,7 +79,9 @@ var (
 
 	BaseDir      string
 	Target       string
-	Version      string
+	Version      string  // Semantic version (e.g., "v0.2.1-beta")
+	GitCommit    string  // Git commit hash
+	BuildDate    string  // Build timestamp
 	VisitedSMTP  bool
 	VisitedHTTP  bool
 	VisitedIMAP  bool
@@ -93,6 +95,28 @@ var (
 
 func init() {
 	ToolRegistry = NewToolTracker()
+	// Set default version if not set by build flags
+	if Version == "" {
+		Version = "dev"
+	}
+	if GitCommit == "" {
+		GitCommit = "unknown"
+	}
+	if BuildDate == "" {
+		BuildDate = "unknown"
+	}
+}
+
+// GetVersion returns the full version string
+func GetVersion() string {
+	if Version == "dev" {
+		return "enumeraga development build"
+	}
+	commitShort := GitCommit
+	if len(commitShort) > 7 {
+		commitShort = commitShort[:7]
+	}
+	return fmt.Sprintf("enumeraga %s (commit: %s, built: %s)", Version, commitShort, BuildDate)
 }
 
 func PrintBanner() {

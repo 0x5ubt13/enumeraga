@@ -17,7 +17,12 @@ import (
 
 // Main logic of Enumeraga infra
 func main() {
-	fmt.Println("----------\n[!] WARNING: \nYou're running a version currently under beta development. \nPlease use the latest pre-compiled version of Enumeraga in the official repo instead (unless you're helping me debug).\nThanks!\n----------")
+	// Show version info
+	if utils.Version != "dev" {
+		fmt.Printf("%s\n", utils.GetVersion())
+	} else {
+		fmt.Println("----------\n[!] WARNING: \nYou're running a version currently under beta development. \nPlease use the latest pre-compiled version of Enumeraga in the official repo instead (unless you're helping me debug).\nThanks!\n----------")
+	}
 
 	// Perform pre-flight checks and get number of lines if cloud logic hasn't kicked off.
 	totalLines := checks.Run()

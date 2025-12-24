@@ -58,11 +58,17 @@ test-one:
 	read -p "Enter test name: " test; \
 	go test -v -short -run $$test $$pkg
 
-# Build the binary
+# Build the binary with version info
 build:
 	@echo "Building enumeraga..."
-	go build -o enumeraga main.go
-	@echo "Build complete: ./enumeraga"
+	@VERSION=$$(git describe --tags --always --dirty 2>/dev/null || echo "dev"); \
+	COMMIT=$$(git rev-parse HEAD 2>/dev/null || echo "unknown"); \
+	DATE=$$(date -u '+%Y-%m-%d_%H:%M:%S'); \
+	go build -ldflags="-X github.com/0x5ubt13/enumeraga/internal/utils.Version=$$VERSION \
+		-X github.com/0x5ubt13/enumeraga/internal/utils.GitCommit=$$COMMIT \
+		-X github.com/0x5ubt13/enumeraga/internal/utils.BuildDate=$$DATE" \
+		-o enumeraga main.go
+	@echo "Build complete: ./enumeraga (version: $$VERSION)"
 
 # Install pre-requisite tools
 install:

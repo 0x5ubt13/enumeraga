@@ -83,8 +83,8 @@ func http() {
 	// WordPress on port 80
 	commands.CallWPEnumeration(fmt.Sprintf("http://%s:80", utils.Target), dir, "80", checks.OptVVerbose)
 
-	// Nikto on port 80
-	nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", utils.Target)}
+	// Nikto on port 80 (with 10 minute timeout)
+	nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", utils.Target), "-maxtime", "600"}
 	nikto80Path := fmt.Sprintf("%snikto_80.out", dir)
 	commands.CallRunTool(nikto80Args, nikto80Path, checks.OptVVerbose)
 
@@ -100,7 +100,7 @@ func http() {
 
 	// Dirsearch - Light dirbusting on port 80
 	dirsearch80Path := fmt.Sprintf("%sdirsearch_80.out", dir)
-	dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s:80", utils.Target), "-o", dirsearch80Path}
+	dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s:80", utils.Target), "-o", dirsearch80Path, "--max-time", "600", "--quiet"}
 	commands.CallRunTool(dirsearch80Args, dirsearch80Path, checks.OptVVerbose)
 
 	if *checks.OptBrute {
@@ -115,8 +115,8 @@ func http() {
 	// WordPress on port 443
 	commands.CallWPEnumeration(fmt.Sprintf("https://%s:443", utils.Target), dir, "443", checks.OptVVerbose)
 
-	// Nikto on port 443
-	nikto443Args := []string{"nikto", "-host", fmt.Sprintf("https://%s:443", utils.Target)}
+	// Nikto on port 443 (with 10 minute timeout)
+	nikto443Args := []string{"nikto", "-host", fmt.Sprintf("https://%s:443", utils.Target), "-maxtime", "600"}
 	nikto443Path := fmt.Sprintf("%snikto_443.out", dir)
 	commands.CallRunTool(nikto443Args, nikto443Path, checks.OptVVerbose)
 
@@ -132,7 +132,7 @@ func http() {
 
 	// Dirsearch - Light dirbusting on port 443
 	dirsearch443Path := fmt.Sprintf("%sdirsearch_443.out", dir)
-	dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s:443", utils.Target), "-o", dirsearch443Path}
+	dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s:443", utils.Target), "-o", dirsearch443Path, "--max-time", "600", "--quiet"}
 	commands.CallRunTool(dirsearch443Args, dirsearch443Path, checks.OptVVerbose)
 
 	// TestSSL on port 443

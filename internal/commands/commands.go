@@ -39,11 +39,11 @@ func WPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
 		return
 	}
 
-	// Detected, prepare to run wpscan
+	// Detected, prepare to run wpscan (with connection timeouts)
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "WordPress detected. Running", "WPScan", "...")
-	wpScanArgs := []string{"wpscan", "--url", targetUrl, "-e", "p,u"}
+	wpScanArgs := []string{"wpscan", "--url", targetUrl, "-e", "p,u", "--request-timeout", "30", "--connect-timeout", "30", "--max-threads", "5"}
 	wpScanPath := fmt.Sprintf("%swpscan_%s.out", caseDir, port)
-	runTool(wpScanArgs, wpScanPath, OptVVerbose)
+	CallRunTool(wpScanArgs, wpScanPath, OptVVerbose)
 }
 
 func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, OptVVerbose *bool) {
@@ -91,7 +91,7 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 		targetURL := fmt.Sprintf("http://%s:80", target)
 		cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
 		cewlPath := fmt.Sprintf("%scewl_80.out", caseDir)
-		runTool(cewlArgs, cewlPath, OptVVerbose)
+		runTool(cewlArgs, cewlPath, port, OptVVerbose)
 
 		ffufArgs := []string{
 			"ffuf",
@@ -103,7 +103,7 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 		}
 		fmt.Println(utils.Debug("[?] Debug: ffuf keywords command:", ffufArgs))
 		ffufPath := fmt.Sprintf("%sffuf_keywords_80.out", caseDir)
-		runTool(ffufArgs, ffufPath, OptVVerbose)
+		runTool(ffufArgs, ffufPath, port, OptVVerbose)
 		return
 	}
 
@@ -111,7 +111,7 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 	targetURL := fmt.Sprintf("http://%s:443", target)
 	cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
 	cewlPath := fmt.Sprintf("%scewl_443.out", caseDir)
-	runTool(cewlArgs, cewlPath, OptVVerbose)
+	runTool(cewlArgs, cewlPath, port, OptVVerbose)
 
 	ffufArgs := []string{
 		"ffuf",
@@ -122,7 +122,7 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 		"-maxtime-job", "300",
 	}
 	ffufPath := fmt.Sprintf("%sffuf_keywords_443.out", caseDir)
-	runTool(ffufArgs, ffufPath, OptVVerbose)
+	runTool(ffufArgs, ffufPath, port, OptVVerbose)
 }
 
 func printToolSuccess(command, tool, filePath string) {
@@ -131,19 +131,17 @@ func printToolSuccess(command, tool, filePath string) {
 
 	progressStr := fmt.Sprintf("[%d/%d]", completed, total)
 
-	if strings.Contains(command, "80") {
-		utils.PrintCustomBiColourMsg("green", "cyan",
-			fmt.Sprintf("%s [+] Done! '%s on port 80' finished successfully",
-				progressStr, tool))
-	} else if strings.Contains(command, "443") {
-		utils.PrintCustomBiColourMsg("green", "cyan",
-			fmt.Sprintf("%s [+] Done! '%s on port 443' finished successfully",
-				progressStr, tool))
+	// If command (port) is not empty, show it in the message
+	var toolDesc string
+	if command != "" {
+		toolDesc = fmt.Sprintf("%s on port %s", tool, command)
 	} else {
-		utils.PrintCustomBiColourMsg("green", "cyan",
-			fmt.Sprintf("%s [+] Done! '%s' finished successfully",
-				progressStr, tool))
+		toolDesc = tool
 	}
+
+	utils.PrintCustomBiColourMsg("green", "cyan",
+		fmt.Sprintf("[+] Done! '%s' finished successfully %s",
+			toolDesc, progressStr))
 
 	utils.PrintCustomBiColourMsg("yellow", "cyan",
 		fmt.Sprintf("    Shortcut: less -R '%s'", filePath))
@@ -183,7 +181,7 @@ func announceCloudTool(tool string) {
 }
 
 // Announce tool and run it
-func runTool(args []string, filePath string, OptVVerbose *bool) {
+func runTool(args []string, filePath string, port string, OptVVerbose *bool) {
 	tool := args[0]
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
@@ -257,7 +255,7 @@ func runTool(args []string, filePath string, OptVVerbose *bool) {
 	if err := cmd.Wait(); err != nil {
 		if tool == "nikto" || tool == "fping" {
 			// Nikto and fping don't have a clean exit
-			printToolSuccess(command, tool, filePath)
+			printToolSuccess(port, tool, filePath)
 			return
 		} else {
 			fmt.Println(utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
@@ -265,7 +263,7 @@ func runTool(args []string, filePath string, OptVVerbose *bool) {
 		}
 	}
 
-	printToolSuccess(command, tool, filePath)
+	printToolSuccess(port, tool, filePath)
 }
 
 // RunRangeTools enumerates a whole CIDR range using specific range tools
@@ -322,7 +320,7 @@ func RunRangeTools(targetRange string, OptVVerbose *bool, OptOutput *string) {
 // eternalBlueSweepCheck is a wee fun module to detect quite low-hanging fruit
 func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string, OptVVerbose *bool) {
 	// Run msf recon first
-	runTool(msfEternalBlueArgs, msfEternalBluePath, OptVVerbose)
+	runTool(msfEternalBlueArgs, msfEternalBluePath, "445", OptVVerbose)
 
 	var confirmedVuln = false
 
@@ -390,68 +388,61 @@ func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, 
 }
 
 func CallWPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
-	toolName := fmt.Sprintf("wpscan on port %s", port)
-	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(targetUrl, caseDir, port string, OptVVerbose *bool, name string) {
+	go func(targetUrl, caseDir, port string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
-		success := true
-		defer func() {
-			utils.ToolRegistry.CompleteTool(name, success)
-		}()
-
-		utils.ToolRegistry.StartTool(name)
 		WPEnumeration(targetUrl, caseDir, port, OptVVerbose)
-	}(targetUrl, caseDir, port, OptVVerbose, toolName)
+	}(targetUrl, caseDir, port, OptVVerbose)
 }
 
 func CallTomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool) {
-	toolName := fmt.Sprintf("tomcat enumeration on port %s", port)
-	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool, name string) {
+	go func(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool) {
 		defer utils.Wg.Done()
-		success := true
-		defer func() {
-			utils.ToolRegistry.CompleteTool(name, success)
-		}()
-
-		utils.ToolRegistry.StartTool(name)
 		tomcatEnumeration(target, targetUrl, caseDir, port, OptBrute, OptVVerbose)
-	}(target, targetUrl, caseDir, port, OptBrute, OptVVerbose, toolName)
+	}(target, targetUrl, caseDir, port, OptBrute, OptVVerbose)
 }
 
 // CallRunCewlandFfufKeywords is a Goroutine for runCewlandFfufKeywords()
 func CallRunCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
-	toolName := fmt.Sprintf("cewl/ffuf keywords on port %s", port)
-	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, caseDir, port string, OptVVerbose *bool, name string) {
+	go func(target, caseDir, port string, OptVVerbose *bool) {
 		defer utils.Wg.Done()
-		success := true
-		defer func() {
-			utils.ToolRegistry.CompleteTool(name, success)
-		}()
-
-		utils.ToolRegistry.StartTool(name)
 		runCewlandFfufKeywords(target, caseDir, port, OptVVerbose)
-	}(target, caseDir, port, OptVVerbose, toolName)
+	}(target, caseDir, port, OptVVerbose)
 }
 
 // extractPortFromPath extracts port number from file path for tool naming
 func extractPortFromPath(filePath string) string {
+	// Check for explicit port numbers in filename or path
 	if strings.Contains(filePath, "_80.out") || strings.Contains(filePath, "/80/") {
 		return "80"
-	} else if strings.Contains(filePath, "_443.out") || strings.Contains(filePath, "/443/") {
+	} else if strings.Contains(filePath, "_443.out") || strings.Contains(filePath, "/443/") || strings.Contains(filePath, "testssl.out") {
 		return "443"
 	} else if strings.Contains(filePath, "_8080.out") || strings.Contains(filePath, "/8080/") {
 		return "8080"
 	} else if strings.Contains(filePath, "_8443.out") || strings.Contains(filePath, "/8443/") {
 		return "8443"
 	}
+
+	// Check for /http/ directory (ports 80, 443, 8080, 8443)
+	if strings.Contains(filePath, "/http/") {
+		basename := filepath.Base(filePath)
+		// Tools that are specific to certain ports
+		if strings.HasPrefix(basename, "wafw00f") || strings.HasPrefix(basename, "whatweb") ||
+			strings.HasPrefix(basename, "dirsearch") || strings.HasPrefix(basename, "nikto") {
+			// These could be 80 or 443 - check filename more carefully
+			if strings.Contains(basename, "80") {
+				return "80"
+			} else if strings.Contains(basename, "443") {
+				return "443"
+			}
+		}
+	}
+
 	// Try to extract port from path pattern like "tool_PORT.out"
 	parts := strings.Split(filepath.Base(filePath), "_")
 	if len(parts) >= 2 {
@@ -460,30 +451,27 @@ func extractPortFromPath(filePath string) string {
 			return portStr
 		}
 	}
-	return "unknown"
+	return ""
 }
 
 // CallRunTool is a Goroutine for runTool()
 func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 	toolName := args[0]
 	port := extractPortFromPath(filePath)
-	if port != "unknown" {
+	if port != "" {
 		toolName = fmt.Sprintf("%s on port %s", args[0], port)
 	}
 
 	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(args []string, filePath string, OptVVerbose *bool, name string) {
+	go func(args []string, filePath string, OptVVerbose *bool, name, portNum string) {
 		defer utils.Wg.Done()
-		success := true
-		defer func() {
-			utils.ToolRegistry.CompleteTool(name, success)
-		}()
 
 		utils.ToolRegistry.StartTool(name)
-		runTool(args, filePath, OptVVerbose)
-	}(args, filePath, OptVVerbose, toolName)
+		runTool(args, filePath, portNum, OptVVerbose)
+		utils.ToolRegistry.CompleteTool(name, true)
+	}(args, filePath, OptVVerbose, toolName, port)
 }
 
 // CallIndividualPortScannerWithNSEScripts is a Goroutine for individualPortScannerWithNSEScripts()
@@ -494,13 +482,10 @@ func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts stri
 
 	go func(target, port, outFile, scripts string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
-		success := true
-		defer func() {
-			utils.ToolRegistry.CompleteTool(name, success)
-		}()
 
 		utils.ToolRegistry.StartTool(name)
 		scans.IndividualPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
+		utils.ToolRegistry.CompleteTool(name, true)
 		printToolSuccess(port, "nmap NSE", outFile+".nmap")
 	}(target, port, outFile, scripts, OptVVerbose, toolName)
 }
@@ -513,14 +498,11 @@ func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile,
 
 	go func(target, port, outFile, scripts string, scriptArgs map[string]string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
-		success := true
-		defer func() {
-			utils.ToolRegistry.CompleteTool(name, success)
-		}()
 
 		utils.ToolRegistry.StartTool(name)
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
 		scans.IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs, OptVVerbose)
+		utils.ToolRegistry.CompleteTool(name, true)
 		printToolSuccess(port, "nmap NSE with args", outFile+".nmap")
 	}(target, port, outFile, scripts, scriptArgs, OptVVerbose, toolName)
 }
@@ -533,13 +515,10 @@ func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts s
 
 	go func(target, port, outFile, scripts string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
-		success := true
-		defer func() {
-			utils.ToolRegistry.CompleteTool(name, success)
-		}()
 
 		utils.ToolRegistry.StartTool(name)
 		scans.IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
+		utils.ToolRegistry.CompleteTool(name, true)
 		printToolSuccess(port, "nmap UDP", outFile+".nmap")
 	}(target, port, outFile, scripts, OptVVerbose, toolName)
 }
@@ -552,13 +531,10 @@ func CallIndividualPortScanner(target, port, outFile string, OptVVerbose *bool) 
 
 	go func(target, port, outFile string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
-		success := true
-		defer func() {
-			utils.ToolRegistry.CompleteTool(name, success)
-		}()
 
 		utils.ToolRegistry.StartTool(name)
 		scans.IndividualPortScanner(target, port, outFile, OptVVerbose)
+		utils.ToolRegistry.CompleteTool(name, true)
 		printToolSuccess(port, "nmap", outFile+".nmap")
 	}(target, port, outFile, OptVVerbose, toolName)
 }
@@ -571,15 +547,12 @@ func CallFullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
 
 	go func(target, ports, outFile string, OptVVerbose *bool, name string) {
 		defer utils.Wg.Done()
-		success := true
-		defer func() {
-			utils.ToolRegistry.CompleteTool(name, success)
-		}()
 
 		utils.ToolRegistry.StartTool(name)
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on'", target, "' and sending it to the background")
 		ports = ports + ",1337" // Adding one likely closed port for OS fingerprinting purposes
 		scans.FullAggressiveScan(target, ports, outFile, OptVVerbose)
+		utils.ToolRegistry.CompleteTool(name, true)
 		printToolSuccess("", "nmap full aggressive", outFile+".nmap")
 	}(target, ports, outFile, OptVVerbose, toolName)
 }

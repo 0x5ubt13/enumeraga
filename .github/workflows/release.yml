@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Build binaries
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          COMMIT=$(git rev-parse HEAD)
+          DATE=$(date -u '+%Y-%m-%d_%H:%M:%S')
+
+          LDFLAGS="-X 'github.com/0x5ubt13/enumeraga/internal/utils.Version=$VERSION' \
+                   -X 'github.com/0x5ubt13/enumeraga/internal/utils.GitCommit=$COMMIT' \
+                   -X 'github.com/0x5ubt13/enumeraga/internal/utils.BuildDate=$DATE'"
+
+          # Build for multiple platforms
+          GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -o enumeraga_linux_amd64 main.go
+          GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -o enumeraga_linux_arm64 main.go
+          GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o enumeraga_darwin_amd64 main.go
+          GOOS=darwin GOARCH=arm64 go build -ldflags="$LDFLAGS" -o enumeraga_darwin_arm64 main.go
+
+          # Create checksums
+          sha256sum enumeraga_* > checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            enumeraga_*
+            checksums.txt
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'rc') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

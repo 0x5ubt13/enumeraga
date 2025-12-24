@@ -48,14 +48,23 @@ var (
 	// OptVVerbose floods your terminal with plenty of verbosity!
 	OptVVerbose = getopt.BoolLong("vv", 'V', "Flood your terminal with plenty of verbosity!")
 
+	// OptVersion displays version information and exits
+	OptVersion = getopt.BoolLong("version", 'v', "Display version information and exit.")
+
 	// Adding placeholder for OptVhost
 	// OptVhost = getopt.StringLong("", '', "", "")
 )
 
 // Run pre-flight checks and return total lines if multi-target
 func Run() int {
-	// Set current version
-	utils.Version = "v0.2.1-beta"
+	// Parse flags early to check for --version
+	getopt.Parse()
+
+	// Check for version flag
+	if *OptVersion {
+		fmt.Println(utils.GetVersion())
+		os.Exit(0)
+	}
 
 	// Check if infra flow or cloud flow apply
 	if len(os.Args) < 2 {
