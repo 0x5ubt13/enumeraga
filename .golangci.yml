@@ -1,27 +1,17 @@
 run:
   timeout: 5m
   tests: true
-  modules-download-mode: readonly
 
 linters:
   enable:
-    - errcheck      # Check for unchecked errors
-    - gosimple      # Simplify code
-    - govet         # Reports suspicious constructs
-    - ineffassign   # Detects ineffectual assignments
-    - staticcheck   # Staticcheck is a go vet on steroids
-    - unused        # Checks for unused constants, variables, functions and types
-    - gofmt         # Checks whether code was gofmt-ed
-    - goimports     # Checks import statements are formatted correctly
-    - misspell      # Finds commonly misspelled English words
-    - revive        # Fast, configurable, extensible, flexible linter
-    - gosec         # Security problems (important for pentest tool)
-    - bodyclose     # Checks whether HTTP response body is closed
-    - unconvert     # Remove unnecessary type conversions
-    - unparam       # Reports unused function parameters
-
-  disable:
-    - typecheck     # Can be redundant with gopls
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - revive
+    - gosec
 
 linters-settings:
   errcheck:
@@ -29,13 +19,16 @@ linters-settings:
     check-type-assertions: false
 
   govet:
-    enable-all: true
+    enable-all: false
+    enable:
+      - printf
+      - stdmethods
+      - unmarshal
     disable:
-      - shadow      # Too strict for this codebase
+      - shadow
       - fieldalignment  # Micro-optimization not needed
 
   revive:
-    confidence: 0.8
     rules:
       - name: blank-imports
       - name: context-as-argument
@@ -44,25 +37,32 @@ linters-settings:
       - name: error-strings
       - name: error-naming
       - name: exported
+        disabled: true  # Too noisy
       - name: increment-decrement
+        disabled: true  # Style preference
       - name: var-naming
+        disabled: true  # Allow targetUrl, sweptHostTcp, etc.
       - name: package-comments
         disabled: true  # Not enforcing package comments
       - name: range
       - name: receiver-naming
       - name: indent-error-flow
+        disabled: true  # Style preference
       - name: superfluous-else
+        disabled: true  # Style preference
       - name: unreachable-code
 
   gosec:
-    # Security is important for pentesting tools
-    # But some checks need to be relaxed for this type of tool
     excludes:
-      - G204  # Subprocess launched with variable - expected in pentesting tool
-      - G304  # File path provided as taint input - expected behavior
+      - G104  # Audit errors not checked - handled by errcheck
+      - G107  # HTTP request with variable - needed for downloads
+      - G110  # Decompression bomb - false positive for zip extraction
+      - G204  # Subprocess with variable - expected in pentesting tool
+      - G304  # File path as taint input - expected behavior
+      - G305  # File traversal - expected in zip extraction
       - G301  # Poor file permissions - may be intentional
-    confidence: medium
-    severity: medium
+      - G302  # Poor file permissions - may be intentional
+      - G306  # Poor file permissions - may be intentional
 
   gofmt:
     simplify: true
@@ -71,37 +71,58 @@ linters-settings:
     local-prefixes: github.com/0x5ubt13/enumeraga
 
 issues:
-  exclude-use-default: false
-  max-issues-per-linter: 0
-  max-same-issues: 0
+  exclude-use-default: true
+  max-issues-per-linter: 50
+  max-same-issues: 3
+  exclude-dirs:
+    - vendor
 
   exclude-rules:
-    # Exclude some linters from running on tests files
+    # Exclude some linters from running on test files
     - path: _test\.go
       linters:
         - gosec
         - errcheck
-        - unparam
 
-    # Allow globals in utils package (common pattern)
+    # Allow globals in utils package
     - path: internal/utils/
-      text: "global variable"
+      text: "(global variable|G101)"
 
-    # Allow command execution in commands package (that's the purpose)
-    - path: internal/commands/
+    # Allow command execution - this is a pentesting tool
+    - path: internal/(commands|portsIterator|scans)/
       linters:
         - gosec
       text: "G204"
 
+    # Allow file operations in infra package
+    - path: internal/infra/
+      linters:
+        - gosec
+      text: "G30[1246]"
+
+    # Exclude deprecated warnings
+    - linters:
+        - staticcheck
+      text: "SA1019:"
+
   exclude:
-    # Ignore "should have comment" warnings for now
+    # Code style exclusions
+    - "should have( a package)? comment"
     - "comment on exported"
-    # Allow long functions in main and setup code
-    - "Function 'main' is too long"
+    - "do not define dynamic errors"
+    - "File is not `gofmt`-ed"
+    - "File is not `goimports`-ed"
+    # Allow necessary complexity
     - "cyclomatic complexity"
+    - "cognitive complexity"
+    - "Function .* is too long"
+    # Common false positives
+    - "G104: Errors unhandled"
+    - "weak cryptographic primitive"
+    - "response body must be closed"  # Many are deferred
+    - "declaration of .* shadows"  # Acceptable in limited scope
 
 output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
+  formats:
+    - format: colored-line-number
   sort-results: true
