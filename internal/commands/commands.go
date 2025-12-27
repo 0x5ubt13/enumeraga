@@ -2,10 +2,10 @@ package commands
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +21,12 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/xuri/excelize/v2"
 )
+
+// getTimeoutSeconds returns the configured timeout in seconds as a string.
+// Uses ToolTimeout (in minutes) from utils package.
+func getTimeoutSeconds() string {
+	return strconv.Itoa(utils.ToolTimeout * 60)
+}
 
 // WPEnumeration provides enumeration for WordPress
 func WPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
@@ -98,17 +104,17 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 			"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", utils.DirListMedium, keywordsList, utils.ExtensionsList),
 			"-u", fmt.Sprintf("http://%s/FOLDERS/KEYWORDSEXTENSIONS", target),
 			"-v",
-			"-maxtime", "300",
-			"-maxtime-job", "300",
+			"-maxtime", getTimeoutSeconds(),
+			"-maxtime-job", getTimeoutSeconds(),
 		}
-		fmt.Println(utils.Debug("[?] Debug: ffuf keywords command:", ffufArgs))
+		utils.PrintSafe("%s\n", utils.Debug("[?] Debug: ffuf keywords command:", ffufArgs))
 		ffufPath := fmt.Sprintf("%sffuf_keywords_80.out", caseDir)
 		runTool(ffufArgs, ffufPath, port, OptVVerbose)
 		return
 	}
 
-	keywordsList := fmt.Sprintf("%scewl_keywordslist_433.out", caseDir)
-	targetURL := fmt.Sprintf("http://%s:443", target)
+	keywordsList := fmt.Sprintf("%scewl_keywordslist_443.out", caseDir)
+	targetURL := fmt.Sprintf("https://%s:443", target)
 	cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
 	cewlPath := fmt.Sprintf("%scewl_443.out", caseDir)
 	runTool(cewlArgs, cewlPath, port, OptVVerbose)
@@ -116,10 +122,10 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 	ffufArgs := []string{
 		"ffuf",
 		"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", utils.DirListMedium, keywordsList, utils.ExtensionsList),
-		"-u", fmt.Sprintf("http://%s/FOLDERS/KEYWORDSEXTENSIONS", target),
+		"-u", fmt.Sprintf("https://%s/FOLDERS/KEYWORDSEXTENSIONS", target),
 		"-v",
-		"-maxtime", "300",
-		"-maxtime-job", "300",
+		"-maxtime", getTimeoutSeconds(),
+		"-maxtime-job", getTimeoutSeconds(),
 	}
 	ffufPath := fmt.Sprintf("%sffuf_keywords_443.out", caseDir)
 	runTool(ffufArgs, ffufPath, port, OptVVerbose)
@@ -182,12 +188,19 @@ func announceCloudTool(tool string) {
 
 // Announce tool and run it
 func runTool(args []string, filePath string, port string, OptVVerbose *bool) {
+	// Check if shutdown is in progress before starting
+	if utils.IsShuttingDown() {
+		return
+	}
+
 	tool := args[0]
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
 	announceTool(command, tool)
 
-	cmd := exec.Command(tool, cmdArgs...)
+	// Use CommandContext to allow cancellation via global context
+	ctx := utils.GetGlobalContext()
+	cmd := exec.CommandContext(ctx, tool, cmdArgs...)
 
 	// Create pipes to capture the command's output
 	stdout, err := cmd.StdoutPipe()
@@ -253,12 +266,17 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) {
 
 	// Wait for the command to complete
 	if err := cmd.Wait(); err != nil {
+		// Check if the error was due to context cancellation (shutdown)
+		if ctx.Err() == context.Canceled {
+			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Tool '", tool, "' terminated due to shutdown")
+			return
+		}
 		if tool == "nikto" || tool == "fping" {
 			// Nikto and fping don't have a clean exit
 			printToolSuccess(port, tool, filePath)
 			return
 		} else {
-			fmt.Println(utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
+			utils.PrintSafe("%s %s %s %s\n", utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
 			return
 		}
 	}
@@ -285,7 +303,9 @@ func RunRangeTools(targetRange string, OptVVerbose *bool, OptOutput *string) {
 	}
 
 	// Get wordlists for the range
-	utils.GetWordlists(OptVVerbose)
+	if err := utils.GetWordlists(OptVVerbose); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("wordlist warning: %v", err))
+	}
 
 	// run nbtscan-unixwiz
 	nbtscanArgs := []string{"nbtscan-unixwiz", "-f", targetRange}
@@ -327,7 +347,8 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	// Check how many of them are likely
 	file, err := os.Open(msfEternalBluePath)
 	if err != nil {
-		log.Fatal(err)
+		utils.ErrorMsg(fmt.Sprintf("Error opening eternal blue results file: %v", err))
+		return
 	}
 	defer func(file *os.File) {
 		err := file.Close()
@@ -339,7 +360,7 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	confirmedFile := fmt.Sprintf("%seternalblue_confirmed.txt", dir)
 	confirmed, err := os.Create(confirmedFile)
 	if err != nil {
-		fmt.Println(err)
+		utils.ErrorMsg(fmt.Sprintf("Error creating confirmed file: %v", err))
 		return
 	}
 	defer func(confirmed *os.File) {
@@ -352,7 +373,7 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	scanner := bufio.NewScanner(file)
 	if err := scanner.Err(); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error while creating new scanner on file %s: %s", msfEternalBluePath, err))
-		log.Fatal(err)
+		return
 	}
 
 	for scanner.Scan() {
@@ -378,41 +399,83 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 
 // Goroutine for eternalBlueSweepCheck()
 func callEternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string, OptVVerbose *bool) {
-	utils.Wg.Add(1)
-
-	go func(msfEternalBlueArgs []string, msfEternalBluePath, dir string) {
-		defer utils.Wg.Done()
-
+	runAsync(func() {
 		eternalBlueSweepCheck(msfEternalBlueArgs, msfEternalBluePath, dir, OptVVerbose)
-	}(msfEternalBlueArgs, msfEternalBluePath, dir)
+	})
 }
 
+// CallWPEnumeration is an async wrapper for WordPress enumeration.
 func CallWPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
-	utils.Wg.Add(1)
-
-	go func(targetUrl, caseDir, port string, OptVVerbose *bool) {
-		defer utils.Wg.Done()
+	runAsync(func() {
 		WPEnumeration(targetUrl, caseDir, port, OptVVerbose)
-	}(targetUrl, caseDir, port, OptVVerbose)
+	})
 }
 
+// CallTomcatEnumeration is an async wrapper for Tomcat enumeration.
 func CallTomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool) {
-	utils.Wg.Add(1)
-
-	go func(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool) {
-		defer utils.Wg.Done()
+	runAsync(func() {
 		tomcatEnumeration(target, targetUrl, caseDir, port, OptBrute, OptVVerbose)
-	}(target, targetUrl, caseDir, port, OptBrute, OptVVerbose)
+	})
 }
 
 // CallRunCewlandFfufKeywords is a Goroutine for runCewlandFfufKeywords()
 func CallRunCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
+	runAsync(func() {
+		runCewlandFfufKeywords(target, caseDir, port, OptVVerbose)
+	})
+}
+
+// AsyncFunc is the function signature for async functions
+type AsyncFunc func()
+
+// NmapScanFunc is the function signature for nmap scan functions that return error
+type NmapScanFunc func() error
+
+// runAsync is a simple helper to run a function asynchronously with WaitGroup tracking and worker pool throttling
+func runAsync(fn AsyncFunc) {
+	utils.Wg.Add(1)
+	go func() {
+		defer utils.Wg.Done()
+
+		// Acquire a worker slot (blocks if pool is full)
+		pool := utils.GetWorkerPool()
+		if !pool.Acquire() {
+			// Shutdown in progress, skip
+			return
+		}
+		defer pool.Release()
+
+		fn()
+	}()
+}
+
+// runNmapScanAsync is a generic helper to run nmap scans asynchronously with tool registration and worker pool throttling
+// It handles: WaitGroup, tool registration, goroutine spawning, error handling, success printing, and concurrency limiting
+func runNmapScanAsync(toolName string, port string, outFile string, scanFunc NmapScanFunc) {
+	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
-	go func(target, caseDir, port string, OptVVerbose *bool) {
+	go func(name, portNum, outputFile string) {
 		defer utils.Wg.Done()
-		runCewlandFfufKeywords(target, caseDir, port, OptVVerbose)
-	}(target, caseDir, port, OptVVerbose)
+
+		// Acquire a worker slot (blocks if pool is full)
+		pool := utils.GetWorkerPool()
+		if !pool.Acquire() {
+			// Shutdown in progress, skip this tool
+			utils.ToolRegistry.CompleteTool(name, false)
+			return
+		}
+		defer pool.Release()
+
+		utils.ToolRegistry.StartTool(name)
+		if err := scanFunc(); err != nil {
+			utils.ErrorMsg(fmt.Sprintf("%s failed: %v", name, err))
+			utils.ToolRegistry.CompleteTool(name, false)
+			return
+		}
+		utils.ToolRegistry.CompleteTool(name, true)
+		printToolSuccess(portNum, name, outputFile+".nmap")
+	}(toolName, port, outFile)
 }
 
 // extractPortFromPath extracts port number from file path for tool naming
@@ -454,7 +517,7 @@ func extractPortFromPath(filePath string) string {
 	return ""
 }
 
-// CallRunTool is a Goroutine for runTool()
+// CallRunTool is a Goroutine for runTool() with worker pool throttling
 func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 	toolName := args[0]
 	port := extractPortFromPath(filePath)
@@ -468,6 +531,15 @@ func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 	go func(args []string, filePath string, OptVVerbose *bool, name, portNum string) {
 		defer utils.Wg.Done()
 
+		// Acquire a worker slot (blocks if pool is full)
+		pool := utils.GetWorkerPool()
+		if !pool.Acquire() {
+			// Shutdown in progress, skip this tool
+			utils.ToolRegistry.CompleteTool(name, false)
+			return
+		}
+		defer pool.Release()
+
 		utils.ToolRegistry.StartTool(name)
 		runTool(args, filePath, portNum, OptVVerbose)
 		utils.ToolRegistry.CompleteTool(name, true)
@@ -477,84 +549,44 @@ func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 // CallIndividualPortScannerWithNSEScripts is a Goroutine for individualPortScannerWithNSEScripts()
 func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts string, OptVVerbose *bool) {
 	toolName := fmt.Sprintf("nmap NSE on port %s", port)
-	utils.ToolRegistry.RegisterTool(toolName)
-	utils.Wg.Add(1)
-
-	go func(target, port, outFile, scripts string, OptVVerbose *bool, name string) {
-		defer utils.Wg.Done()
-
-		utils.ToolRegistry.StartTool(name)
-		scans.IndividualPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
-		utils.ToolRegistry.CompleteTool(name, true)
-		printToolSuccess(port, "nmap NSE", outFile+".nmap")
-	}(target, port, outFile, scripts, OptVVerbose, toolName)
+	runNmapScanAsync(toolName, port, outFile, func() error {
+		return scans.IndividualPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
+	})
 }
 
 // CallIndividualPortScannerWithNSEScriptsAndScriptArgs is a Goroutine for scans.IndividualPortScannerWithNSEScriptsAndScriptArgs()
 func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string, OptVVerbose *bool) {
 	toolName := fmt.Sprintf("nmap NSE with args on port %s", port)
-	utils.ToolRegistry.RegisterTool(toolName)
-	utils.Wg.Add(1)
-
-	go func(target, port, outFile, scripts string, scriptArgs map[string]string, OptVVerbose *bool, name string) {
-		defer utils.Wg.Done()
-
-		utils.ToolRegistry.StartTool(name)
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting nmap scan against port(s) '", port, "' on target '", target, "' and sending it to the background")
-		scans.IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs, OptVVerbose)
-		utils.ToolRegistry.CompleteTool(name, true)
-		printToolSuccess(port, "nmap NSE with args", outFile+".nmap")
-	}(target, port, outFile, scripts, scriptArgs, OptVVerbose, toolName)
+	runNmapScanAsync(toolName, port, outFile, func() error {
+		return scans.IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs, OptVVerbose)
+	})
 }
 
 // CallIndividualUDPPortScannerWithNSEScripts is a Goroutine for scans.IndividualUDPPortScannerWithNSEScripts()
 func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string, OptVVerbose *bool) {
 	toolName := fmt.Sprintf("nmap UDP on port %s", port)
-	utils.ToolRegistry.RegisterTool(toolName)
-	utils.Wg.Add(1)
-
-	go func(target, port, outFile, scripts string, OptVVerbose *bool, name string) {
-		defer utils.Wg.Done()
-
-		utils.ToolRegistry.StartTool(name)
-		scans.IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
-		utils.ToolRegistry.CompleteTool(name, true)
-		printToolSuccess(port, "nmap UDP", outFile+".nmap")
-	}(target, port, outFile, scripts, OptVVerbose, toolName)
+	runNmapScanAsync(toolName, port, outFile, func() error {
+		return scans.IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
+	})
 }
 
 // CallIndividualPortScanner is a Goroutine for scans.IndividualPortScanner()
 func CallIndividualPortScanner(target, port, outFile string, OptVVerbose *bool) {
 	toolName := fmt.Sprintf("nmap on port %s", port)
-	utils.ToolRegistry.RegisterTool(toolName)
-	utils.Wg.Add(1)
-
-	go func(target, port, outFile string, OptVVerbose *bool, name string) {
-		defer utils.Wg.Done()
-
-		utils.ToolRegistry.StartTool(name)
-		scans.IndividualPortScanner(target, port, outFile, OptVVerbose)
-		utils.ToolRegistry.CompleteTool(name, true)
-		printToolSuccess(port, "nmap", outFile+".nmap")
-	}(target, port, outFile, OptVVerbose, toolName)
+	runNmapScanAsync(toolName, port, outFile, func() error {
+		return scans.IndividualPortScanner(target, port, outFile, OptVVerbose)
+	})
 }
 
 // CallFullAggressiveScan is a Goroutine for scans.FullAggressiveScan()
 func CallFullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
 	toolName := "nmap full aggressive scan"
-	utils.ToolRegistry.RegisterTool(toolName)
-	utils.Wg.Add(1)
-
-	go func(target, ports, outFile string, OptVVerbose *bool, name string) {
-		defer utils.Wg.Done()
-
-		utils.ToolRegistry.StartTool(name)
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on'", target, "' and sending it to the background")
-		ports = ports + ",1337" // Adding one likely closed port for OS fingerprinting purposes
-		scans.FullAggressiveScan(target, ports, outFile, OptVVerbose)
-		utils.ToolRegistry.CompleteTool(name, true)
-		printToolSuccess("", "nmap full aggressive", outFile+".nmap")
-	}(target, ports, outFile, OptVVerbose, toolName)
+	// Adding one likely closed port for OS fingerprinting purposes
+	portsWithClosed := ports + ",1337"
+	runNmapScanAsync(toolName, "", outFile, func() error {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on '", target, "' and sending it to the background")
+		return scans.FullAggressiveScan(target, portsWithClosed, outFile, OptVVerbose)
+	})
 }
 
 /* --------------------------------
@@ -621,7 +653,7 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 			}
 		}
 
-		// TODO: add flags to pass azure creds?
+		// Future: Add CLI flags to pass Azure credentials for non-interactive auth
 		commandToRun = fmt.Sprintf("scout %s --no-browser --report-dir %s", provider, filePath)
 
 	case "prowler":
@@ -687,6 +719,11 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 
 // runCloudTool is a new version of runTool for cloud - Announce cloud tool and run it
 func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
+	// Check if shutdown is in progress before starting
+	if utils.IsShuttingDown() {
+		return
+	}
+
 	tool := args[0]
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
@@ -694,7 +731,9 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	utils.PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> About to run ", tool, " against ", cmdArgs[0], " using the following command: ", strings.Join(args, " "))
 	announceCloudTool(tool)
 
-	cmd := exec.Command(tool, cmdArgs...)
+	// Use CommandContext to allow cancellation via global context
+	ctx := utils.GetGlobalContext()
+	cmd := exec.CommandContext(ctx, tool, cmdArgs...)
 
 	// Create a pipe to capture the command's output
 	stdout, err := cmd.StdoutPipe()
@@ -754,6 +793,11 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 
 	// Wait for the command to complete
 	if err := cmd.Wait(); err != nil {
+		// Check if the error was due to context cancellation (shutdown)
+		if ctx.Err() == context.Canceled {
+			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Cloud tool '", tool, "' terminated due to shutdown")
+			return
+		}
 		if tool == "nikto" || tool == "fping" {
 			// Nikto and fping don't have a clean exit
 			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
@@ -762,7 +806,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 			}
 			return
 		} else {
-			fmt.Println(utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
+			utils.PrintSafe("%s %s %s %s\n", utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
 			return
 		}
 	}

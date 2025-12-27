@@ -23,10 +23,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Additional infra tools
     ident-user-enum nbtscan-unixwiz responder rusers \
     onesixtyone snmp braa ldap-utils \
-    # Metasploit and Seclists (required for wordlists)
-    metasploit-framework seclists \
+    # Metasploit (for enumeration modules)
+    metasploit-framework \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Download only the specific SecLists wordlists we need instead of full 1.9GB package
+# This reduces image size from ~3GB to ~1GB
+RUN mkdir -p /usr/share/seclists/Discovery/Web-Content \
+    && mkdir -p /usr/share/seclists/Passwords \
+    && mkdir -p /usr/share/seclists/Usernames \
+    && mkdir -p /usr/share/seclists/Discovery/SNMP \
+    && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/raft-medium-directories-lowercase.txt \
+        -o /usr/share/seclists/Discovery/Web-Content/raft-medium-directories-lowercase.txt \
+    && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/darkweb2017-top1000.txt \
+        -o /usr/share/seclists/Passwords/darkweb2017-top1000.txt \
+    && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/web-extensions.txt \
+        -o /usr/share/seclists/Discovery/Web-Content/web-extensions.txt \
+    && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Usernames/top-usernames-shortlist.txt \
+        -o /usr/share/seclists/Usernames/top-usernames-shortlist.txt \
+    && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/SNMP/snmp-onesixtyone.txt \
+        -o /usr/share/seclists/Discovery/SNMP/snmp-onesixtyone.txt
 
 # Install ODAT if available (may not be on all architectures)
 RUN apt-get update && apt-get install -y odat || true \

@@ -9,7 +9,7 @@ import (
 	"github.com/pborman/getopt/v2"
 )
 
-func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutput, OptTarget *string) int {
+func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutput, OptTarget *string) (int, error) {
 	// Parse optional infra arguments, getting rid of the 'infra' arg
 	os.Args = os.Args[1:]
 	getopt.Parse()
@@ -28,7 +28,7 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 		utils.ErrorMsg("No arguments were provided.")
 		printInfraUsage()
 		utils.PrintInfraUsageExamples()
-		os.Exit(1)
+		return 0, fmt.Errorf("no arguments provided")
 	}
 
 	// Check 2: Help flag or nmap flag passed?
@@ -65,13 +65,16 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 	}
 
 	// Call check 5
-	checkFive(OptTarget)
+	if err := checkFive(OptTarget); err != nil {
+		return 0, err
+	}
 
 	// Call check 6
 	checkSix(OptOutput, OptQuiet, OptVVerbose)
 
 	// Check 8: Determine whether it is a single target or multi-target and return number of lines
-	return checkSeven(OptTarget)
+	lines, err := checkSeven(OptTarget)
+	return lines, err
 
 	// End of checks
 }
@@ -89,16 +92,18 @@ func printInfraUsage() {
 	fmt.Println("  -q, --quiet          Don't print the banner and decrease overall verbosity")
 	fmt.Println("  -r, --range CIDR     Specify a CIDR range to use tools for whole subnets")
 	fmt.Println("  -t, --target TARGET  Specify target single IP / List of IPs file (required)")
+	fmt.Println("  -T, --timeout MINS   Maximum time in minutes for long-running tools (default: 10)")
 	fmt.Println("  -V, --vv             Flood your terminal with plenty of verbosity!")
 	fmt.Println()
 }
 
 // checkFive ensures there's a valid target
-func checkFive(OptTarget *string) {
+func checkFive(OptTarget *string) error {
 	if *OptTarget == "" {
 		utils.ErrorMsg("You must provide an IP address or targets file with the flag -t to start the attack.")
-		os.Exit(1)
+		return fmt.Errorf("no target provided")
 	}
+	return nil
 }
 
 // checkSix ensures base output directory is correctly set and exists
@@ -117,13 +122,13 @@ func checkSix(OptOutput *string, OptQuiet, OptVVerbose *bool) {
 }
 
 // checkSeven finishes this section by returning number of lines if multi-target or 0 if single-target
-func checkSeven(OptTarget *string) int {
+func checkSeven(OptTarget *string) (int, error) {
 	targetInput := net.ParseIP(*OptTarget)
 
 	// Check if it's a valid IP address (IPv4 or IPv6)
 	if targetInput != nil {
 		// Valid IP - single target mode
-		return 0
+		return 0, nil
 	}
 
 	// Not a valid IP - try to resolve as hostname/URL
@@ -133,17 +138,17 @@ func checkSeven(OptTarget *string) int {
 		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Resolved hostname '", *OptTarget, "' to IP: ", resolvedIP)
 		// Update OptTarget to use the resolved IP for scanning
 		*OptTarget = resolvedIP
-		return 0
+		return 0, nil
 	}
 
 	// Not a valid IP or hostname - assume it's a targets file
 	// Validate file exists before attempting to read
 	if err := utils.ValidateFilePath(*OptTarget); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Target validation failed: %v", err))
-		os.Exit(1)
+		return 0, fmt.Errorf("target validation failed: %w", err)
 	}
 
 	// Multi-target. Check file exists and get lines
 	_, totalLines := utils.ReadTargetsFile(OptTarget)
-	return totalLines
+	return totalLines, nil
 }

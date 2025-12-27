@@ -9,31 +9,30 @@ import (
 // TestCheckFive tests target validation
 func TestCheckFive(t *testing.T) {
 	tests := []struct {
-		name      string
-		target    string
-		shouldExit bool
+		name       string
+		target     string
+		wantErr    bool
 	}{
 		{
-			name:      "valid target",
-			target:    "192.168.1.1",
-			shouldExit: false,
+			name:    "valid target",
+			target:  "192.168.1.1",
+			wantErr: false,
 		},
 		{
-			name:      "empty target",
-			target:    "",
-			shouldExit: true,
+			name:    "empty target",
+			target:  "",
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.shouldExit {
-				// For tests that should exit, we can't easily test os.Exit()
-				// In a real scenario, you'd refactor to return errors instead
-				t.Skip("Skipping test that calls os.Exit()")
-			} else {
-				// Test non-exiting path
-				checkFive(&tt.target)
+			err := checkFive(&tt.target)
+			if tt.wantErr && err == nil {
+				t.Errorf("checkFive() expected error for empty target, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("checkFive() unexpected error: %v", err)
 			}
 		})
 	}
@@ -118,7 +117,11 @@ func TestCheckSeven(t *testing.T) {
 			}
 
 			targetCopy := tt.target
-			result := checkSeven(&targetCopy)
+			result, err := checkSeven(&targetCopy)
+			if err != nil {
+				t.Errorf("checkSeven() returned unexpected error: %v", err)
+				return
+			}
 
 			if result != tt.wantLines {
 				t.Errorf("checkSeven() = %d, want %d", result, tt.wantLines)
@@ -152,9 +155,11 @@ func TestCheckSevenInvalidCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// These tests would normally call os.Exit(1)
-			// In production code, consider refactoring to return errors
-			t.Skip("Skipping test that calls os.Exit()")
+			targetCopy := tt.target
+			_, err := checkSeven(&targetCopy)
+			if err == nil {
+				t.Errorf("checkSeven() expected error for invalid target %q, got nil", tt.target)
+			}
 		})
 	}
 }
@@ -213,7 +218,10 @@ func TestInfraFlow(t *testing.T) {
 			}
 
 			// Test checkSeven
-			lines := checkSeven(&tt.target)
+			lines, err := checkSeven(&tt.target)
+			if err != nil {
+				t.Errorf("checkSeven() returned unexpected error: %v", err)
+			}
 			if lines != 0 {
 				t.Errorf("checkSeven() for single target returned %d, want 0", lines)
 			}

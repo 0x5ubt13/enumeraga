@@ -15,8 +15,7 @@ func Run(provider string, OptVVerbose *bool) {
 	}
 	fmt.Println(utils.Debug("[?] Debug -> providerDir = ", providerDir))
 
-	// Launch scoutsuite's function inside commands.
-	//TODO: think: change to goroutine??? Probs too much smashing the cloud provider??
+	// Launch cloud scanning tools sequentially to avoid rate limiting from cloud providers
 	// Add more tools here, then complete switch case in commands.PrepCloudTool()
 	runTool("scoutsuite", provider, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
 	runTool("prowler", provider, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)

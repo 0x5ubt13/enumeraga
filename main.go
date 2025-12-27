@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -17,6 +18,12 @@ import (
 
 // Main logic of Enumeraga infra
 func main() {
+	// Initialize global context with signal handling for graceful shutdown
+	utils.InitGlobalContext()
+
+	// Initialize worker pool for concurrent tool execution (limits goroutines)
+	utils.InitWorkerPool(0) // 0 = use default (20 concurrent tools)
+
 	// Show version info
 	if utils.Version != "dev" {
 		fmt.Printf("%s\n", utils.GetVersion())
@@ -25,7 +32,10 @@ func main() {
 	}
 
 	// Perform pre-flight checks and get number of lines if cloud logic hasn't kicked off.
-	totalLines := checks.Run()
+	totalLines, err := checks.Run()
+	if err != nil {
+		os.Exit(1)
+	}
 
 	// Timing the execution
 	start := time.Now()
@@ -76,7 +86,9 @@ func targetInit(totalLines int) error {
 		if !*checks.OptQuiet {
 			fmt.Printf("%s\n", utils.Cyan("[*] Bruteforce flag detected. Activating fuzzing and bruteforce tools where applicable."))
 		}
-		utils.GetWordlists(checks.OptVVerbose)
+		if err := utils.GetWordlists(checks.OptVVerbose); err != nil {
+			utils.ErrorMsg(fmt.Sprintf("Failed to locate wordlists: %v", err))
+		}
 	}
 
 	// If not single target, initialise multi target flow
@@ -97,18 +109,34 @@ func targetInit(totalLines int) error {
 	return nil
 }
 
-func sweepPorts() ([]nmap.Host, []nmap.Host) {
+func sweepPorts() ([]nmap.Host, []nmap.Host, error) {
+	var tcpHosts, udpHosts []nmap.Host
+	var tcpErr, udpErr error
+
 	// If top ports flag passed, branch to use a common ports scan instead
 	if *checks.OptTopPorts != "" {
-		return scans.TcpPortSweepWithTopPorts(utils.Target, checks.OptTopPorts, checks.OptVVerbose),
-			scans.UdpPortSweep(utils.Target, checks.OptVVerbose)
+		tcpHosts, tcpErr = scans.TcpPortSweepWithTopPorts(utils.Target, checks.OptTopPorts, checks.OptVVerbose)
+		udpHosts, udpErr = scans.UdpPortSweep(utils.Target, checks.OptVVerbose)
+	} else if utils.TimesSwept == 0 {
+		tcpHosts, tcpErr = scans.TcpPortSweep(utils.Target, checks.OptVVerbose)
+		udpHosts, udpErr = scans.UdpPortSweep(utils.Target, checks.OptVVerbose)
+	} else {
+		tcpHosts, tcpErr = scans.SlowerTcpPortSweep(utils.Target, checks.OptVVerbose)
+		udpHosts, udpErr = scans.SlowerUdpPortSweep(utils.Target, checks.OptVVerbose)
 	}
 
-	if utils.TimesSwept == 0 {
-		return scans.TcpPortSweep(utils.Target, checks.OptVVerbose), scans.UdpPortSweep(utils.Target, checks.OptVVerbose)
+	// Combine errors if both failed
+	if tcpErr != nil && udpErr != nil {
+		return nil, nil, fmt.Errorf("TCP scan error: %v; UDP scan error: %v", tcpErr, udpErr)
+	}
+	if tcpErr != nil {
+		utils.ErrorMsg(fmt.Sprintf("TCP scan failed: %v", tcpErr))
+	}
+	if udpErr != nil {
+		utils.ErrorMsg(fmt.Sprintf("UDP scan failed: %v", udpErr))
 	}
 
-	return scans.SlowerTcpPortSweep(utils.Target, checks.OptVVerbose), scans.SlowerUdpPortSweep(utils.Target, checks.OptVVerbose)
+	return tcpHosts, udpHosts, nil
 }
 
 // Run all phases of scanning using a single target
@@ -136,7 +164,10 @@ func singleTarget(target string, baseFilePath string) error {
 
 	// Perform ports sweep
 	utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Sweeping TCP and UDP ports on target '", target, "', please wait...")
-	sweptHostTcp, sweptHostUdp := sweepPorts()
+	sweptHostTcp, sweptHostUdp, sweepErr := sweepPorts()
+	if sweepErr != nil {
+		return fmt.Errorf("port sweep failed: %w", sweepErr)
+	}
 
 	// Save open ports in dedicated slice
 	// Convert slice to nmap-friendly formatted numbers
@@ -148,14 +179,18 @@ func singleTarget(target string, baseFilePath string) error {
 	// Introducing a control to repeat the scan in case there are no ports or there is only one port open
 	// Do it only once
 	if len(openPorts) <= 1 && utils.TimesSwept == 1 {
-		sweptHostTcpSecond, sweptHostUdpSecond := sweepPorts()
-		openPortsSliceSecondTry := utils.GetOpenPortsSlice(sweptHostTcpSecond, sweptHostUdpSecond)
-
-		if len(openPortsSliceSecondTry) > len(openPortsSlice) {
-			openPorts = utils.RemoveDuplicates(strings.Join(openPortsSliceSecondTry, ","))
-			utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] More ports found in the second slow run for target '", target, "'.")
+		sweptHostTcpSecond, sweptHostUdpSecond, secondSweepErr := sweepPorts()
+		if secondSweepErr != nil {
+			utils.ErrorMsg(fmt.Sprintf("Second port sweep failed: %v", secondSweepErr))
 		} else {
-			utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] No further ports were found in the second slow run for target '", target, "'.")
+			openPortsSliceSecondTry := utils.GetOpenPortsSlice(sweptHostTcpSecond, sweptHostUdpSecond)
+
+			if len(openPortsSliceSecondTry) > len(openPortsSlice) {
+				openPorts = utils.RemoveDuplicates(strings.Join(openPortsSliceSecondTry, ","))
+				utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] More ports found in the second slow run for target '", target, "'.")
+			} else {
+				utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] No further ports were found in the second slow run for target '", target, "'.")
+			}
 		}
 	}
 
@@ -207,6 +242,9 @@ func multiTarget(targetsFile *string) {
 	}
 
 	for i := 0; i < lines; i++ {
+		// Reset visited flags for each new target to allow fresh enumeration
+		utils.ResetVisitedFlags()
+
 		target := targets[i]
 
 		// Clean up trailing not alphanumeric characters in target

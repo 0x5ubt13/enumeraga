@@ -2,51 +2,67 @@ package portsIterator
 
 import (
 	"fmt"
-	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"os/exec"
+	"strconv"
 	"strings"
 
+	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
-// Enumerate File Transfer Protocol (20-21/TCP)
-func ftp() {
-	if utils.VisitedFTP {
+// getTimeoutSeconds returns the configured timeout in seconds as a string.
+// Uses ToolTimeout (in minutes) from utils package.
+func getTimeoutSeconds() string {
+	return strconv.Itoa(utils.ToolTimeout * 60)
+}
+
+// buildOutputPath constructs a standardized output file path for a tool.
+func buildOutputPath(dir, toolName string) string {
+	return fmt.Sprintf("%s%s.out", dir, toolName)
+}
+
+// runHydraBrute runs hydra brute force attack for a given service if brute mode is enabled.
+func runHydraBrute(service, dir string) {
+	if !*checks.OptBrute {
 		return
 	}
-	utils.VisitedFTP = true
-
-	ftpDir := utils.ProtocolDetected("FTP", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "20,21", ftpDir+"ftp_scan", "ftp-* and not brute", checks.OptVVerbose)
-
-	// Hydra for FTP
-	if *checks.OptBrute {
-		hydraArgs := []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ftp", utils.Target)}
-		hydraPath := fmt.Sprintf("%shydra_ftp.out", ftpDir)
-		commands.CallRunTool(hydraArgs, hydraPath, checks.OptVVerbose)
+	hydraArgs := []string{
+		"hydra",
+		"-L", utils.UsersList,
+		"-P", utils.DarkwebTop1000,
+		"-f",
+		"-t", "4",
+		"-W", "30",
+		fmt.Sprintf("%s://%s", service, utils.Target),
 	}
+	hydraPath := buildOutputPath(dir, "hydra_"+service)
+	commands.CallRunTool(hydraArgs, hydraPath, checks.OptVVerbose)
+}
+
+// Enumerate File Transfer Protocol (20-21/TCP)
+func ftp() {
+	if utils.IsVisited("ftp") {
+		return
+	}
+
+	dir := utils.ProtocolDetected("FTP", utils.BaseDir)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "20,21", dir+"ftp_scan", "ftp-* and not brute", checks.OptVVerbose)
+	runHydraBrute("ftp", dir)
 }
 
 // Enumerate Secure Shell Protocol (22/TCP)
 func ssh() {
-	sshDir := utils.ProtocolDetected("SSH", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "22", sshDir+"ssh_scan", "ssh-* and not brute", checks.OptVVerbose)
-
-	// Hydra for SSH
-	if *checks.OptBrute {
-		hydraArgs := []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "ssh", utils.Target)}
-		hydraPath := fmt.Sprintf("%shydra_ssh.out", sshDir)
-		commands.CallRunTool(hydraArgs, hydraPath, checks.OptVVerbose)
-	}
+	dir := utils.ProtocolDetected("SSH", utils.BaseDir)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "22", dir+"ssh_scan", "ssh-* and not brute", checks.OptVVerbose)
+	runHydraBrute("ssh", dir)
 }
 
 // Enumerate Simple Mail Transfer Protocol (25,465,587/TCP)
 func smtp() {
-	if utils.VisitedSMTP {
+	if utils.IsVisited("smtp") {
 		return
 	}
-	utils.VisitedSMTP = true
 
 	smtpDir := utils.ProtocolDetected("SMTP", utils.BaseDir)
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "25,465,587", smtpDir+"smtp_scan", "smtp-commands,smtp-enum-users,smtp-open-relay", checks.OptVVerbose)
@@ -61,20 +77,17 @@ func dns() {
 // Enumerate Finger (79/TCP)
 func finger() {
 	dir := utils.ProtocolDetected("Finger", utils.BaseDir)
-	nmapOutputFile := dir + "finger_scan"
-	commands.CallIndividualPortScanner(utils.Target, "79", nmapOutputFile, checks.OptVVerbose)
+	commands.CallIndividualPortScanner(utils.Target, "79", dir+"finger_scan", checks.OptVVerbose)
 
 	msfArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", utils.Target)}
-	msfPath := fmt.Sprintf("%smsfconsole.out", dir)
-	commands.CallRunTool(msfArgs, msfPath, checks.OptVVerbose)
+	commands.CallRunTool(msfArgs, buildOutputPath(dir, "msfconsole"), checks.OptVVerbose)
 }
 
 // Enumerate HyperText Transfer Protocol (80,443,8080/TCP)
 func http() {
-	if utils.VisitedHTTP {
+	if utils.IsVisited("http") {
 		return
 	}
-	utils.VisitedHTTP = true
 
 	dir := utils.ProtocolDetected("HTTP", utils.BaseDir)
 	commands.CallIndividualPortScanner(utils.Target, "80,443,8080", dir+"http_scan", checks.OptVVerbose)
@@ -83,8 +96,8 @@ func http() {
 	// WordPress on port 80
 	commands.CallWPEnumeration(fmt.Sprintf("http://%s:80", utils.Target), dir, "80", checks.OptVVerbose)
 
-	// Nikto on port 80 (with 10 minute timeout)
-	nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", utils.Target), "-maxtime", "600"}
+	// Nikto on port 80 (with configurable timeout)
+	nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", utils.Target), "-maxtime", getTimeoutSeconds()}
 	nikto80Path := fmt.Sprintf("%snikto_80.out", dir)
 	commands.CallRunTool(nikto80Args, nikto80Path, checks.OptVVerbose)
 
@@ -100,11 +113,10 @@ func http() {
 
 	// Dirsearch - Light dirbusting on port 80
 	dirsearch80Path := fmt.Sprintf("%sdirsearch_80.out", dir)
-	dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s:80", utils.Target), "-o", dirsearch80Path, "--max-time", "600", "--quiet"}
+	dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s:80", utils.Target), "-o", dirsearch80Path, "--max-time", getTimeoutSeconds(), "--quiet"}
 	commands.CallRunTool(dirsearch80Args, dirsearch80Path, checks.OptVVerbose)
 
 	if *checks.OptBrute {
-		// TODO: check why ffuf doesn't work
 		// CeWL + Ffuf Keywords Bruteforcing
 		commands.CallRunCewlandFfufKeywords(utils.Target, dir, "80", checks.OptVVerbose)
 		commands.CallRunCewlandFfufKeywords(utils.Target, dir, "443", checks.OptVVerbose)
@@ -115,8 +127,8 @@ func http() {
 	// WordPress on port 443
 	commands.CallWPEnumeration(fmt.Sprintf("https://%s:443", utils.Target), dir, "443", checks.OptVVerbose)
 
-	// Nikto on port 443 (with 10 minute timeout)
-	nikto443Args := []string{"nikto", "-host", fmt.Sprintf("https://%s:443", utils.Target), "-maxtime", "600"}
+	// Nikto on port 443 (with configurable timeout)
+	nikto443Args := []string{"nikto", "-host", fmt.Sprintf("https://%s:443", utils.Target), "-maxtime", getTimeoutSeconds()}
 	nikto443Path := fmt.Sprintf("%snikto_443.out", dir)
 	commands.CallRunTool(nikto443Args, nikto443Path, checks.OptVVerbose)
 
@@ -132,7 +144,7 @@ func http() {
 
 	// Dirsearch - Light dirbusting on port 443
 	dirsearch443Path := fmt.Sprintf("%sdirsearch_443.out", dir)
-	dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s:443", utils.Target), "-o", dirsearch443Path, "--max-time", "600", "--quiet"}
+	dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s:443", utils.Target), "-o", dirsearch443Path, "--max-time", getTimeoutSeconds(), "--quiet"}
 	commands.CallRunTool(dirsearch443Args, dirsearch443Path, checks.OptVVerbose)
 
 	// TestSSL on port 443
@@ -143,7 +155,8 @@ func http() {
 		}
 	}
 
-	testsslArgs := []string{testssl, fmt.Sprintf("https://%s:443", utils.Target)}
+	// testssl with 10 minute timeout (--connect-timeout applies per connection)
+	testsslArgs := []string{testssl, "--connect-timeout", "30", "--openssl-timeout", "30", fmt.Sprintf("https://%s:443", utils.Target)}
 	testsslPath := fmt.Sprintf("%stestssl.out", dir)
 	commands.CallRunTool(testsslArgs, testsslPath, checks.OptVVerbose)
 
@@ -176,10 +189,9 @@ func kerberos() {
 
 // Enumerate Internet Message Access Protocol (110,143,993,995/TCP)
 func imap() {
-	if utils.VisitedIMAP {
+	if utils.IsVisited("imap") {
 		return
 	}
-	utils.VisitedIMAP = true
 
 	dir := utils.ProtocolDetected("IMAP-POP3", utils.BaseDir)
 	nmapOutputFile := dir + "imap_pop3_scan"
@@ -236,10 +248,9 @@ func msrpc() {
 
 // Enumerate NetBIOS / Server Message Block Protocol (137-139,445/TCP - 137/UDP)
 func smb() {
-	if utils.VisitedSMB {
+	if utils.IsVisited("smb") {
 		return
 	}
-	utils.VisitedSMB = true
 	dir := utils.ProtocolDetected("NetBIOS-SMB", utils.BaseDir)
 
 	// Nmap
@@ -278,14 +289,11 @@ func smb() {
 }
 
 // Enumerate Simple Network Management Protocol (161-162,10161-10162/UDP)
+// Future enhancement: Wait for onesixtyone to find community strings, then loop over found CS
 func snmp() {
-	// TODO: (outstanding from AutoEnum)
-	// Hold on all SNMP enumeration until onesixtyone has finished bruteforcing community strings
-	// then launch the tools in a loop against all the found CS
-	if utils.VisitedSNMP {
+	if utils.IsVisited("snmp") {
 		return
 	}
-	utils.VisitedSNMP = true
 	dir := utils.ProtocolDetected("SNMP", utils.BaseDir)
 
 	// Nmap
@@ -312,10 +320,9 @@ func snmp() {
 
 // Enumerate Light Desktop Access Protocol (389,636,3268-3269/TCP)
 func ldap() {
-	if utils.VisitedLDAP {
+	if utils.IsVisited("ldap") {
 		return
 	}
-	utils.VisitedLDAP = true
 	dir := utils.ProtocolDetected("LDAP", utils.BaseDir)
 
 	// Nmap
@@ -366,10 +373,9 @@ func ldap() {
 
 // Enumerate Berkeley R-services (512-514/TCP)
 func rservices() {
-	if utils.VisitedRsvc {
+	if utils.IsVisited("rsvc") {
 		return
 	}
-	utils.VisitedRsvc = true
 	dir := utils.ProtocolDetected("RServices", utils.BaseDir)
 
 	// Nmap
@@ -457,10 +463,17 @@ func tns() {
 	nmapNSEScripts := "oracle-sid-brute"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "1521", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
 
-	// TODO: Check executing this: odat all -s "${1}" >> "${tns_dir}odat.out" &&
-	startSentence := "[!] Run this manually: '"
-	midSentence := fmt.Sprintf("odat all --output-file %sodat.out -s %s", dir, utils.Target)
-	utils.PrintCustomBiColourMsg("yellow", "cyan", startSentence, midSentence, "'")
+	// ODAT - Oracle Database Attacking Tool
+	if utils.CheckToolExists("odat") {
+		odatArgs := []string{"odat", "all", "-s", utils.Target}
+		odatPath := fmt.Sprintf("%sodat.out", dir)
+		commands.CallRunTool(odatArgs, odatPath, checks.OptVVerbose)
+	} else {
+		// Provide manual command if odat not installed
+		startSentence := "[!] ODAT not found. Run this manually: '"
+		midSentence := fmt.Sprintf("odat all --output-file %sodat.out -s %s", dir, utils.Target)
+		utils.PrintCustomBiColourMsg("yellow", "cyan", startSentence, midSentence, "'")
+	}
 }
 
 // Enumerate Network File System Protocol (2049/TCP)
@@ -534,50 +547,34 @@ func nfs() {
 // Enumerate MySQL server (3306/TCP)
 func mysql() {
 	dir := utils.ProtocolDetected("MYSQL", utils.BaseDir)
-	nmapOutputFile := dir + "mysql_scan"
-	nmapNSEScripts := "mysql*"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3306", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
-	// Hydra for MySQL
-	if *checks.OptBrute {
-		hydraArgs := []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "mysql", utils.Target)}
-		hydraPath := fmt.Sprintf("%shydra_mysql.out", dir)
-		commands.CallRunTool(hydraArgs, hydraPath, checks.OptVVerbose)
-	}
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3306", dir+"mysql_scan", "mysql*", checks.OptVVerbose)
+	runHydraBrute("mysql", dir)
 }
 
 // Enumerate Remote Desktop Protocol (3389/TCP)
 func rdp() {
 	dir := utils.ProtocolDetected("RDP", utils.BaseDir)
-	nmapOutputFile := dir + "rdp_scan"
-	nmapNSEScripts := "rdp*"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3389", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
-	// Hydra for RDP
-	if *checks.OptBrute {
-		hydraArgs := []string{"hydra", "-L", utils.UsersList, "-P", utils.DarkwebTop1000, "-f", fmt.Sprintf("%s://%s", "rdp", utils.Target)}
-		hydraPath := fmt.Sprintf("%shydra_rdp.out", dir)
-		commands.CallRunTool(hydraArgs, hydraPath, checks.OptVVerbose)
-	}
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3389", dir+"rdp_scan", "rdp*", checks.OptVVerbose)
+	runHydraBrute("rdp", dir)
 }
 
 // Enumerate Windows Remote Management Protocol (5985-5968/TCP)
 func winrm() {
-	if utils.VisitedWinRM {
+	if utils.IsVisited("winrm") {
 		return
 	}
-	utils.VisitedWinRM = true
 
 	dir := utils.ProtocolDetected("WinRM", utils.BaseDir)
 	nmapOutputFile := dir + "winrm_scan"
 	commands.CallIndividualPortScanner(utils.Target, "5985,5986", nmapOutputFile, checks.OptVVerbose)
 }
 
-// Enumerate Webmin (10000/TCP)
+// Enumerate port 10000/TCP - commonly Webmin or NDMP
+// Nmap service detection will identify the actual service in output
 func tenthousand() {
-	// TODO: if not webmin, enum ndmp.
-	dir := utils.ProtocolDetected("webmin", utils.BaseDir)
-	nmapOutputFile := dir + "webmin_scan"
+	dir := utils.ProtocolDetected("port_10000", utils.BaseDir)
+	nmapOutputFile := dir + "port_10000_scan"
+	// Use service version detection to identify Webmin vs NDMP vs other
 	commands.CallIndividualPortScanner(utils.Target, "10000", nmapOutputFile, checks.OptVVerbose)
 }
 
@@ -593,7 +590,7 @@ func Run(openPortsSlice []string) {
 
 		default:
 			if *checks.OptVVerbose {
-				fmt.Printf("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
+				utils.PrintSafe("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
 			}
 		}
 	}

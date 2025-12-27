@@ -497,3 +497,151 @@ func BenchmarkRemoveDuplicates(b *testing.B) {
 		RemoveDuplicates(input)
 	}
 }
+
+// TestVisitedStateBasicFlow tests the basic visited state tracking flow
+func TestVisitedStateBasicFlow(t *testing.T) {
+	// Reset visited flags before test
+	ResetVisitedFlags()
+
+	// First check should mark as visited and return false (wasn't visited before)
+	if IsVisited("http") {
+		t.Error("HTTP should not be visited initially")
+	}
+
+	// Second check should return true (already visited)
+	if !IsVisited("http") {
+		t.Error("HTTP should be marked as visited after first call")
+	}
+
+	// Different protocol should not be affected
+	if IsVisited("smb") {
+		t.Error("SMB should not be visited initially")
+	}
+
+	// Reset should clear all flags
+	ResetVisitedFlags()
+	if IsVisited("http") {
+		t.Error("HTTP should not be visited after reset")
+	}
+}
+
+// TestVisitedStateConcurrency tests concurrent access to visited state
+func TestVisitedStateConcurrency(t *testing.T) {
+	ResetVisitedFlags()
+
+	// Use the correct protocol names as defined in VisitedState switch cases
+	protocols := []string{"http", "smb", "ldap", "ftp", "smtp", "imap", "snmp", "rsvc", "winrm"}
+	done := make(chan bool, len(protocols))
+
+	// Concurrently mark all protocols as visited
+	for _, p := range protocols {
+		go func(protocol string) {
+			_ = IsVisited(protocol)
+			done <- true
+		}(p)
+	}
+
+	// Wait for all to complete
+	for i := 0; i < len(protocols); i++ {
+		<-done
+	}
+
+	// Now verify all are marked as visited (sequential check is fine here)
+	for _, p := range protocols {
+		if !IsVisited(p) {
+			t.Errorf("Protocol %s should be visited after first access", p)
+		}
+	}
+}
+
+// TestWorkerPoolBasic tests basic worker pool operations
+func TestWorkerPoolBasic(t *testing.T) {
+	// Initialize pool with small size for testing
+	InitWorkerPool(3)
+	pool := GetWorkerPool()
+
+	if pool.GetMaxWorkers() != 3 {
+		t.Errorf("Expected max workers to be 3, got %d", pool.GetMaxWorkers())
+	}
+
+	// Acquire workers
+	if !pool.Acquire() {
+		t.Error("First acquire should succeed")
+	}
+	if pool.GetActiveWorkers() != 1 {
+		t.Errorf("Expected 1 active worker, got %d", pool.GetActiveWorkers())
+	}
+
+	if !pool.Acquire() {
+		t.Error("Second acquire should succeed")
+	}
+	if pool.GetActiveWorkers() != 2 {
+		t.Errorf("Expected 2 active workers, got %d", pool.GetActiveWorkers())
+	}
+
+	if !pool.Acquire() {
+		t.Error("Third acquire should succeed")
+	}
+	if pool.GetActiveWorkers() != 3 {
+		t.Errorf("Expected 3 active workers, got %d", pool.GetActiveWorkers())
+	}
+
+	// Release one worker
+	pool.Release()
+	if pool.GetActiveWorkers() != 2 {
+		t.Errorf("Expected 2 active workers after release, got %d", pool.GetActiveWorkers())
+	}
+
+	// Release remaining workers
+	pool.Release()
+	pool.Release()
+	if pool.GetActiveWorkers() != 0 {
+		t.Errorf("Expected 0 active workers after all releases, got %d", pool.GetActiveWorkers())
+	}
+}
+
+// TestWorkerPoolConcurrency tests concurrent worker pool operations
+func TestWorkerPoolConcurrency(t *testing.T) {
+	InitWorkerPool(5)
+	pool := GetWorkerPool()
+
+	// Drain any existing workers from previous tests
+	for pool.GetActiveWorkers() > 0 {
+		pool.Release()
+	}
+
+	done := make(chan bool, 5)
+
+	// Launch exactly 5 goroutines (matches pool size) that acquire, do work, then release
+	for i := 0; i < 5; i++ {
+		go func() {
+			if pool.Acquire() {
+				// Simulate work
+				pool.Release()
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < 5; i++ {
+		<-done
+	}
+
+	// Verify pool is back to empty state
+	if pool.GetActiveWorkers() != 0 {
+		t.Errorf("Expected 0 active workers after all complete, got %d", pool.GetActiveWorkers())
+	}
+}
+
+// TestWorkerPoolGetPool tests that GetWorkerPool returns a valid pool
+func TestWorkerPoolGetPool(t *testing.T) {
+	pool := GetWorkerPool()
+	if pool == nil {
+		t.Error("GetWorkerPool should return a non-nil pool")
+	}
+	// Pool should have a positive max workers count
+	if pool.GetMaxWorkers() <= 0 {
+		t.Errorf("Expected positive max workers, got %d", pool.GetMaxWorkers())
+	}
+}

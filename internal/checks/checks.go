@@ -51,14 +51,21 @@ var (
 	// OptVersion displays version information and exits
 	OptVersion = getopt.BoolLong("version", 'v', "Display version information and exit.")
 
+	// OptTimeout sets the maximum time (in minutes) for long-running tools like nikto, dirsearch, hydra
+	// Default: 10 minutes
+	OptTimeout = getopt.IntLong("timeout", 'T', 10, "Maximum time in minutes for long-running tools (nikto, dirsearch, etc). Default: 10")
+
 	// Adding placeholder for OptVhost
 	// OptVhost = getopt.StringLong("", '', "", "")
 )
 
 // Run pre-flight checks and return total lines if multi-target
-func Run() int {
+func Run() (int, error) {
 	// Parse flags early to check for --version
 	getopt.Parse()
+
+	// Set global timeout from CLI flag
+	utils.ToolTimeout = *OptTimeout
 
 	// Check for version flag
 	if *OptVersion {
@@ -69,22 +76,23 @@ func Run() int {
 	// Check if infra flow or cloud flow apply
 	if len(os.Args) < 2 {
 		utils.ErrorMsg("You need to choose between `enumeraga infra` or `enumeraga cloud`")
-		os.Exit(1)
+		return 0, fmt.Errorf("no subcommand provided: use 'infra' or 'cloud'")
 	}
 
 	switch os.Args[1] {
 	case "c", "cl", "clo", "clou", "cloud":
 		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting Cloud checks phase"), utils.Cyan(" ----------"))
 
-		cloud.Run(OptOutput, OptHelp, OptQuiet, OptVVerbose)
+		if err := cloud.Run(OptOutput, OptHelp, OptQuiet, OptVVerbose); err != nil {
+			return 0, err
+		}
+		return 0, nil
 	case "i", "in", "inf", "infr", "infra":
 		// Infra checks now moved to internal/infra/infra.go
 		return infra.Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose, OptOutput, OptTarget)
 
 	default:
 		utils.ErrorMsg("You need to choose between `enumeraga infra` or `enumeraga cloud`")
-		os.Exit(1)
+		return 0, fmt.Errorf("invalid subcommand '%s': use 'infra' or 'cloud'", os.Args[1])
 	}
-
-	return 0
 }

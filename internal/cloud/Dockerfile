@@ -54,8 +54,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     pipx \
     git \
-    golang \
-    build-essential \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -73,8 +71,9 @@ RUN sudo mkdir -p /etc/apt/keyrings \
 
 # Install AWS CLI
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
-&& unzip awscliv2.zip \
-&& ./aws/install
+    && unzip awscliv2.zip \
+    && ./aws/install \
+    && rm -rf awscliv2.zip aws
 
 # # Create non-privileged user for homebrew compatibility
 # RUN echo 'subtle ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
@@ -97,9 +96,10 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
 #     eval $(~/.linuxbrew/bin/brew shellenv) && \
 #     brew install cloudfox awscli azure-cli
 
-# Try installing brew-dependant tools manually to reduce build time
-# Install cloudfox
-RUN go install github.com/BishopFox/cloudfox@latest
+# Install cloudfox from pre-built binary to avoid needing Go in final image
+RUN CLOUDFOX_VERSION=$(curl -s https://api.github.com/repos/BishopFox/cloudfox/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') \
+    && curl -sL "https://github.com/BishopFox/cloudfox/releases/download/${CLOUDFOX_VERSION}/cloudfox-linux-amd64" -o /usr/local/bin/cloudfox \
+    && chmod +x /usr/local/bin/cloudfox
 
 # Install OCI CLI via pip (more reliable than homebrew)
 RUN pip3 install --user oci-cli || true

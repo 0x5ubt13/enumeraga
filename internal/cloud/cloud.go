@@ -11,7 +11,7 @@ import (
 
 
 // Run launches the main entrypoint for enumeraga cloud
-func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
+func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	// Timing the execution
 	start := time.Now()
 
@@ -49,14 +49,13 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 		utils.ErrorMsg("No arguments were provided.")
 		printCloudUsage()
 		utils.PrintCloudUsageExamples()
-		os.Exit(1)
+		return fmt.Errorf("no cloud provider specified")
 	}
 
 	// Check 3: Ensure there is a valid CSP target
 	provider, err := parseCSP(remainingArgs[0])
 	if err != nil {
-		utils.ErrorMsg(err)
-		os.Exit(1)
+		return fmt.Errorf("invalid cloud provider: %w", err)
 	}
 
 	// Check 4: I AM GROOT!!!!
@@ -88,6 +87,8 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) {
 
 	// Wait for goroutines to finish to terminate the program
 	utils.Wg.Wait()
+
+	return nil
 }
 
 // printCloudUsage prints only the cloud-relevant flags, not infra flags

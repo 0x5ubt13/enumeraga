@@ -3,19 +3,21 @@ package utils
 import (
 	"archive/zip"
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/net/html"
@@ -62,6 +64,10 @@ var (
 	// TimesSwept keeps track of how many ports have been tried to be swept for a host
 	TimesSwept int
 
+	// ToolTimeout is the maximum time in minutes for long-running tools (nikto, dirsearch, etc).
+	// Default: 10 minutes. Can be set via CLI flag -T/--timeout
+	ToolTimeout = 10
+
 	// Declare globals updated and wordlistsLocated, as these may consume a lot of time and aren't needed more than once
 	Updated, wordlistsLocated bool
 
@@ -77,21 +83,256 @@ var (
 	// ToolRegistry tracks all enumeration tools and their progress
 	ToolRegistry *ToolTracker
 
-	BaseDir      string
-	Target       string
-	Version      string  // Semantic version (e.g., "v0.2.1-beta")
-	GitCommit    string  // Git commit hash
-	BuildDate    string  // Build timestamp
-	VisitedSMTP  bool
-	VisitedHTTP  bool
-	VisitedIMAP  bool
-	VisitedSMB   bool
-	VisitedSNMP  bool
-	VisitedLDAP  bool
-	VisitedRsvc  bool
-	VisitedWinRM bool
-	VisitedFTP   bool
+	BaseDir   string
+	Target    string
+	Version   string // Semantic version (e.g., "v0.2.1-beta")
+	GitCommit string // Git commit hash
+	BuildDate string // Build timestamp
+
+	// visitedState provides thread-safe access to protocol visited flags
+	visitedState = &VisitedState{}
 )
+
+// VisitedState protects protocol visited flags from concurrent access
+type VisitedState struct {
+	mu       sync.RWMutex
+	smtp     bool
+	http     bool
+	imap     bool
+	smb      bool
+	snmp     bool
+	ldap     bool
+	rsvc     bool
+	winrm    bool
+	ftp      bool
+}
+
+// CheckAndMarkVisited atomically checks if a protocol was visited and marks it if not.
+// Returns true if the protocol was already visited (caller should skip), false if this is the first visit.
+func (v *VisitedState) CheckAndMarkVisited(protocol string) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	switch protocol {
+	case "smtp":
+		if v.smtp {
+			return true
+		}
+		v.smtp = true
+	case "http":
+		if v.http {
+			return true
+		}
+		v.http = true
+	case "imap":
+		if v.imap {
+			return true
+		}
+		v.imap = true
+	case "smb":
+		if v.smb {
+			return true
+		}
+		v.smb = true
+	case "snmp":
+		if v.snmp {
+			return true
+		}
+		v.snmp = true
+	case "ldap":
+		if v.ldap {
+			return true
+		}
+		v.ldap = true
+	case "rsvc":
+		if v.rsvc {
+			return true
+		}
+		v.rsvc = true
+	case "winrm":
+		if v.winrm {
+			return true
+		}
+		v.winrm = true
+	case "ftp":
+		if v.ftp {
+			return true
+		}
+		v.ftp = true
+	}
+	return false
+}
+
+// Reset clears all visited flags (call between targets in multi-target mode)
+func (v *VisitedState) Reset() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.smtp = false
+	v.http = false
+	v.imap = false
+	v.smb = false
+	v.snmp = false
+	v.ldap = false
+	v.rsvc = false
+	v.winrm = false
+	v.ftp = false
+}
+
+// Deprecated: Legacy accessors for backwards compatibility - prefer CheckAndMarkVisited
+var (
+	VisitedSMTP  bool // Deprecated: use visitedState.CheckAndMarkVisited("smtp")
+	VisitedHTTP  bool // Deprecated: use visitedState.CheckAndMarkVisited("http")
+	VisitedIMAP  bool // Deprecated: use visitedState.CheckAndMarkVisited("imap")
+	VisitedSMB   bool // Deprecated: use visitedState.CheckAndMarkVisited("smb")
+	VisitedSNMP  bool // Deprecated: use visitedState.CheckAndMarkVisited("snmp")
+	VisitedLDAP  bool // Deprecated: use visitedState.CheckAndMarkVisited("ldap")
+	VisitedRsvc  bool // Deprecated: use visitedState.CheckAndMarkVisited("rsvc")
+	VisitedWinRM bool // Deprecated: use visitedState.CheckAndMarkVisited("winrm")
+	VisitedFTP   bool // Deprecated: use visitedState.CheckAndMarkVisited("ftp")
+)
+
+// Global context for graceful shutdown - allows cancellation of all running tools
+var (
+	globalCtx       context.Context
+	globalCancel    context.CancelFunc
+	shutdownOnce    sync.Once
+	shutdownStarted bool
+	shutdownMu      sync.RWMutex
+)
+
+// InitGlobalContext initializes the global context with signal handling.
+// Call this once at program startup (in main.go).
+func InitGlobalContext() context.Context {
+	globalCtx, globalCancel = context.WithCancel(context.Background())
+
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		sig := <-sigChan
+		shutdownMu.Lock()
+		shutdownStarted = true
+		shutdownMu.Unlock()
+
+		PrintCustomBiColourMsg("yellow", "red", "\n[!] Received signal ", sig.String(), ", initiating graceful shutdown...")
+		PrintCustomBiColourMsg("cyan", "yellow", "[*] Waiting for running tools to terminate (press Ctrl+C again to force exit)...")
+
+		// Cancel all contexts
+		globalCancel()
+		Interrupted = true
+
+		// Listen for second signal to force exit
+		go func() {
+			<-sigChan
+			PrintCustomBiColourMsg("red", "yellow", "\n[!] Force exit requested. Terminating immediately...")
+			os.Exit(1)
+		}()
+	}()
+
+	return globalCtx
+}
+
+// GetGlobalContext returns the global context for use in tool execution.
+// Returns a background context if InitGlobalContext hasn't been called.
+func GetGlobalContext() context.Context {
+	if globalCtx == nil {
+		return context.Background()
+	}
+	return globalCtx
+}
+
+// IsShuttingDown returns true if a shutdown has been initiated.
+func IsShuttingDown() bool {
+	shutdownMu.RLock()
+	defer shutdownMu.RUnlock()
+	return shutdownStarted
+}
+
+// CancelGlobalContext cancels the global context, signaling all tools to stop.
+func CancelGlobalContext() {
+	shutdownOnce.Do(func() {
+		if globalCancel != nil {
+			globalCancel()
+		}
+	})
+}
+
+// IsVisited provides thread-safe access to check and mark protocol visited status
+func IsVisited(protocol string) bool {
+	return visitedState.CheckAndMarkVisited(protocol)
+}
+
+// ResetVisitedFlags resets all visited flags (call between targets in multi-target mode)
+func ResetVisitedFlags() {
+	visitedState.Reset()
+}
+
+// WorkerPool provides a semaphore-based limiter for concurrent tool execution.
+// This prevents unbounded goroutine creation when scanning targets with many open ports.
+type WorkerPool struct {
+	sem chan struct{} // Semaphore to limit concurrency
+	max int           // Maximum concurrent workers
+}
+
+// Global worker pool instance
+var (
+	workerPool     *WorkerPool
+	workerPoolOnce sync.Once
+)
+
+// DefaultMaxWorkers is the default maximum concurrent tools (sensible for most systems)
+const DefaultMaxWorkers = 20
+
+// InitWorkerPool initializes the global worker pool with the specified max workers.
+// If maxWorkers <= 0, uses DefaultMaxWorkers. Safe to call multiple times (only first call takes effect).
+func InitWorkerPool(maxWorkers int) {
+	workerPoolOnce.Do(func() {
+		if maxWorkers <= 0 {
+			maxWorkers = DefaultMaxWorkers
+		}
+		workerPool = &WorkerPool{
+			sem: make(chan struct{}, maxWorkers),
+			max: maxWorkers,
+		}
+	})
+}
+
+// GetWorkerPool returns the global worker pool, initializing with defaults if needed.
+func GetWorkerPool() *WorkerPool {
+	if workerPool == nil {
+		InitWorkerPool(DefaultMaxWorkers)
+	}
+	return workerPool
+}
+
+// Acquire blocks until a worker slot is available, or returns false if shutdown is in progress.
+func (wp *WorkerPool) Acquire() bool {
+	if IsShuttingDown() {
+		return false
+	}
+	select {
+	case wp.sem <- struct{}{}:
+		return true
+	case <-GetGlobalContext().Done():
+		return false
+	}
+}
+
+// Release frees a worker slot. Must be called after Acquire() returns true.
+func (wp *WorkerPool) Release() {
+	<-wp.sem
+}
+
+// GetMaxWorkers returns the maximum number of concurrent workers configured.
+func (wp *WorkerPool) GetMaxWorkers() int {
+	return wp.max
+}
+
+// GetActiveWorkers returns the number of currently active workers.
+func (wp *WorkerPool) GetActiveWorkers() int {
+	return len(wp.sem)
+}
 
 func init() {
 	ToolRegistry = NewToolTracker()
@@ -119,6 +360,7 @@ func GetVersion() string {
 	return fmt.Sprintf("enumeraga %s (commit: %s, built: %s)", Version, commitShort, BuildDate)
 }
 
+// PrintBanner displays the enumeraga ASCII art banner with version information.
 func PrintBanner() {
 	fmt.Printf("\n%s\n", Cyan("                                                     ", Version))
 	fmt.Printf("%s%s%s\n", Yellow(" __________                                    ________"), Cyan("________"), Yellow("______ "))
@@ -258,6 +500,7 @@ func ValidateFilePath(path string) error {
 	return nil
 }
 
+// PrintInfraUsageExamples displays example command line usage for infrastructure scanning mode.
 func PrintInfraUsageExamples() {
 	e := color.WhiteString("enumeraga ")
 
@@ -272,6 +515,7 @@ func PrintInfraUsageExamples() {
 	)
 }
 
+// PrintCloudUsageExamples displays example command line usage for cloud scanning mode.
 func PrintCloudUsageExamples() {
 	e := color.WhiteString("enumeraga cloud ")
 
@@ -303,9 +547,18 @@ func isCompatibleDistro() error {
 	return nil
 }
 
-// ErrorMsg gets a custom error message printed out to terminal
+// ErrorMsg gets a custom error message printed out to terminal (mutex-protected for goroutine safety)
 func ErrorMsg(errMsg any) {
+	outputMutex.Lock()
+	defer outputMutex.Unlock()
 	fmt.Printf("%s %s\n", Red("[-] Error detected:"), errMsg)
+}
+
+// PrintSafe prints a message with mutex protection for goroutine safety
+func PrintSafe(format string, args ...any) {
+	outputMutex.Lock()
+	defer outputMutex.Unlock()
+	fmt.Printf(format, args...)
 }
 
 // ReadTargetsFile from the argument path passed to -t; returns number of targets, one per line
@@ -351,6 +604,8 @@ func ProtocolDetected(protocol, baseDir string) string {
 	return protocolDir
 }
 
+// WriteTextToFile writes a text message to a file at the specified path.
+// Creates the file if it doesn't exist, overwrites if it does.
 func WriteTextToFile(filePath string, message string) error {
 	// Open file
 	f, err := os.Create(filePath)
@@ -370,6 +625,8 @@ func WriteTextToFile(filePath string, message string) error {
 	return nil
 }
 
+// WritePortsToFile writes discovered open ports to a file and announces the results.
+// Returns the ports string and any error encountered.
 func WritePortsToFile(filePath string, ports string, host string) (string, error) {
 	// Open file
 	fileName := fmt.Sprintf("%sopen_ports.txt", filePath)
@@ -531,7 +788,7 @@ func getKeyTools() []string {
 		"nbtscan-unixwiz",
 		"nikto",
 		"nmap",
-		// TODO: add nuclei!!!
+		"nuclei",
 		"odat",
 		"responder-RunFinger",
 		"rusers",
@@ -845,46 +1102,58 @@ func installEnum4linuxNg() error {
 	return nil
 }
 
-func GetWordlists(optVVerbose *bool) {
+func GetWordlists(optVVerbose *bool) error {
 	if wordlistsLocated {
-		return
+		return nil
 	}
 	wordlistsLocated = true
 
+	var missingWordlists []string
+
 	// Locate the "raft-medium-directories-lowercase" file
 	dirListMediumSlice, err := zglob.Glob("/usr/share/seclists/Discovery/Web-Content/raft-medium-directories-lowercase.txt")
-	if err != nil {
-		log.Fatalf("Error locating 'raft-medium-directories-lowercase' with zglob: %v\n", err)
+	if err != nil || len(dirListMediumSlice) == 0 {
+		missingWordlists = append(missingWordlists, "raft-medium-directories-lowercase.txt")
+		ErrorMsg("Warning: Could not locate 'raft-medium-directories-lowercase.txt' - directory bruteforcing may not work")
+	} else {
+		DirListMedium = dirListMediumSlice[0]
 	}
-	DirListMedium = dirListMediumSlice[0]
 
 	// Locate the "darkweb2017-top1000.txt" file
 	DarkwebTop1000Slice, err := zglob.Glob("/usr/share/seclists/Passwords/darkweb2017-top1000.txt")
-	if err != nil {
-		log.Fatalf("Error locating 'darkweb2017-top1000.txt': %v\n", err)
+	if err != nil || len(DarkwebTop1000Slice) == 0 {
+		missingWordlists = append(missingWordlists, "darkweb2017-top1000.txt")
+		ErrorMsg("Warning: Could not locate 'darkweb2017-top1000.txt' - password bruteforcing may not work")
+	} else {
+		DarkwebTop1000 = DarkwebTop1000Slice[0]
 	}
-	DarkwebTop1000 = DarkwebTop1000Slice[0]
 
 	// Locate the "web-extensions.txt" file
 	ExtensionsListSlice, err := zglob.Glob("/usr/share/seclists/Discovery/Web-Content/web-extensions.txt")
-	if err != nil {
-		log.Fatalf("Error locating 'web-extensions.txt': %v\n", err)
+	if err != nil || len(ExtensionsListSlice) == 0 {
+		missingWordlists = append(missingWordlists, "web-extensions.txt")
+		ErrorMsg("Warning: Could not locate 'web-extensions.txt' - extension fuzzing may not work")
+	} else {
+		ExtensionsList = ExtensionsListSlice[0]
 	}
-	ExtensionsList = ExtensionsListSlice[0]
 
 	// Locate the "top-usernames-shortlist" file
 	UsersListSlice, err := zglob.Glob("/usr/share/seclists/Usernames/top-usernames-shortlist.txt")
-	if err != nil {
-		log.Fatalf("Error locating 'top-usernames-shortlist': %v\n", err)
+	if err != nil || len(UsersListSlice) == 0 {
+		missingWordlists = append(missingWordlists, "top-usernames-shortlist.txt")
+		ErrorMsg("Warning: Could not locate 'top-usernames-shortlist.txt' - user enumeration may not work")
+	} else {
+		UsersList = UsersListSlice[0]
 	}
-	UsersList = UsersListSlice[0]
 
 	// Locate the "snmp-onesixtyone" file
 	snmpListSlice, err := zglob.Glob("/usr/share/seclists/Discovery/SNMP/snmp-onesixtyone.txt")
-	if err != nil {
-		log.Fatalf("Error locating 'SNMP/snmp.txt': %v\n", err)
+	if err != nil || len(snmpListSlice) == 0 {
+		missingWordlists = append(missingWordlists, "snmp-onesixtyone.txt")
+		ErrorMsg("Warning: Could not locate 'snmp-onesixtyone.txt' - SNMP enumeration may not work")
+	} else {
+		SnmpList = snmpListSlice[0]
 	}
-	SnmpList = snmpListSlice[0]
 
 	if *optVVerbose {
 		fmt.Println("Located Files:")
@@ -894,6 +1163,13 @@ func GetWordlists(optVVerbose *bool) {
 		fmt.Printf("users_list: %v\n", UsersList)
 		fmt.Printf("snmp_list: %v\n", SnmpList)
 	}
+
+	// Return error only if ALL wordlists are missing
+	if len(missingWordlists) == 5 {
+		return fmt.Errorf("no wordlists found - please install seclists or ensure wordlists are in /usr/share/seclists/")
+	}
+
+	return nil
 }
 
 // PrintCustomBiColourMsg loops over the necessary colours, printing one at a time
