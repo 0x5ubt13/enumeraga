@@ -102,7 +102,7 @@ func http() {
 	commands.CallRunTool(nikto80Args, nikto80Path, checks.OptVVerbose)
 
 	// Wafw00f on port 80
-	wafw00f80Args := []string{"wafw00f", "-v", fmt.Sprintf("http://%s:80", utils.Target)}
+	wafw00f80Args := []string{"wafw00f", "-v", "--timeout", getTimeoutSeconds(), fmt.Sprintf("http://%s:80", utils.Target)}
 	wafw00f80Path := fmt.Sprintf("%swafw00f_80.out", dir)
 	commands.CallRunTool(wafw00f80Args, wafw00f80Path, checks.OptVVerbose)
 
@@ -133,7 +133,7 @@ func http() {
 	commands.CallRunTool(nikto443Args, nikto443Path, checks.OptVVerbose)
 
 	// Wafw00f on port 443
-	wafw00f443Args := []string{"wafw00f", "-v", fmt.Sprintf("https://%s:443", utils.Target)}
+	wafw00f443Args := []string{"wafw00f", "-v", "--timeout", getTimeoutSeconds(), fmt.Sprintf("https://%s:443", utils.Target)}
 	wafw00f443Path := fmt.Sprintf("%swafw00f_443.out", dir)
 	commands.CallRunTool(wafw00f443Args, wafw00f443Path, checks.OptVVerbose)
 
@@ -151,7 +151,7 @@ func http() {
 	testssl := "testssl"
 	if !utils.CheckToolExists("testssl") {
 		if utils.CheckToolExists("testssl.sh") {
-		testssl = "testssl.sh"
+			testssl = "testssl.sh"
 		}
 	}
 

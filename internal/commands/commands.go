@@ -71,7 +71,7 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, 
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "Tomcat detected. Running", "Gobuster", "...")
 
 	// Run Gobuster
-	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "-u", fmt.Sprintf("%s:%s", target, port), "-w", utils.DirListMedium}
+	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "-u", fmt.Sprintf("%s:%s", target, port), "-w", utils.DirListMedium, "--timeout", getTimeoutSeconds() + "s"}
 	gobusterPath := fmt.Sprintf("%stomcat_gobuster.out", caseDir)
 	CallRunTool(gobusterArgs, gobusterPath, OptVVerbose)
 
@@ -97,7 +97,9 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 		targetURL := fmt.Sprintf("http://%s:80", target)
 		cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
 		cewlPath := fmt.Sprintf("%scewl_80.out", caseDir)
-		runTool(cewlArgs, cewlPath, port, OptVVerbose)
+		if err := runTool(cewlArgs, cewlPath, port, OptVVerbose); err == nil {
+			printToolSuccess(port, "cewl", cewlPath, -1, -1)
+		}
 
 		ffufArgs := []string{
 			"ffuf",
@@ -109,7 +111,9 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 		}
 		utils.PrintSafe("%s\n", utils.Debug("[?] Debug: ffuf keywords command:", ffufArgs))
 		ffufPath := fmt.Sprintf("%sffuf_keywords_80.out", caseDir)
-		runTool(ffufArgs, ffufPath, port, OptVVerbose)
+		if err := runTool(ffufArgs, ffufPath, port, OptVVerbose); err == nil {
+			printToolSuccess(port, "ffuf", ffufPath, -1, -1)
+		}
 		return
 	}
 
@@ -117,7 +121,9 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 	targetURL := fmt.Sprintf("https://%s:443", target)
 	cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
 	cewlPath := fmt.Sprintf("%scewl_443.out", caseDir)
-	runTool(cewlArgs, cewlPath, port, OptVVerbose)
+	if err := runTool(cewlArgs, cewlPath, port, OptVVerbose); err == nil {
+		printToolSuccess(port, "cewl", cewlPath, -1, -1)
+	}
 
 	ffufArgs := []string{
 		"ffuf",
@@ -128,11 +134,15 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 		"-maxtime-job", getTimeoutSeconds(),
 	}
 	ffufPath := fmt.Sprintf("%sffuf_keywords_443.out", caseDir)
-	runTool(ffufArgs, ffufPath, port, OptVVerbose)
+	if err := runTool(ffufArgs, ffufPath, port, OptVVerbose); err == nil {
+		printToolSuccess(port, "ffuf", ffufPath, -1, -1)
+	}
 }
 
-func printToolSuccess(command, tool, filePath string) {
-	completed, total := utils.ToolRegistry.GetProgress()
+func printToolSuccess(command, tool, filePath string, completed, total int) {
+	if completed == -1 {
+		completed, total = utils.ToolRegistry.GetProgress()
+	}
 	runningTools := utils.ToolRegistry.GetRunningTools()
 
 	progressStr := fmt.Sprintf("[%d/%d]", completed, total)
@@ -187,10 +197,10 @@ func announceCloudTool(tool string) {
 }
 
 // Announce tool and run it
-func runTool(args []string, filePath string, port string, OptVVerbose *bool) {
+func runTool(args []string, filePath string, port string, OptVVerbose *bool) error {
 	// Check if shutdown is in progress before starting
 	if utils.IsShuttingDown() {
-		return
+		return nil
 	}
 
 	tool := args[0]
@@ -206,20 +216,20 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating stdout pipe: %s", err))
-		os.Exit(1)
+		return err
 	}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating stderr pipe: %s", err))
-		os.Exit(1)
+		return err
 	}
 
 	// Create a file to write the output to
 	file, err := os.Create(filePath)
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating output file: %s", err))
-		os.Exit(1)
+		return err
 	}
 
 	defer func(file *os.File) {
@@ -232,7 +242,7 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) {
 	// Start the command asynchronously in a goroutine
 	if err := cmd.Start(); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error starting command %s: %v", tool, err))
-		return
+		return err
 	}
 
 	// Capture stdout and stderr concurrently to prevent blocking
@@ -269,19 +279,19 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) {
 		// Check if the error was due to context cancellation (shutdown)
 		if ctx.Err() == context.Canceled {
 			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Tool '", tool, "' terminated due to shutdown")
-			return
+			return err
 		}
 		if tool == "nikto" || tool == "fping" {
 			// Nikto and fping don't have a clean exit
-			printToolSuccess(port, tool, filePath)
-			return
+			// We return nil as success for these tools
+			return nil
 		} else {
 			utils.PrintSafe("%s %s %s %s\n", utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
-			return
+			return err
 		}
 	}
 
-	printToolSuccess(port, tool, filePath)
+	return nil
 }
 
 // RunRangeTools enumerates a whole CIDR range using specific range tools
@@ -340,7 +350,9 @@ func RunRangeTools(targetRange string, OptVVerbose *bool, OptOutput *string) {
 // eternalBlueSweepCheck is a wee fun module to detect quite low-hanging fruit
 func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string, OptVVerbose *bool) {
 	// Run msf recon first
-	runTool(msfEternalBlueArgs, msfEternalBluePath, "445", OptVVerbose)
+	if err := runTool(msfEternalBlueArgs, msfEternalBluePath, "445", OptVVerbose); err == nil {
+		printToolSuccess("445", "msfconsole (eternalblue)", msfEternalBluePath, -1, -1)
+	}
 
 	var confirmedVuln = false
 
@@ -473,8 +485,8 @@ func runNmapScanAsync(toolName string, port string, outFile string, scanFunc Nma
 			utils.ToolRegistry.CompleteTool(name, false)
 			return
 		}
-		utils.ToolRegistry.CompleteTool(name, true)
-		printToolSuccess(portNum, name, outputFile+".nmap")
+		completed, total := utils.ToolRegistry.CompleteTool(name, true)
+		printToolSuccess(portNum, name, outputFile+".nmap", completed, total)
 	}(toolName, port, outFile)
 }
 
@@ -541,8 +553,11 @@ func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 		defer pool.Release()
 
 		utils.ToolRegistry.StartTool(name)
-		runTool(args, filePath, portNum, OptVVerbose)
-		utils.ToolRegistry.CompleteTool(name, true)
+		err := runTool(args, filePath, portNum, OptVVerbose)
+		completed, total := utils.ToolRegistry.CompleteTool(name, err == nil)
+		if err == nil {
+			printToolSuccess(portNum, args[0], filePath, completed, total)
+		}
 	}(args, filePath, OptVVerbose, toolName, port)
 }
 
@@ -811,7 +826,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		}
 	}
 
-	printToolSuccess(command, tool, filePath)
+	printToolSuccess(command, tool, filePath, -1, -1)
 }
 
 // RunCloudScan orchestrates the cloud security scanning

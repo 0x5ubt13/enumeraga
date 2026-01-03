@@ -53,7 +53,7 @@ func (t *ToolTracker) StartTool(name string) {
 	}
 }
 
-func (t *ToolTracker) CompleteTool(name string, success bool) {
+func (t *ToolTracker) CompleteTool(name string, success bool) (completed, total int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if tool, exists := t.tools[name]; exists {
@@ -65,6 +65,14 @@ func (t *ToolTracker) CompleteTool(name string, success bool) {
 		}
 		tool.EndTime = time.Now()
 	}
+
+	total = len(t.tools)
+	for _, tool := range t.tools {
+		if tool.Status == ToolCompleted || tool.Status == ToolFailed {
+			completed++
+		}
+	}
+	return completed, total
 }
 
 func (t *ToolTracker) GetProgress() (completed, total int) {

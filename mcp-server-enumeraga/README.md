@@ -5,10 +5,10 @@ Model Context Protocol (MCP) server for Enumeraga that uses **Docker containers*
 ## Architecture
 
 ```
-User → Claude (LLM) → MCP Server → Docker Containers → Results
-                                      ↓
-                               gagarter/enumeraga_infra
-                               gagarter/enumeraga_cloud
+User → LLM → MCP Server → Docker Containers → Results
+                                ↓
+                      gagarter/enumeraga_infra
+                      gagarter/enumeraga_cloud
 ```
 
 The MCP server orchestrates Docker containers that have all tools pre-installed, providing:
@@ -67,6 +67,44 @@ Or if installed globally:
   "mcpServers": {
     "enumeraga": {
       "command": "mcp-server-enumeraga"
+    }
+  }
+}
+```
+
+### For Gemini CLI
+
+Add to your configuration file:
+
+**macOS**: `~/.gemini/config.json`
+**Windows**: `%USERPROFILE%\.gemini\config.json`
+**Linux**: `~/.gemini/config.json`
+
+```json
+{
+  "mcpServers": {
+    "enumeraga": {
+      "command": "python3",
+      "args": [
+        "/path/to/enumeraga/mcp-server-enumeraga/mcp_server_enumeraga/server.py"
+      ]
+    }
+  }
+}
+```
+
+### For Local Ollama (via compatible clients)
+
+If you are using an MCP client that works with a local Ollama server (e.g., via a bridge or compatible UI), use the standard MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "enumeraga": {
+      "command": "python3",
+      "args": [
+        "/path/to/enumeraga/mcp-server-enumeraga/mcp_server_enumeraga/server.py"
+      ]
     }
   }
 }
@@ -224,7 +262,7 @@ If images not found:
 
 ## How It Works
 
-1. **LLM Decision**: Claude analyzes user request and decides to use Enumeraga
+1. **LLM Decision**: Claude/Gemini/Other LLM analyses user request and decides to use Enumeraga
 2. **Tool Selection**: Chooses appropriate tool (infra_scan, cloud_scan, etc.)
 3. **Docker Command**: MCP server builds Docker command with proper volumes
 4. **Container Execution**: Docker pulls image (if needed) and runs container
@@ -261,7 +299,7 @@ The Docker images are automatically built and published via GitHub Actions:
 - Output directory writable by container
 - No sensitive data in container after removal
 
-### Authorization
+### Authorisation
 
 **You are responsible for:**
 - Having permission to scan targets
