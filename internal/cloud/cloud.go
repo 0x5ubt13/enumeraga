@@ -2,21 +2,20 @@ package cloud
 
 import (
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/pborman/getopt/v2"
-	"os"
-	"time"
 )
-
 
 // Run launches the main entrypoint for enumeraga cloud
 func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	// Timing the execution
 	start := time.Now()
 
-	// Cloud flow must end when this Run function finishes
-	defer os.Exit(0)
+
 
 	// Parse optional cloud arguments, getting rid of the `enumeraga cloud` args
 	// Keep os.Args[0] as program name for getopt, remove "cloud" subcommand
@@ -38,8 +37,9 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 		}
 		printCloudUsage()
 		utils.PrintCloudUsageExamples()
-		os.Exit(0)
+		return utils.ErrHelpRequested
 	}
+
 
 	// Get remaining args after flag parsing
 	remainingArgs := getopt.Args()
@@ -88,8 +88,9 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	// Wait for goroutines to finish to terminate the program
 	utils.Wg.Wait()
 
-	return nil
+	return utils.ErrCloudComplete
 }
+
 
 // printCloudUsage prints only the cloud-relevant flags, not infra flags
 func printCloudUsage() {

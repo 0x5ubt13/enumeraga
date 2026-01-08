@@ -20,10 +20,10 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/net/html"
 	"github.com/Ullaakut/nmap/v3"
 	"github.com/fatih/color"
 	"github.com/mattn/go-zglob"
+	"golang.org/x/net/html"
 )
 
 // Host is a struct that holds the OS and architecture of the host to identify the correct tools to install
@@ -74,7 +74,7 @@ var (
 	// Interrupted global, to show user different info if single IP target was unsuccessful
 	Interrupted bool
 
-	// Sync: Define a mutex to synchronize access to standard output
+	// Sync: Define a mutex to synchronise access to standard output
 	outputMutex sync.Mutex
 
 	// Wg sync: Define a WaitGroup to generate goroutines
@@ -200,7 +200,7 @@ var (
 	shutdownMu      sync.RWMutex
 )
 
-// InitGlobalContext initializes the global context with signal handling.
+// InitGlobalContext initialises the global context with signal handling.
 // Call this once at program startup (in main.go).
 func InitGlobalContext() context.Context {
 	globalCtx, globalCancel = context.WithCancel(context.Background())
@@ -284,7 +284,7 @@ var (
 // DefaultMaxWorkers is the default maximum concurrent tools (sensible for most systems)
 const DefaultMaxWorkers = 20
 
-// InitWorkerPool initializes the global worker pool with the specified max workers.
+// InitWorkerPool initialises the global worker pool with the specified max workers.
 // If maxWorkers <= 0, uses DefaultMaxWorkers. Safe to call multiple times (only first call takes effect).
 func InitWorkerPool(maxWorkers int) {
 	workerPoolOnce.Do(func() {
@@ -548,18 +548,18 @@ func isCompatibleDistro() error {
 }
 
 // ErrorMsg gets a custom error message printed out to terminal (mutex-protected for goroutine safety)
+// Now uses the structured logger for better control and testability
 func ErrorMsg(errMsg any) {
-	outputMutex.Lock()
-	defer outputMutex.Unlock()
-	fmt.Printf("%s %s\n", Red("[-] Error detected:"), errMsg)
+	GetLogger().Error("%v", errMsg)
 }
 
+
 // PrintSafe prints a message with mutex protection for goroutine safety
+// Now uses the structured logger
 func PrintSafe(format string, args ...any) {
-	outputMutex.Lock()
-	defer outputMutex.Unlock()
-	fmt.Printf(format, args...)
+	GetLogger().Printf(format, args...)
 }
+
 
 // ReadTargetsFile from the argument path passed to -t; returns number of targets, one per line
 func ReadTargetsFile(optTarget *string) ([]string, int) {

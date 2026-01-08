@@ -19,7 +19,7 @@ Automatic multiprocess Linux CLI tool that aims for a quick enumeration wrapping
 - **Graceful shutdown** - Ctrl+C cleanly terminates all running tools
 - **Configurable timeouts** - Prevent long-running tools from blocking scans (default: 10 minutes)
 - **Progress tracking** - Real-time progress counter showing completed/total tools
-- **Docker support** - Containerized versions for both infrastructure and cloud scanning
+- **Docker support** - Containerised versions for both infrastructure and cloud scanning
 - **Cloud scanning** - Supports AWS, Azure, GCP, OCI, AliCloud, and DigitalOcean
 
 ## The motivation

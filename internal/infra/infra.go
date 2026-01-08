@@ -38,8 +38,9 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 		}
 		printInfraUsage()
 		utils.PrintInfraUsageExamples()
-		os.Exit(0)
+		return 0, utils.ErrHelpRequested
 	}
+
 
 	if *OptNmapOnly {
 		if !*OptQuiet {
@@ -61,8 +62,9 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 
 	if *OptInstall && !*OptNmapOnly {
 		fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga infra -t!"))
-		os.Exit(0)
+		return 0, utils.ErrInstallComplete
 	}
+
 
 	// Call check 5
 	if err := checkFive(OptTarget); err != nil {
