@@ -24,6 +24,7 @@ wheels/
 venv/
 env/
 ENV/
+venv_mcp_server
 
 # IDE
 .vscode/

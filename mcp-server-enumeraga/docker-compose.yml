@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  enumeraga-mcp:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: enumeraga-mcp
+    environment:
+      - MCP_MODE=sse
+    volumes:
+      # CRITICAL: Mount Docker socket so the MCP server can spawn sibling containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount output directory (shared with host)
+      - ./scan_results:/app/enumeraga_output
+    ports:
+      # Expose port so existing n8n container can reach it via host network
+      - "9000:9000"
+    restart: unless-stopped
+    # Use host networking mode if possible, otherwise rely on mapped ports
+    # network_mode: host 

@@ -41,7 +41,6 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 		return 0, utils.ErrHelpRequested
 	}
 
-
 	if *OptNmapOnly {
 		if !*OptQuiet {
 			fmt.Println(utils.Cyan("[*] Nmap only flag detected. Aborting other functionality of Enumeraga and only launching nmap scans.\n"))
@@ -64,7 +63,6 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 		fmt.Println(utils.Green("[+] All pre-required tools have been installed! You're good to go! Run your first scan with enumeraga infra -t!"))
 		return 0, utils.ErrInstallComplete
 	}
-
 
 	// Call check 5
 	if err := checkFive(OptTarget); err != nil {

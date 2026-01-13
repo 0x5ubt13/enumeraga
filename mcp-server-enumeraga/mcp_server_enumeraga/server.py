@@ -3,14 +3,19 @@
 
 import asyncio
 import json
-import tempfile
+import os
+import sys
 from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+from mcp.server.sse import SseServerTransport
 from mcp.types import Tool, TextContent
-
+from starlette.applications import Starlette
+from starlette.routing import Route, Mount
+from starlette.requests import Request
+from starlette.responses import Response
 
 # Docker image names (published on Docker Hub)
 INFRA_IMAGE = "gagarter/enumeraga_infra:latest"
@@ -56,6 +61,11 @@ TOOLS: list[Tool] = [
                     "description": "Very verbose output for debugging",
                     "default": False,
                 },
+                "detach": {
+                    "type": "boolean",
+                    "description": "Run in background (detached mode) to avoid timeouts. Returns Container ID.",
+                    "default": False,
+                },
             },
             "required": ["target"],
         },
@@ -87,6 +97,11 @@ TOOLS: list[Tool] = [
                 "verbose": {
                     "type": "boolean",
                     "description": "Very verbose output for debugging",
+                    "default": False,
+                },
+                "detach": {
+                    "type": "boolean",
+                    "description": "Run in background (detached mode) to avoid timeouts. Returns Container ID.",
                     "default": False,
                 },
             },
@@ -130,7 +145,7 @@ def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "docker", "run", "--rm",
+        "docker", "run", "--rm", "--privileged",
         "--network", "host",  # Required for nmap to work properly
         "-v", f"{output_dir}:/tmp/enumeraga_output",
         INFRA_IMAGE,
@@ -262,10 +277,18 @@ async def check_docker() -> dict[str, Any]:
 
 async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool execution requests."""
+    print(f"Executing tool: {name} with args: {arguments}", file=sys.stderr)
     try:
         if name == "enumeraga_infra_scan":
             cmd = build_docker_infra_command(arguments)
+            
+            # Handle detached mode
+            detached = arguments.get("detach", False)
+            if detached:
+                # Insert -d after "run"
+                cmd.insert(2, "-d")
 
+            # Inform user about the scan
             # Inform user about the scan
             target = arguments["target"]
             output_dir = Path(arguments.get("output_dir", "./enumeraga_output")).absolute()
@@ -277,6 +300,14 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
 
             output = await run_command(cmd, timeout=7200)  # 2 hour timeout
 
+            if detached:
+                 return [
+                    TextContent(
+                        type="text",
+                        text=f"Scan started in detached mode.\nContainer ID: {output.strip()}\n\nResults will be saved to: {output_dir}\nCheck container logs: docker logs {output.strip()}",
+                    )
+                ]
+
             return [
                 TextContent(
                     type="text",
@@ -286,6 +317,12 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
 
         elif name == "enumeraga_cloud_scan":
             cmd = build_docker_cloud_command(arguments)
+            
+            # Handle detached mode
+            detached = arguments.get("detach", False)
+            if detached:
+                # Insert -d after "run"
+                cmd.insert(2, "-d")
 
             provider = arguments["provider"]
             output_dir = Path(arguments.get("output_dir", "./enumeraga_output")).absolute()
@@ -296,6 +333,14 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
             info_msg += "This may take several minutes...\n\n"
 
             output = await run_command(cmd, timeout=7200)  # 2 hour timeout
+
+            if detached:
+                 return [
+                    TextContent(
+                        type="text",
+                        text=f"Scan started in detached mode.\nContainer ID: {output.strip()}\n\nResults will be saved to: {output_dir}\nCheck container logs: docker logs {output.strip()}",
+                    )
+                ]
 
             return [
                 TextContent(
@@ -378,6 +423,40 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
         ]
 
 
+def create_app(server: Server) -> Starlette:
+    """Create Starlette app for SSE."""
+    
+    sse = SseServerTransport("/messages")
+
+    async def handle_sse(request: Request):
+        try:
+            async with sse.connect_sse(
+                request.scope, request.receive, request._send
+            ) as streams:
+                await server.run(
+                    streams[0], streams[1], server.create_initialization_options()
+                )
+        except Exception:
+            # Handle client disconnects
+            pass
+
+    async def handle_post(request: Request):
+        try:
+            await sse.handle_post_message(
+                request.scope, request.receive, request._send
+            )
+        except Exception:
+            pass
+
+    return Starlette(
+        debug=True,
+        routes=[
+            Route("/sse", endpoint=handle_sse),
+            Route("/messages", endpoint=handle_post, methods=["POST"]),
+        ],
+    )
+
+
 async def run_server():
     """Run the MCP server."""
     server = Server("enumeraga-mcp-server")
@@ -390,21 +469,43 @@ async def run_server():
     # Handle tool calls
     @server.call_tool()
     async def call_tool(name: str, arguments: Any) -> list[TextContent]:
+        # When running in Docker, we need to adjust default output path
+        if not arguments.get("output_dir"):
+            arguments["output_dir"] = "/tmp/enumeraga_output"
         return await handle_tool_call(name, arguments)
-
-    # Run stdio server
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            server.create_initialization_options(),
+    
+    # Check execution mode
+    mode = os.environ.get("MCP_MODE", "stdio")
+    
+    if mode == "sse":
+        port = int(os.environ.get("PORT", 8000))
+        print(f"Starting SSE server on 0.0.0.0:{port}...", file=sys.stderr)
+        import uvicorn
+        app = create_app(server)
+        
+        # Configure generous timeouts for long-running scans
+        config = uvicorn.Config(
+            app, 
+            host="0.0.0.0", 
+            port=port,
+            timeout_keep_alive=3600, # 1 hour keep-alive
+            timeout_notify=300,      # 5 minutes notify
+            log_level="info"
         )
+        server_instance = uvicorn.Server(config)
+        await server_instance.serve()
+    else:
+        # Run stdio server
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                server.create_initialization_options(),
+            )
 
 
 def main():
     """Entry point for the MCP server."""
-    import sys
-
     # Check Python version
     if sys.version_info < (3, 10):
         print("Error: Python 3.10+ required", file=sys.stderr)

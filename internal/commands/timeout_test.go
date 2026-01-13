@@ -14,8 +14,8 @@ func TestGetTimeoutSeconds(t *testing.T) {
 	}()
 
 	tests := []struct {
-		name          string
-		timeoutInput  int
+		name           string
+		timeoutInput   int
 		expectedOutput string
 	}{
 		{"default 10 mins", 10, "600"},

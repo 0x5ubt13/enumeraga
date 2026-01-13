@@ -1,657 +1,88 @@
 package portsIterator
 
 import (
-	"fmt"
-	"os/exec"
-	"strconv"
-	"strings"
-
 	"github.com/0x5ubt13/enumeraga/internal/checks"
-	"github.com/0x5ubt13/enumeraga/internal/commands"
+	"github.com/0x5ubt13/enumeraga/internal/portsIterator/protocols"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
-// getTimeoutSeconds returns the configured timeout in seconds as a string.
-// Uses ToolTimeout (in minutes) from utils package.
-func getTimeoutSeconds() string {
-	return strconv.Itoa(utils.ToolTimeout * 60)
-}
-
-// buildOutputPath constructs a standardized output file path for a tool.
-func buildOutputPath(dir, toolName string) string {
-	return fmt.Sprintf("%s%s.out", dir, toolName)
-}
-
-// runHydraBrute runs hydra brute force attack for a given service if brute mode is enabled.
-func runHydraBrute(service, dir string) {
-	if !*checks.OptBrute {
-		return
-	}
-	hydraArgs := []string{
-		"hydra",
-		"-L", utils.UsersList,
-		"-P", utils.DarkwebTop1000,
-		"-f",
-		"-t", "4",
-		"-W", "30",
-		fmt.Sprintf("%s://%s", service, utils.Target),
-	}
-	hydraPath := buildOutputPath(dir, "hydra_"+service)
-	commands.CallRunTool(hydraArgs, hydraPath, checks.OptVVerbose)
-}
-
-// Enumerate File Transfer Protocol (20-21/TCP)
-func ftp() {
-	if utils.IsVisited("ftp") {
-		return
-	}
-
-	dir := utils.ProtocolDetected("FTP", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "20,21", dir+"ftp_scan", "ftp-* and not brute", checks.OptVVerbose)
-	runHydraBrute("ftp", dir)
-}
-
-// Enumerate Secure Shell Protocol (22/TCP)
-func ssh() {
-	dir := utils.ProtocolDetected("SSH", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "22", dir+"ssh_scan", "ssh-* and not brute", checks.OptVVerbose)
-	runHydraBrute("ssh", dir)
-}
-
-// Enumerate Simple Mail Transfer Protocol (25,465,587/TCP)
-func smtp() {
-	if utils.IsVisited("smtp") {
-		return
-	}
-
-	smtpDir := utils.ProtocolDetected("SMTP", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "25,465,587", smtpDir+"smtp_scan", "smtp-commands,smtp-enum-users,smtp-open-relay", checks.OptVVerbose)
-}
-
-// Enumerate Domain Name System (53/TCP)
-func dns() {
-	dir := utils.ProtocolDetected("DNS", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "53", dir+"dns_scan", "*dns*", checks.OptVVerbose)
-}
-
-// Enumerate Finger (79/TCP)
-func finger() {
-	dir := utils.ProtocolDetected("Finger", utils.BaseDir)
-	commands.CallIndividualPortScanner(utils.Target, "79", dir+"finger_scan", checks.OptVVerbose)
-
-	msfArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", utils.Target)}
-	commands.CallRunTool(msfArgs, buildOutputPath(dir, "msfconsole"), checks.OptVVerbose)
-}
-
-// Enumerate HyperText Transfer Protocol (80,443,8080/TCP)
-func http() {
-	if utils.IsVisited("http") {
-		return
-	}
-
-	dir := utils.ProtocolDetected("HTTP", utils.BaseDir)
-	commands.CallIndividualPortScanner(utils.Target, "80,443,8080", dir+"http_scan", checks.OptVVerbose)
-
-	// Port 80:
-	// WordPress on port 80
-	commands.CallWPEnumeration(fmt.Sprintf("http://%s:80", utils.Target), dir, "80", checks.OptVVerbose)
-
-	// Nikto on port 80 (with configurable timeout)
-	nikto80Args := []string{"nikto", "-host", fmt.Sprintf("http://%s:80", utils.Target), "-maxtime", getTimeoutSeconds()}
-	nikto80Path := fmt.Sprintf("%snikto_80.out", dir)
-	commands.CallRunTool(nikto80Args, nikto80Path, checks.OptVVerbose)
-
-	// Wafw00f on port 80
-	wafw00f80Args := []string{"wafw00f", "-v", "--timeout", getTimeoutSeconds(), fmt.Sprintf("http://%s:80", utils.Target)}
-	wafw00f80Path := fmt.Sprintf("%swafw00f_80.out", dir)
-	commands.CallRunTool(wafw00f80Args, wafw00f80Path, checks.OptVVerbose)
-
-	// WhatWeb on port 80
-	whatWeb80Args := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("http://%s:80", utils.Target)}
-	whatWeb80Path := fmt.Sprintf("%swhatweb_80.out", dir)
-	commands.CallRunTool(whatWeb80Args, whatWeb80Path, checks.OptVVerbose)
-
-	// Dirsearch - Light dirbusting on port 80
-	dirsearch80Path := fmt.Sprintf("%sdirsearch_80.out", dir)
-	dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s:80", utils.Target), "-o", dirsearch80Path, "--max-time", getTimeoutSeconds(), "--quiet"}
-	commands.CallRunTool(dirsearch80Args, dirsearch80Path, checks.OptVVerbose)
-
-	if *checks.OptBrute {
-		// CeWL + Ffuf Keywords Bruteforcing
-		commands.CallRunCewlandFfufKeywords(utils.Target, dir, "80", checks.OptVVerbose)
-		commands.CallRunCewlandFfufKeywords(utils.Target, dir, "443", checks.OptVVerbose)
-	}
-
-	// Port 443:
-
-	// WordPress on port 443
-	commands.CallWPEnumeration(fmt.Sprintf("https://%s:443", utils.Target), dir, "443", checks.OptVVerbose)
-
-	// Nikto on port 443 (with configurable timeout)
-	nikto443Args := []string{"nikto", "-host", fmt.Sprintf("https://%s:443", utils.Target), "-maxtime", getTimeoutSeconds()}
-	nikto443Path := fmt.Sprintf("%snikto_443.out", dir)
-	commands.CallRunTool(nikto443Args, nikto443Path, checks.OptVVerbose)
-
-	// Wafw00f on port 443
-	wafw00f443Args := []string{"wafw00f", "-v", "--timeout", getTimeoutSeconds(), fmt.Sprintf("https://%s:443", utils.Target)}
-	wafw00f443Path := fmt.Sprintf("%swafw00f_443.out", dir)
-	commands.CallRunTool(wafw00f443Args, wafw00f443Path, checks.OptVVerbose)
-
-	// WhatWeb on port 443
-	whatWeb443Args := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("http://%s:443", utils.Target)}
-	whatWeb443Path := fmt.Sprintf("%swhatweb_443.out", dir)
-	commands.CallRunTool(whatWeb443Args, whatWeb443Path, checks.OptVVerbose)
-
-	// Dirsearch - Light dirbusting on port 443
-	dirsearch443Path := fmt.Sprintf("%sdirsearch_443.out", dir)
-	dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s:443", utils.Target), "-o", dirsearch443Path, "--max-time", getTimeoutSeconds(), "--quiet"}
-	commands.CallRunTool(dirsearch443Args, dirsearch443Path, checks.OptVVerbose)
-
-	// TestSSL on port 443
-	testssl := "testssl"
-	if !utils.CheckToolExists("testssl") {
-		if utils.CheckToolExists("testssl.sh") {
-			testssl = "testssl.sh"
-		}
-	}
-
-	// testssl with 10 minute timeout (--connect-timeout applies per connection)
-	testsslArgs := []string{testssl, "--connect-timeout", "30", "--openssl-timeout", "30", fmt.Sprintf("https://%s:443", utils.Target)}
-	testsslPath := fmt.Sprintf("%stestssl.out", dir)
-	commands.CallRunTool(testsslArgs, testsslPath, checks.OptVVerbose)
-
-	// Port 8080
-
-	// WordPress on port 8080
-	commands.CallWPEnumeration(fmt.Sprintf("http://%s:8080", utils.Target), dir, "8080", checks.OptVVerbose)
-
-	// Tomcat
-	commands.CallTomcatEnumeration(utils.Target, fmt.Sprintf("http://%s:8080/docs", utils.Target), dir, "8080", checks.OptBrute, checks.OptVVerbose)
-}
-
-// Enumerate Kerberos Protocol (88/TCP)
-func kerberos() {
-	dir := utils.ProtocolDetected("Kerberos", utils.BaseDir)
-	nmapOutputFile := dir + "kerberos_scan"
-	commands.CallIndividualPortScanner(utils.Target, "88", nmapOutputFile, checks.OptVVerbose)
-
-	filePath := dir + "potential_DC_commands.txt"
-	message := `
-	Potential DC found. Enumerate further.
-	Get the name of the domain and chuck it to:
-	nmap -p 88 \ 
-	--script=krb5-enum-users \
-	--script-args krb5-enum-users.realm=\"{Domain_Name}\" \\\n,userdb={Big_Userlist} \\\n{IP}"`
-	if err := utils.WriteTextToFile(filePath, message); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Failed to write kerberos commands file: %v", err))
-	}
-}
-
-// Enumerate Internet Message Access Protocol (110,143,993,995/TCP)
-func imap() {
-	if utils.IsVisited("imap") {
-		return
-	}
-
-	dir := utils.ProtocolDetected("IMAP-POP3", utils.BaseDir)
-	nmapOutputFile := dir + "imap_pop3_scan"
-	commands.CallIndividualPortScanner(utils.Target, "110,143,993,995", nmapOutputFile, checks.OptVVerbose)
-
-	// Openssl
-	openSSLArgs := []string{"openssl", "s_client", "-connect", fmt.Sprintf("%s:imaps", utils.Target)}
-	openSSLPath := fmt.Sprintf("%sopenssl_imap.out", dir)
-	commands.CallRunTool(openSSLArgs, openSSLPath, checks.OptVVerbose)
-
-	// NC banner grabbing
-	ports := []string{"110", "143", "993", "995"}
-	for port := range ports {
-		ncArgs := []string{"nc", "-nv", utils.Target, ports[port]}
-		ncPath := fmt.Sprintf("%s%s_banner_grab.out", dir, ports[port])
-		commands.CallRunTool(ncArgs, ncPath, checks.OptVVerbose)
-	}
-}
-
-// Enumerate Remote Procedure Call Protocol (111/TCP)
-func rpc() {
-	dir := utils.ProtocolDetected("RPC", utils.BaseDir)
-	nmapOutputFile := dir + "rpc_scan"
-	commands.CallIndividualPortScanner(utils.Target, "111", nmapOutputFile, checks.OptVVerbose)
-}
-
-// Enumerate Ident Protocol (113/TCP)
-func ident(openPortsSlice []string) {
-	dir := utils.ProtocolDetected("Ident", utils.BaseDir)
-	nmapOutputFile := dir + "ident_scan"
-	commands.CallIndividualPortScanner(utils.Target, "113", nmapOutputFile, checks.OptVVerbose)
-
-	// ident-user-enum
-	spacedPorts := strings.Join(openPortsSlice, " ")
-	identUserEnumArgs := []string{"ident-user-enum", utils.Target, spacedPorts}
-	identUserEnumPath := fmt.Sprintf("%sident-user-enum.out", dir)
-	commands.CallRunTool(identUserEnumArgs, identUserEnumPath, checks.OptVVerbose)
-}
-
-// Enumerate Microsoft's Remote Procedure Call Protocol (135,593/TCP)
-func msrpc() {
-	dir := utils.ProtocolDetected("MSRPC", utils.BaseDir)
-	nmapOutputFile := dir + "msrpc_scan"
-	commands.CallIndividualPortScanner(utils.Target, "135,593", nmapOutputFile, checks.OptVVerbose)
-
-	rpcDump135Args := []string{"impacket-rpcdump", "135"}
-	rpcDump135Path := fmt.Sprintf("%srpcdump_135.out", dir)
-	commands.CallRunTool(rpcDump135Args, rpcDump135Path, checks.OptVVerbose)
-
-	rpcDump593Args := []string{"impacket-rpcdump", "593"}
-	rpcDump593Path := fmt.Sprintf("%srpcdump_593.out", dir)
-	commands.CallRunTool(rpcDump593Args, rpcDump593Path, checks.OptVVerbose)
-}
-
-// Enumerate NetBIOS / Server Message Block Protocol (137-139,445/TCP - 137/UDP)
-func smb() {
-	if utils.IsVisited("smb") {
-		return
-	}
-	dir := utils.ProtocolDetected("NetBIOS-SMB", utils.BaseDir)
-
-	// Nmap
-	nmapOutputFile := dir + "nb_smb_scan"
-	nmapUDPOutputFile := dir + "nb_smb_UDP_scan"
-	nmapNSEScripts := "smb* and not brute"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "137,138,139,445", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose) // TCP
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "137", nmapUDPOutputFile, "nbstat.nse", checks.OptVVerbose)         // UDP
-
-	// CME
-	cmeArgs := []string{"crackmapexec", "smb", "-u", "''", "-p", "''", utils.Target}
-	cmePath := fmt.Sprintf("%scme_anon.out", dir)
-	commands.CallRunTool(cmeArgs, cmePath, checks.OptVVerbose)
-
-	if *checks.OptBrute {
-		// CME BruteForcing
-		cmeBfArgs := []string{"crackmapexec", "smb", "-u", utils.UsersList, "-p", utils.DarkwebTop1000, "--shares", "--sessions", "--disks", "--loggedon-users", "--users", "--groups", "--computers", "--local-groups", "--pass-pol", "--rid-brute", utils.Target}
-		cmeBfPath := fmt.Sprintf("%scme_bf.out", dir)
-		commands.CallRunTool(cmeBfArgs, cmeBfPath, checks.OptVVerbose)
-	}
-
-	// SMBMap
-	smbMapArgs := []string{"smbmap", "-H", utils.Target}
-	smbMapPath := fmt.Sprintf("%ssmbmap.out", dir)
-	commands.CallRunTool(smbMapArgs, smbMapPath, checks.OptVVerbose)
-
-	// NMBLookup
-	nmbLookupArgs := []string{"nmblookup", "-A", utils.Target}
-	nmbLookupPath := fmt.Sprintf("%snmblookup.out", dir)
-	commands.CallRunTool(nmbLookupArgs, nmbLookupPath, checks.OptVVerbose)
-
-	// Enum4linux-ng
-	enum4linuxNgArgs := []string{"enum4linux-ng", "-A", "-C", utils.Target}
-	enum4linuxNgPath := fmt.Sprintf("%senum4linux_ng.out", dir)
-	commands.CallRunTool(enum4linuxNgArgs, enum4linuxNgPath, checks.OptVVerbose)
-}
-
-// Enumerate Simple Network Management Protocol (161-162,10161-10162/UDP)
-// Future enhancement: Wait for onesixtyone to find community strings, then loop over found CS
-func snmp() {
-	if utils.IsVisited("snmp") {
-		return
-	}
-	dir := utils.ProtocolDetected("SNMP", utils.BaseDir)
-
-	// Nmap
-	nmapOutputFile := dir + "snmp_scan"
-	nmapNSEScripts := "snmp* and not snmp-brute"
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "161,162,10161,10162", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
-	// SNMPWalk
-	snmpWalkArgs := []string{"snmpwalk", "-v2c", "-c", "public", utils.Target}
-	snmpWalkPath := fmt.Sprintf("%ssnmpwalk_v2c_public.out", dir)
-	commands.CallRunTool(snmpWalkArgs, snmpWalkPath, checks.OptVVerbose)
-
-	// OneSixtyOne
-	oneSixtyOneArgs := []string{"onesixtyone", "-c", utils.SnmpList, utils.Target}
-	oneSixtyOnePath := fmt.Sprintf("%snblookup.out", dir)
-	commands.CallRunTool(oneSixtyOneArgs, oneSixtyOnePath, checks.OptVVerbose)
-
-	// Braa
-	// automate bf other CS than public
-	braaArgs := []string{"braa", fmt.Sprintf("public@%s:.1.3.6.*", utils.Target)}
-	braaPath := fmt.Sprintf("%sbraa_public.out", dir)
-	commands.CallRunTool(braaArgs, braaPath, checks.OptVVerbose)
-}
-
-// Enumerate Light Desktop Access Protocol (389,636,3268-3269/TCP)
-func ldap() {
-	if utils.IsVisited("ldap") {
-		return
-	}
-	dir := utils.ProtocolDetected("LDAP", utils.BaseDir)
-
-	// Nmap
-	nmapOutputFile := dir + "ldap_scan"
-	nmapNSEScripts := "ldap* and not brute"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "389,636,3268,3269", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
-	// LDAPSearch - Anonymous bind to discover base DN
-	ldapSearchArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("ldap://%s", utils.Target), "-s", "base", "-b", "", "defaultNamingContext"}
-	ldapSearchPath := fmt.Sprintf("%sldapsearch_base_discovery.out", dir)
-	commands.CallRunTool(ldapSearchArgs, ldapSearchPath, checks.OptVVerbose)
-
-	// LDAPSearch - Anonymous bind to enumerate everything (if allowed)
-	ldapSearchFullArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("ldap://%s", utils.Target), "-b", ""}
-	ldapSearchFullPath := fmt.Sprintf("%sldapsearch_anonymous_dump.out", dir)
-	commands.CallRunTool(ldapSearchFullArgs, ldapSearchFullPath, checks.OptVVerbose)
-
-	// Create helper file with manual enumeration instructions
-	filePath := dir + "ldap_manual_enum_tips.txt"
-	message := fmt.Sprintf(`LDAP Enumeration Tips:
-
-1. Check the base discovery output to find the base DN:
-   less -R %sldapsearch_base_discovery.out
-
-2. Once you have the base DN (e.g., DC=example,DC=com), run:
-   ldapsearch -x -H ldap://%s -b "DC=example,DC=com"
-
-3. Try common LDAP queries:
-   # List all users
-   ldapsearch -x -H ldap://%s -b "DC=example,DC=com" "(objectClass=user)"
-
-   # List all groups
-   ldapsearch -x -H ldap://%s -b "DC=example,DC=com" "(objectClass=group)"
-
-   # List all computers
-   ldapsearch -x -H ldap://%s -b "DC=example,DC=com" "(objectClass=computer)"
-
-4. If anonymous bind fails, try authenticated bind:
-   ldapsearch -x -H ldap://%s -D "CN=username,DC=example,DC=com" -w password -b "DC=example,DC=com"
-
-5. For LDAPS (port 636), use:
-   ldapsearch -x -H ldaps://%s -b "DC=example,DC=com"
-`, ldapSearchPath, utils.Target, utils.Target, utils.Target, utils.Target, utils.Target, utils.Target)
-	if err := utils.WriteTextToFile(filePath, message); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Failed to write LDAP enumeration tips file: %v", err))
-	}
-}
-
-// Enumerate Berkeley R-services (512-514/TCP)
-func rservices() {
-	if utils.IsVisited("rsvc") {
-		return
-	}
-	dir := utils.ProtocolDetected("RServices", utils.BaseDir)
-
-	// Nmap
-	nmapOutputFile := dir + "rservices_scan"
-	commands.CallIndividualPortScanner(utils.Target, "512,513,514", nmapOutputFile, checks.OptVVerbose)
-
-	// Rwho
-	rwhoArgs := []string{"rwho", "-a", utils.Target}
-	rwhoPath := fmt.Sprintf("%srwho.out", dir)
-	commands.CallRunTool(rwhoArgs, rwhoPath, checks.OptVVerbose)
-
-	// Rusers
-	rusersArgs := []string{"rusers", "-la", utils.Target}
-	rusersPath := fmt.Sprintf("%srusers.out", dir)
-	commands.CallRunTool(rusersArgs, rusersPath, checks.OptVVerbose)
-
-	filePath := dir + "next_step_tip.txt"
-	message := `
-	Tip: Enumerate NFS, etc on the utils.Target server for /home/user/.rhosts and /etc/hosts.equiv files to use with rlogin, rsh and rexec.
-	If found, use the following command:
-	rlogin "utils.Target" -l "found_user"`
-	if err := utils.WriteTextToFile(filePath, message); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Failed to write r-services enumeration tips file: %v", err))
-	}
-}
-
-// Enumerate Intelligent Platform Management Interface Protocol (623/TCP)
-func ipmi() {
-	dir := utils.ProtocolDetected("IPMI", utils.BaseDir)
-	nmapOutputFile := dir + "ipmi_scan"
-
-	// Nmap
-	nmapNSEScripts := "ipmi*"
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "623", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
-	// Metasploit
-	msfArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/ipmi/ipmi_dumphashes; set rhosts %s; set output_john_file %sipmi_hashes.john; run; exit", utils.Target, dir)}
-	msfPath := fmt.Sprintf("%smsf_scanner.out", dir)
-	commands.CallRunTool(msfArgs, msfPath, checks.OptVVerbose)
-}
-
-// Enumerate Remote Synchronisation protocol (873/TCP)
-func rsync() {
-	dir := utils.ProtocolDetected("Rsync", utils.BaseDir)
-	nmapOutputFile := dir + "rsync_scan"
-	commands.CallIndividualPortScanner(utils.Target, "873", nmapOutputFile, checks.OptVVerbose)
-
-	// Netcat
-	ncArgs := []string{"nc", "-nv", utils.Target, "873"}
-	ncPath := fmt.Sprintf("%sbanner_grab.out", dir)
-	commands.CallRunTool(ncArgs, ncPath, checks.OptVVerbose)
-
-	filePath := dir + "next_steps_tip.txt"
-	message := `Tip: If nc's output has a drive in it after enumerating the version, for example 'dev', your natural following step should be:
-	"rsync -av --list-only rsync://${utils.Target}/dev"`
-	if err := utils.WriteTextToFile(filePath, message); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Failed to write rsync enumeration tips file: %v", err))
-	}
-}
-
-// Enumerate Microsoft's SQL Server (1433/TCP)
-func mssql() {
-	dir := utils.ProtocolDetected("MSSQL", utils.BaseDir)
-	nmapOutputFile := dir + "mssql"
-	nmapNSEScripts := "ms-sql-info,ms-sql-empty-password,ms-sql-xp-cmdshell,ms-sql-config,ms-sql-ntlm-info,ms-sql-tables,ms-sql-hasdbaccess,ms-sql-dac,ms-sql-dump-hashes"
-	nmapNSEScriptsArgs := map[string]string{
-		"mssql.instance-port": "1433",
-		"mssql.username":      "sa",
-		"mssql.password":      "",
-		"mssql.instance-name": "MSSQLSERVER",
-	}
-	commands.CallIndividualPortScannerWithNSEScriptsAndScriptArgs(utils.Target, "1433", nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs, checks.OptVVerbose)
-
-	if *checks.OptBrute {
-		bruteCMEArgs := []string{"crackmapexec", "mssql", utils.Target, "-u", utils.UsersList, "-p", utils.DarkwebTop1000}
-		bruteCMEPath := fmt.Sprintf("%scme_brute.out", dir)
-		commands.CallRunTool(bruteCMEArgs, bruteCMEPath, checks.OptVVerbose)
-	}
-}
-
-// Enumerate Oracle's Transparent Network Substrate (1521/TCP)
-func tns() {
-	dir := utils.ProtocolDetected("TNS", utils.BaseDir)
-	nmapOutputFile := dir + "tns_scan"
-	nmapNSEScripts := "oracle-sid-brute"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "1521", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
-	// ODAT - Oracle Database Attacking Tool
-	if utils.CheckToolExists("odat") {
-		odatArgs := []string{"odat", "all", "-s", utils.Target}
-		odatPath := fmt.Sprintf("%sodat.out", dir)
-		commands.CallRunTool(odatArgs, odatPath, checks.OptVVerbose)
-	} else {
-		// Provide manual command if odat not installed
-		startSentence := "[!] ODAT not found. Run this manually: '"
-		midSentence := fmt.Sprintf("odat all --output-file %sodat.out -s %s", dir, utils.Target)
-		utils.PrintCustomBiColourMsg("yellow", "cyan", startSentence, midSentence, "'")
-	}
-}
-
-// Enumerate Network File System Protocol (2049/TCP)
-func nfs() {
-	dir := utils.ProtocolDetected("NFS/", utils.BaseDir)
-	nmapOutputFile := dir + "nfs_scan"
-	nmapNSEScripts := "nfs-ls,nfs-showmount,nfs-statfs"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "2049", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
-	// Showmount and mount
-	showmountArgs := []string{"showmount", "-e", utils.Target}
-	showmountPath := fmt.Sprintf("%sshowmount.out", dir)
-	commands.CallRunTool(showmountArgs, showmountPath, checks.OptVVerbose)
-
-	// Mkdir and mount, to mount every found drive with showmount
-	mountDir := fmt.Sprintf("%s%s", dir, "mounted_NFS_contents/")
-	_, err := utils.CustomMkdir(mountDir)
-	if err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Error creating dir: %v", err))
-	}
-
-	showmountOut, err := exec.Command("bash", "-c", fmt.Sprintf("cat %sshowmount.out", dir)).Output()
-	if err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Error reading showmount output: %v. NFS enumeration may be incomplete.", err))
-		return
-	}
-	dirsToMount := []string{}
-	for _, line := range strings.Split(string(showmountOut), "\n") {
-		if strings.Contains(line, "/") {
-			dirsToMount = append(dirsToMount, strings.Split(line, " ")[0])
-		}
-	}
-
-	if len(dirsToMount) == 0 {
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] No NFS shares found to mount on target '", utils.Target, "'")
-		return
-	}
-
-	mountedDirs := []string{}
-	for _, dirToMount := range dirsToMount {
-		localMountPath := fmt.Sprintf("%s%s/", mountDir, strings.ReplaceAll(dirToMount, "/", "_"))
-		_, err := utils.CustomMkdir(localMountPath)
-		if err != nil {
-			utils.ErrorMsg(fmt.Sprintf("Error creating dir for NFS mount: %v", err))
-			continue
-		}
-		mountCmd := exec.Command("bash", "-c", fmt.Sprintf("mount -t nfs %s:%s %s -o nolock,vers=3,tcp,timeo=300", utils.Target, dirToMount, localMountPath))
-		if err := mountCmd.Run(); err != nil {
-			utils.ErrorMsg(fmt.Sprintf("Error mounting NFS share %s: %v. Continuing with other shares...", dirToMount, err))
-			continue
-		}
-		mountedDirs = append(mountedDirs, localMountPath)
-		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully mounted NFS share '", dirToMount, "' to '", localMountPath, "'")
-	}
-
-	if len(mountedDirs) == 0 {
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] No NFS shares could be mounted on target '", utils.Target, "'")
-		return
-	}
-
-	treeCmd := exec.Command("bash", "-c", fmt.Sprintf("tree %s >> %snfs_mounts.tree 2>&1", mountDir, mountDir))
-	if err := treeCmd.Run(); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Error running tree command: %v. Skipping tree output.", err))
-	}
-
-	if err := utils.WriteTextToFile(fmt.Sprintf("%scleanup_readme.txt", mountDir), fmt.Sprintf("To clean up and unmount the NFS drive, run 'umount -v '%s'/(mounted dirs)\n", mountDir)); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Failed to write NFS cleanup readme: %v", err))
-	}
-}
-
-// Enumerate MySQL server (3306/TCP)
-func mysql() {
-	dir := utils.ProtocolDetected("MYSQL", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3306", dir+"mysql_scan", "mysql*", checks.OptVVerbose)
-	runHydraBrute("mysql", dir)
-}
-
-// Enumerate Remote Desktop Protocol (3389/TCP)
-func rdp() {
-	dir := utils.ProtocolDetected("RDP", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3389", dir+"rdp_scan", "rdp*", checks.OptVVerbose)
-	runHydraBrute("rdp", dir)
-}
-
-// Enumerate Windows Remote Management Protocol (5985-5968/TCP)
-func winrm() {
-	if utils.IsVisited("winrm") {
-		return
-	}
-
-	dir := utils.ProtocolDetected("WinRM", utils.BaseDir)
-	nmapOutputFile := dir + "winrm_scan"
-	commands.CallIndividualPortScanner(utils.Target, "5985,5986", nmapOutputFile, checks.OptVVerbose)
-}
-
-// Enumerate port 10000/TCP - commonly Webmin or NDMP
-// Nmap service detection will identify the actual service in output
-func tenthousand() {
-	dir := utils.ProtocolDetected("port_10000", utils.BaseDir)
-	nmapOutputFile := dir + "port_10000_scan"
-	// Use service version detection to identify Webmin vs NDMP vs other
-	commands.CallIndividualPortScanner(utils.Target, "10000", nmapOutputFile, checks.OptVVerbose)
-}
-
-// Iterate through each port, group up by protocol and automate launching tools
+// Run iterates through each port, groups by protocol and automates launching tools
 func Run(openPortsSlice []string) {
 	for _, port := range openPortsSlice {
-		switch port {
-		case "20", "21", "22", "25", "465", "587", "53", "79", "80", "443", "8080", "88", "110", "143", "993", "995", "111", "113", "135", "593", "137", "138", "139", "445":
-			upToSMB(port, openPortsSlice)
-
-		case "161", "162", "10161", "10162", "389", "636", "3268", "3269", "512", "513", "514", "623", "873", "1433", "1521", "2049", "3306", "3389", "5985", "5986", "10000":
-			beyondSMB(port)
-
-		default:
-			if *checks.OptVVerbose {
-				utils.PrintSafe("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
-			}
-		}
+		routePort(port, openPortsSlice)
 	}
 }
 
-// Splitting Run in half for maintainability purposes
-func upToSMB(port string, openPortsSlice []string) {
+// routePort routes a port to its appropriate protocol handler
+func routePort(port string, openPortsSlice []string) {
 	switch port {
+	// File Transfer
 	case "20", "21":
-		ftp()
-	case "22":
-		ssh()
-	case "25", "465", "587":
-		smtp()
-	case "53":
-		dns()
-	case "79":
-		finger()
-	case "80", "443", "8080":
-		http()
-	case "88":
-		kerberos()
-	case "110", "143", "993", "995":
-		imap()
-	case "111":
-		rpc()
-	case "113":
-		ident(openPortsSlice)
-	case "135", "593":
-		msrpc()
-	case "137", "138", "139", "445":
-		smb()
-	}
-}
-
-// Splitting Run in half for maintainability purposes
-func beyondSMB(port string) {
-	switch port {
-	case "161", "162", "10161", "10162": // UDP
-		snmp()
-	case "389", "636", "3268", "3269":
-		ldap()
-	case "512", "513", "514":
-		rservices()
-	case "623":
-		ipmi()
+		protocols.FTP()
 	case "873":
-		rsync()
-	case "1433":
-		mssql()
-	case "1521":
-		tns()
+		protocols.Rsync()
 	case "2049":
-		nfs()
-	case "3306":
-		mysql()
+		protocols.NFS()
+
+	// Remote Access
+	case "22":
+		protocols.SSH()
 	case "3389":
-		rdp()
+		protocols.RDP()
 	case "5985", "5986":
-		winrm()
+		protocols.WinRM()
+
+	// Mail
+	case "25", "465", "587":
+		protocols.SMTP()
+	case "110", "143", "993", "995":
+		protocols.IMAP()
+
+	// Web
+	case "80", "443", "8080":
+		protocols.HTTP()
+
+	// SMB/NetBIOS
+	case "137", "138", "139", "445":
+		protocols.SMB()
+
+	// Directory Services
+	case "88":
+		protocols.Kerberos()
+	case "389", "636", "3268", "3269":
+		protocols.LDAP()
+
+	// Databases
+	case "3306":
+		protocols.MySQL()
+	case "1433":
+		protocols.MSSQL()
+	case "1521":
+		protocols.TNS()
+
+	// Miscellaneous
+	case "53":
+		protocols.DNS()
+	case "79":
+		protocols.Finger()
+	case "111":
+		protocols.RPC()
+	case "113":
+		protocols.Ident(openPortsSlice)
+	case "135", "593":
+		protocols.MSRPC()
+	case "161", "162", "10161", "10162": // UDP
+		protocols.SNMP()
+	case "512", "513", "514":
+		protocols.RServices()
+	case "623":
+		protocols.IPMI()
 	case "10000":
-		tenthousand()
+		protocols.Port10000()
+
+	default:
+		if *checks.OptVVerbose {
+			utils.PrintSafe("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
+		}
 	}
 }

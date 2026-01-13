@@ -3,6 +3,7 @@ package portsIterator
 import (
 	"testing"
 
+	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
@@ -27,9 +28,10 @@ func TestGetTimeoutSeconds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			utils.ToolTimeout = tt.timeoutInput
-			got := getTimeoutSeconds()
-			if got != tt.expectedOutput {
-				t.Errorf("getTimeoutSeconds() = %v, want %v", got, tt.expectedOutput)
+			// Test the timeout conversion function
+			timeoutStr := common.GetTimeoutSeconds()
+			if timeoutStr != tt.expectedOutput {
+				t.Errorf("common.GetTimeoutSeconds() = %v, want %v", timeoutStr, tt.expectedOutput)
 			}
 		})
 	}

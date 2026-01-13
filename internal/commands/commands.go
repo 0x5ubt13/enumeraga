@@ -757,7 +757,6 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		return
 	}
 
-
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("failed to get stderr pipe: %v", err))
@@ -770,7 +769,6 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		utils.ErrorMsg(fmt.Sprintf("Error creating output file: %s", err))
 		return
 	}
-
 
 	defer func(file *os.File) {
 		err := file.Close()

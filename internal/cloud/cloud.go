@@ -15,8 +15,6 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	// Timing the execution
 	start := time.Now()
 
-
-
 	// Parse optional cloud arguments, getting rid of the `enumeraga cloud` args
 	// Keep os.Args[0] as program name for getopt, remove "cloud" subcommand
 	os.Args = append(os.Args[:1], os.Args[2:]...)
@@ -39,7 +37,6 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 		utils.PrintCloudUsageExamples()
 		return utils.ErrHelpRequested
 	}
-
 
 	// Get remaining args after flag parsing
 	remainingArgs := getopt.Args()
@@ -90,7 +87,6 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 
 	return utils.ErrCloudComplete
 }
-
 
 // printCloudUsage prints only the cloud-relevant flags, not infra flags
 func printCloudUsage() {

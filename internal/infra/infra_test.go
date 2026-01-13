@@ -9,9 +9,9 @@ import (
 // TestCheckFive tests target validation
 func TestCheckFive(t *testing.T) {
 	tests := []struct {
-		name       string
-		target     string
-		wantErr    bool
+		name    string
+		target  string
+		wantErr bool
 	}{
 		{
 			name:    "valid target",

@@ -11,11 +11,11 @@ import (
 // Logger provides structured logging with backward-compatible interface
 // Maintains colored output while providing better control and testability
 type Logger struct {
-	quiet      bool
-	verbose    bool
-	output     io.Writer
+	quiet       bool
+	verbose     bool
+	output      io.Writer
 	errorOutput io.Writer
-	mu         sync.Mutex
+	mu          sync.Mutex
 }
 
 // Global logger instance - initialised to maintain backward compatibility
@@ -124,11 +124,11 @@ func (l *Logger) Debugf(format string, args ...interface{}) {
 func (l *Logger) ColoredMsg(color1, color2 string, parts ...string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	
+
 	if l.quiet && !isImportantMessage(parts) {
 		return
 	}
-	
+
 	// Use existing PrintCustomBiColourMsg logic
 	PrintCustomBiColourMsg(color1, color2, parts...)
 }
@@ -139,7 +139,7 @@ func isImportantMessage(parts []string) bool {
 	if len(parts) == 0 {
 		return false
 	}
-	
+
 	// Check for error/warning indicators
 	first := parts[0]
 	return first == "[-]" || first == "[!]" || first == "[+]"
