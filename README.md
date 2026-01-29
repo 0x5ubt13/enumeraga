@@ -142,8 +142,15 @@ docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_i
 # Run against targets from a file
 docker run --network host -v ./output:/tmp/enumeraga_output -v ./targets.txt:/targets.txt gagarter/enumeraga_infra -t /targets.txt
 ```
-
 **Note:** The `--network host` flag is required for nmap scans to work properly.
+
+#### M-series MacOS (ARM64)!
+
+If you want all the goodies of Enumeraga without having to emulate an x86_64 machine, I gotchu! Use this:
+
+```bash
+docker run --privileged --platform linux/amd64 --network host -v ./enumeraga_output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99
+```
 
 ### Containerised version - Cloud Scanning
 
