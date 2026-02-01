@@ -15,13 +15,17 @@ func TcpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 	defer cancel()
 
 	// Equivalent to `nmap -p1-65535 --min-rate=2000 --privileged <target>` with 15-min timeout
-	scanner, err := nmap.NewScanner(
-		ctx,
+	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithPorts("1-65535"),
-		nmap.WithMinRate(common.FastMinRate),
 		nmap.WithPrivileged(),
-	)
+	}
+	if utils.GentleMode {
+		options = append(options, common.GentleTimingOptions()...)
+	} else {
+		options = append(options, nmap.WithMinRate(common.FastMinRate))
+	}
+	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner: %w", err)
 	}
@@ -41,13 +45,17 @@ func SlowerTcpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 	defer cancel()
 
 	// Equivalent to `nmap -p1-65535 --min-rate=500 --privileged <target>` with 15-min timeout
-	scanner, err := nmap.NewScanner(
-		ctx,
+	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithPorts("1-65535"),
-		nmap.WithMinRate(common.DefaultMinRate),
 		nmap.WithPrivileged(),
-	)
+	}
+	if utils.GentleMode {
+		options = append(options, common.GentleTimingOptions()...)
+	} else {
+		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
+	}
+	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner: %w", err)
 	}
@@ -70,13 +78,17 @@ func TcpPortSweepWithTopPorts(target string, optTopPorts *string, optVVerbose *b
 		return nil, fmt.Errorf("unable to convert top ports var: %w", err)
 	}
 
-	scanner, err := nmap.NewScanner(
-		ctx,
+	options := []nmap.Option{
 		nmap.WithMostCommonPorts(topPorts),
 		nmap.WithTargets(target),
-		nmap.WithMinRate(common.FastMinRate),
 		nmap.WithPrivileged(),
-	)
+	}
+	if utils.GentleMode {
+		options = append(options, common.GentleTimingOptions()...)
+	} else {
+		options = append(options, nmap.WithMinRate(common.FastMinRate))
+	}
+	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner: %w", err)
 	}

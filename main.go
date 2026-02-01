@@ -21,9 +21,6 @@ func main() {
 	// Initialize global context with signal handling for graceful shutdown
 	utils.InitGlobalContext()
 
-	// Initialize worker pool for concurrent tool execution (limits goroutines)
-	utils.InitWorkerPool(0) // 0 = use default (20 concurrent tools)
-
 	// Show version info
 	if utils.Version != "dev" {
 		fmt.Printf("%s\n", utils.GetVersion())
@@ -36,6 +33,9 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
+
+	// Initialize worker pool for concurrent tool execution (limits goroutines)
+	utils.InitWorkerPool(utils.MaxWorkersForMode())
 
 	// Timing the execution
 	start := time.Now()

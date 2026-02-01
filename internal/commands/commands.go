@@ -203,10 +203,16 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) err
 		return nil
 	}
 
+	args = applyGentleArgs(args)
+
 	tool := args[0]
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
 	announceTool(command, tool)
+
+	if delay := utils.ToolStartDelay(); delay > 0 {
+		time.Sleep(delay)
+	}
 
 	// Use CommandContext to allow cancellation via global context
 	ctx := utils.GetGlobalContext()
@@ -480,6 +486,9 @@ func runNmapScanAsync(toolName string, port string, outFile string, scanFunc Nma
 		defer pool.Release()
 
 		utils.ToolRegistry.StartTool(name)
+		if delay := utils.ToolStartDelay(); delay > 0 {
+			time.Sleep(delay)
+		}
 		if err := scanFunc(); err != nil {
 			utils.ErrorMsg(fmt.Sprintf("%s failed: %v", name, err))
 			utils.ToolRegistry.CompleteTool(name, false)
@@ -488,6 +497,44 @@ func runNmapScanAsync(toolName string, port string, outFile string, scanFunc Nma
 		completed, total := utils.ToolRegistry.CompleteTool(name, true)
 		printToolSuccess(portNum, name, outputFile+".nmap", completed, total)
 	}(toolName, port, outFile)
+}
+
+func applyGentleArgs(args []string) []string {
+	if !utils.GentleMode || len(args) == 0 {
+		return args
+	}
+
+	tool := args[0]
+	out := make([]string, len(args))
+	copy(out, args)
+
+	switch tool {
+	case "ffuf":
+		out = setFlagValue(out, "-rate", "50")
+		out = setFlagValue(out, "-t", "2")
+	case "dirsearch":
+		out = setFlagValue(out, "-t", "2")
+	case "gobuster":
+		out = setFlagValue(out, "-t", "5")
+	case "hydra":
+		out = setFlagValue(out, "-t", "2")
+	case "wpscan":
+		out = setFlagValue(out, "--max-threads", "1")
+	case "whatweb":
+		out = setFlagValue(out, "-a", "1")
+	}
+
+	return out
+}
+
+func setFlagValue(args []string, flag string, value string) []string {
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == flag {
+			args[i+1] = value
+			return args
+		}
+	}
+	return append(args, flag, value)
 }
 
 // extractPortFromPath extracts port number from file path for tool naming

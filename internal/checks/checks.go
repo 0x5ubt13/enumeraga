@@ -16,6 +16,9 @@ var (
 	// OptBrute Activates all fuzzing and bruteforce in the script
 	OptBrute = getopt.BoolLong("brute", 'b', "Activate all fuzzing and bruteforce in the tool.")
 
+	// OptGentle throttles scans and tools for a gentler profile
+	OptGentle = getopt.BoolLong("gentle", 'g', "Throttle scans and tools for a gentler scan profile.")
+
 	// Specify custom DNS servers.
 	// Default option: -n
 	// OptDNS 		= getopt.StringLong("DNS", 'd', "", "Specify custom DNS servers. Default option: -n")
@@ -81,6 +84,7 @@ func Run() (int, error) {
 
 	switch os.Args[1] {
 	case "c", "cl", "clo", "clou", "cloud":
+		utils.SetGentleMode(false)
 		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting Cloud checks phase"), utils.Cyan(" ----------"))
 
 		if err := cloud.Run(OptOutput, OptHelp, OptQuiet, OptVVerbose); err != nil {
@@ -88,6 +92,7 @@ func Run() (int, error) {
 		}
 		return 0, nil
 	case "i", "in", "inf", "infr", "infra":
+		utils.SetGentleMode(*OptGentle)
 		// Infra checks now moved to internal/infra/infra.go
 		return infra.Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose, OptOutput, OptTarget)
 

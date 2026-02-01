@@ -11,9 +11,10 @@ import (
 
 // ScanDefaults holds common scan configuration
 const (
-	DefaultTimeout = 15 * time.Minute
-	DefaultMinRate = 500
-	FastMinRate    = 2000
+	DefaultTimeout  = 15 * time.Minute
+	DefaultMinRate  = 500
+	FastMinRate     = 2000
+	GentleScanDelay = 400 * time.Millisecond
 )
 
 // HandleScanResult processes nmap scan results and warnings
@@ -29,6 +30,17 @@ func HandleScanResult(result *nmap.Run, warnings *[]string, err error, optVVerbo
 // CreateContext creates a context with the default timeout
 func CreateContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), DefaultTimeout)
+}
+
+// GentleTimingOptions returns nmap timing options for gentle mode.
+func GentleTimingOptions() []nmap.Option {
+	if !utils.GentleMode {
+		return nil
+	}
+	return []nmap.Option{
+		nmap.WithTimingTemplate(nmap.TimingPolite),
+		nmap.WithScanDelay(GentleScanDelay),
+	}
 }
 
 // PrintScanStart prints scan start message

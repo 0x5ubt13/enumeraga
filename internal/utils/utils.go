@@ -54,6 +54,9 @@ var (
 	// Default: 10 minutes. Can be set via CLI flag -T/--timeout
 	ToolTimeout = 10
 
+	// GentleMode enables a throttled scan profile for infra scanning.
+	GentleMode bool
+
 	// Interrupted global, to show user different info if single IP target was unsuccessful
 	Interrupted bool
 
@@ -70,6 +73,13 @@ var (
 	BuildDate string // Build timestamp
 )
 
+const (
+	// GentleMaxWorkers limits concurrent tools when gentle mode is enabled.
+	GentleMaxWorkers = 2
+	// GentleToolStartDelay adds spacing between tool starts in gentle mode.
+	GentleToolStartDelay = 750 * time.Millisecond
+)
+
 func init() {
 	ToolRegistry = NewToolTracker()
 	// Set default version if not set by build flags
@@ -82,6 +92,28 @@ func init() {
 	if BuildDate == "" {
 		BuildDate = "unknown"
 	}
+}
+
+// SetGentleMode enables or disables gentle scan behaviour.
+func SetGentleMode(enabled bool) {
+	GentleMode = enabled
+}
+
+// MaxWorkersForMode returns a max worker count honoring gentle mode.
+// Returning 0 keeps the default worker pool size.
+func MaxWorkersForMode() int {
+	if GentleMode {
+		return GentleMaxWorkers
+	}
+	return 0
+}
+
+// ToolStartDelay returns the configured delay between tool starts.
+func ToolStartDelay() time.Duration {
+	if GentleMode {
+		return GentleToolStartDelay
+	}
+	return 0
 }
 
 // GetVersion returns the full version string

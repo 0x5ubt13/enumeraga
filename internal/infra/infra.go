@@ -18,6 +18,10 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 	if !*OptQuiet {
 		utils.PrintBanner()
 	}
+	if utils.GentleMode && !*OptQuiet {
+		utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Gentle mode enabled: nmap timing T2 (polite), scan delay 400ms, maximum workers 2, tool start delay 750ms.")
+		utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Gentle tool settings: ffuf rate 50/t=2, dirsearch t=2, gobuster t=5, hydra t=2, wpscan max-threads 1, whatweb aggression 1.")
+	}
 
 	if !*OptQuiet {
 		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting infra checks phase"), utils.Cyan(" ----------"))
@@ -84,6 +88,7 @@ func printInfraUsage() {
 	fmt.Println("Usage: enumeraga infra [OPTIONS]")
 	fmt.Println("\nOptions:")
 	fmt.Println("  -b, --brute          Activate all fuzzing and bruteforce in the tool")
+	fmt.Println("  -g, --gentle         Throttle scans and tools for a gentler scan profile")
 	fmt.Println("  -h, --help           Display this help and exit")
 	fmt.Println("  -i, --install        Only try to install pre-requisite tools and exit")
 	fmt.Println("  -n, --nmap-only      Activate nmap scans only and ignore all other tools")

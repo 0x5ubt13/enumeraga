@@ -16,21 +16,25 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string, 
 	ctx, cancel := common.CreateContext()
 	defer cancel()
 
-	scanner, err := nmap.NewScanner(
-		ctx,
+	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithPorts(port),
 		nmap.WithPrivileged(),
-		nmap.WithMinRate(common.DefaultMinRate),
 		nmap.WithDisabledDNSResolution(),
 		nmap.WithDefaultScript(),
 		nmap.WithServiceInfo(),
-		nmap.WithNmapOutput(outFile+".nmap"),
-		nmap.WithGrepOutput(outFile+".grep"),
+		nmap.WithNmapOutput(outFile + ".nmap"),
+		nmap.WithGrepOutput(outFile + ".grep"),
 		nmap.WithScripts(scripts),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
-	)
+	}
+	if utils.GentleMode {
+		options = append(options, common.GentleTimingOptions()...)
+	} else {
+		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
+	}
+	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualPortScannerWithNSEScripts: %s %s %s %w", target, port, outFile, err)
 	}
@@ -55,22 +59,26 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 	ctx, cancel := common.CreateContext()
 	defer cancel()
 
-	scanner, err := nmap.NewScanner(
-		ctx,
+	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithPorts(port),
 		nmap.WithPrivileged(),
-		nmap.WithMinRate(common.DefaultMinRate),
 		nmap.WithDisabledDNSResolution(),
 		nmap.WithDefaultScript(),
 		nmap.WithServiceInfo(),
-		nmap.WithNmapOutput(outFile+".nmap"),
-		nmap.WithGrepOutput(outFile+".grep"),
+		nmap.WithNmapOutput(outFile + ".nmap"),
+		nmap.WithGrepOutput(outFile + ".grep"),
 		nmap.WithScripts(scripts),
 		nmap.WithScriptArguments(scriptArgs),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
-	)
+	}
+	if utils.GentleMode {
+		options = append(options, common.GentleTimingOptions()...)
+	} else {
+		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
+	}
+	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualPortScannerWithNSEScriptsAndScriptArgs: %s %s %s %w", target, port, outFile, err)
 	}
@@ -95,22 +103,26 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 	ctx, cancel := common.CreateContext()
 	defer cancel()
 
-	scanner, err := nmap.NewScanner(
-		ctx,
+	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithUDPScan(),
 		nmap.WithPorts(port),
 		nmap.WithPrivileged(),
-		nmap.WithMinRate(common.DefaultMinRate),
 		nmap.WithDisabledDNSResolution(),
 		nmap.WithDefaultScript(),
 		nmap.WithServiceInfo(),
-		nmap.WithNmapOutput(outFile+".nmap"),
-		nmap.WithGrepOutput(outFile+".grep"),
+		nmap.WithNmapOutput(outFile + ".nmap"),
+		nmap.WithGrepOutput(outFile + ".grep"),
 		nmap.WithScripts(scripts),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
-	)
+	}
+	if utils.GentleMode {
+		options = append(options, common.GentleTimingOptions()...)
+	} else {
+		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
+	}
+	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualUDPPortScannerWithNSEScripts: %s %s %s %w", target, port, outFile, err)
 	}

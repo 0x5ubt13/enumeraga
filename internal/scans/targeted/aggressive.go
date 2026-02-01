@@ -14,20 +14,24 @@ func IndividualPortScanner(target, port, outFile string, optVVerbose *bool) erro
 	ctx, cancel := common.CreateContext()
 	defer cancel()
 
-	scanner, err := nmap.NewScanner(
-		ctx,
+	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithPorts(port),
 		nmap.WithPrivileged(),
-		nmap.WithMinRate(common.DefaultMinRate),
 		nmap.WithDisabledDNSResolution(),
 		nmap.WithDefaultScript(),
 		nmap.WithServiceInfo(),
-		nmap.WithNmapOutput(outFile+".nmap"),
-		nmap.WithGrepOutput(outFile+".grep"),
+		nmap.WithNmapOutput(outFile + ".nmap"),
+		nmap.WithGrepOutput(outFile + ".grep"),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
-	)
+	}
+	if utils.GentleMode {
+		options = append(options, common.GentleTimingOptions()...)
+	} else {
+		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
+	}
+	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualPortScanner: %s %s %s %w", target, port, outFile, err)
 	}
@@ -49,20 +53,25 @@ func FullAggressiveScan(target, ports, outFile string, optVVerbose *bool) error 
 	ctx, cancel := common.CreateContext()
 	defer cancel()
 
-	scanner, err := nmap.NewScanner(
-		ctx,
+	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithPorts(ports),
 		nmap.WithPrivileged(),
 		nmap.WithDisabledDNSResolution(),
-		nmap.WithNmapOutput(outFile+".nmap"),
+		nmap.WithNmapOutput(outFile + ".nmap"),
 		nmap.WithOSDetection(),
 		nmap.WithServiceInfo(),
 		nmap.WithDefaultScript(),
-		nmap.WithGrepOutput(outFile+".grep"),
+		nmap.WithGrepOutput(outFile + ".grep"),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
-	)
+	}
+	if utils.GentleMode {
+		options = append(options, common.GentleTimingOptions()...)
+	} else {
+		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
+	}
+	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner fullAggressiveScan: %w", err)
 	}
