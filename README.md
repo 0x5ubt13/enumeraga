@@ -134,15 +134,15 @@ docker build -t gagarter/enumeraga_infra .
 docker pull gagarter/enumeraga_infra
 
 # Run against a single target
-docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99
+docker run --network host --cap-add NET_RAW --cap-add NET_ADMIN -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99
 
 # Run with bruteforce enabled
-docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 -b
+docker run --network host --cap-add NET_RAW --cap-add NET_ADMIN -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 -b
 
 # Run against targets from a file
-docker run --network host -v ./output:/tmp/enumeraga_output -v ./targets.txt:/targets.txt gagarter/enumeraga_infra -t /targets.txt
+docker run --network host --cap-add NET_RAW --cap-add NET_ADMIN -v ./output:/tmp/enumeraga_output -v ./targets.txt:/targets.txt gagarter/enumeraga_infra -t /targets.txt
 ```
-**Note:** The `--network host` flag is required for nmap scans to work properly.
+**Note:** Use `--network host --cap-add NET_RAW --cap-add NET_ADMIN` for nmap privileged scans to work correctly in Docker.
 
 #### M-series MacOS (ARM64)!
 

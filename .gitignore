@@ -30,3 +30,4 @@ docker_infra_build_test.sh
 *.md
 !README.md
 !VERSIONING.md
+.DS_Store
