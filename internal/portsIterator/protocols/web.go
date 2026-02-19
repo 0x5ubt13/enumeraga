@@ -1,7 +1,8 @@
 package protocols
 
 import (
-	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -29,9 +30,6 @@ var (
 	}
 	httpsProbeClient = &http.Client{
 		Timeout: webProbeTimeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -108,6 +106,11 @@ func probeWebScheme(scheme, port string) bool {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if scheme == "https" && isTLSCertValidationError(err) {
+			// HTTPS endpoint detected but certificate validation failed.
+			return true
+		}
+
 		// Retry with GET for servers that reject HEAD.
 		req, err = http.NewRequest(http.MethodGet, targetURL, nil)
 		if err != nil {
@@ -117,6 +120,10 @@ func probeWebScheme(scheme, port string) bool {
 
 		resp, err = client.Do(req)
 		if err != nil {
+			if scheme == "https" && isTLSCertValidationError(err) {
+				// HTTPS endpoint detected but certificate validation failed.
+				return true
+			}
 			return false
 		}
 	}
@@ -125,6 +132,25 @@ func probeWebScheme(scheme, port string) bool {
 	}()
 
 	return resp.StatusCode >= 100 && resp.StatusCode < 600
+}
+
+func isTLSCertValidationError(err error) bool {
+	var unknownAuthorityErr x509.UnknownAuthorityError
+	if errors.As(err, &unknownAuthorityErr) {
+		return true
+	}
+
+	var hostnameErr x509.HostnameError
+	if errors.As(err, &hostnameErr) {
+		return true
+	}
+
+	var certInvalidErr x509.CertificateInvalidError
+	if errors.As(err, &certInvalidErr) {
+		return true
+	}
+
+	return false
 }
 
 func uniqueSortedPorts(openPortsSlice []string) []string {
