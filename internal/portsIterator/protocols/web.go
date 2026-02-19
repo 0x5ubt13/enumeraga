@@ -1,13 +1,155 @@
 package protocols
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net/http"
+	"sort"
+	"strconv"
+	"sync"
+	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
+
+const (
+	webProbeTimeout     = 3 * time.Second
+	webProbeConcurrency = 10
+)
+
+var (
+	httpProbeClient = &http.Client{
+		Timeout: webProbeTimeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	httpsProbeClient = &http.Client{
+		Timeout: webProbeTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+)
+
+// RunWhatWebForDetectedWebPorts probes open ports and launches whatweb when HTTP(S) is detected.
+func RunWhatWebForDetectedWebPorts(openPortsSlice []string) {
+	ports := uniqueSortedPorts(openPortsSlice)
+	if len(ports) == 0 {
+		return
+	}
+
+	sem := make(chan struct{}, webProbeConcurrency)
+	var wg sync.WaitGroup
+
+	var dir string
+	var dirOnce sync.Once
+	getDir := func() string {
+		dirOnce.Do(func() {
+			dir = utils.ProtocolDetected("HTTP", utils.BaseDir)
+		})
+		return dir
+	}
+
+	for _, port := range ports {
+		// Port 80 and 443 already launch whatweb via the standard HTTP protocol flow.
+		if port == "80" || port == "443" {
+			continue
+		}
+
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(port string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			scheme := detectWebScheme(port)
+			if scheme == "" {
+				return
+			}
+
+			whatWebArgs := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port)}
+			whatWebPath := fmt.Sprintf("%swhatweb_%s.out", getDir(), port)
+			commands.CallRunTool(whatWebArgs, whatWebPath, checks.OptVVerbose)
+		}(port)
+	}
+
+	wg.Wait()
+}
+
+func detectWebScheme(port string) string {
+	if probeWebScheme("https", port) {
+		return "https"
+	}
+	if probeWebScheme("http", port) {
+		return "http"
+	}
+	return ""
+}
+
+func probeWebScheme(scheme, port string) bool {
+	targetURL := fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port)
+	req, err := http.NewRequest(http.MethodHead, targetURL, nil)
+	if err != nil {
+		return false
+	}
+
+	client := httpProbeClient
+	if scheme == "https" {
+		client = httpsProbeClient
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		// Retry with GET for servers that reject HEAD.
+		req, err = http.NewRequest(http.MethodGet, targetURL, nil)
+		if err != nil {
+			return false
+		}
+		req.Header.Set("Range", "bytes=0-0")
+
+		resp, err = client.Do(req)
+		if err != nil {
+			return false
+		}
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	return resp.StatusCode >= 100 && resp.StatusCode < 600
+}
+
+func uniqueSortedPorts(openPortsSlice []string) []string {
+	seen := make(map[string]struct{}, len(openPortsSlice))
+	portNumbers := make([]int, 0, len(openPortsSlice))
+
+	for _, port := range openPortsSlice {
+		if _, ok := seen[port]; ok {
+			continue
+		}
+		portNum, err := strconv.Atoi(port)
+		if err != nil {
+			continue
+		}
+		seen[port] = struct{}{}
+		portNumbers = append(portNumbers, portNum)
+	}
+
+	sort.Ints(portNumbers)
+	ports := make([]string, 0, len(portNumbers))
+	for _, portNum := range portNumbers {
+		ports = append(ports, strconv.Itoa(portNum))
+	}
+	return ports
+}
 
 // HTTP enumerates HyperText Transfer Protocol (80,443,8080/TCP)
 func HTTP() {
@@ -74,7 +216,7 @@ func enumerateHTTPPort443(dir string) {
 	commands.CallRunTool(wafw00f443Args, wafw00f443Path, checks.OptVVerbose)
 
 	// WhatWeb on port 443
-	whatWeb443Args := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("http://%s:443", utils.Target)}
+	whatWeb443Args := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("https://%s:443", utils.Target)}
 	whatWeb443Path := fmt.Sprintf("%swhatweb_443.out", dir)
 	commands.CallRunTool(whatWeb443Args, whatWeb443Path, checks.OptVVerbose)
 

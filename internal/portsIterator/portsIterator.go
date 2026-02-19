@@ -8,6 +8,8 @@ import (
 
 // Run iterates through each port, groups by protocol and automates launching tools
 func Run(openPortsSlice []string) {
+	protocols.RunWhatWebForDetectedWebPorts(openPortsSlice)
+
 	for _, port := range openPortsSlice {
 		routePort(port, openPortsSlice)
 	}
