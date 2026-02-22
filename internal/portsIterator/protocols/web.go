@@ -104,6 +104,7 @@ func probeWebScheme(scheme, port string) bool {
 		client = httpsProbeClient
 	}
 
+	// #nosec G704 -- target URL is the user-specified scan target in this security scanner.
 	resp, err := client.Do(req)
 	if err != nil {
 		if scheme == "https" && isTLSCertValidationError(err) {
@@ -118,6 +119,7 @@ func probeWebScheme(scheme, port string) bool {
 		}
 		req.Header.Set("Range", "bytes=0-0")
 
+		// #nosec G704 -- target URL is the user-specified scan target in this security scanner.
 		resp, err = client.Do(req)
 		if err != nil {
 			if scheme == "https" && isTLSCertValidationError(err) {
@@ -146,11 +148,7 @@ func isTLSCertValidationError(err error) bool {
 	}
 
 	var certInvalidErr x509.CertificateInvalidError
-	if errors.As(err, &certInvalidErr) {
-		return true
-	}
-
-	return false
+	return errors.As(err, &certInvalidErr)
 }
 
 func uniqueSortedPorts(openPortsSlice []string) []string {

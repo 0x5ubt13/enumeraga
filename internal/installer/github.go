@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -232,9 +233,12 @@ func Unzip(src, dest string) (string, error) {
 }
 
 // InstallBinary installs a binary to the system PATH
-func InstallBinary(tmpDirToolPath string) (string, error) {
-	// Determine the destination path based on the operating system
-	binaryName := filepath.Base(tmpDirToolPath)
+func InstallBinary(tool, extractedBinaryPath string) (string, error) {
+	// Determine the destination path based on the operating system.
+	binaryName, err := expectedBinaryName(tool)
+	if err != nil {
+		return "", err
+	}
 
 	var destPath string
 	switch HostOS.OS {
@@ -246,14 +250,23 @@ func InstallBinary(tmpDirToolPath string) (string, error) {
 		return "", fmt.Errorf("unsupported operating system to install binary: %s/%s. Please open PR or let me know to fix it", HostOS.OS, HostOS.Arch)
 	}
 
-	// Move the binary to the destination path
-	if err := os.Rename(tmpDirToolPath, destPath); err != nil {
-		fmt.Println("Error moving binary to PATH. Maybe you need sudo?:", err)
-		return "", fmt.Errorf("error moving binary to PATH: %v", err)
+	info, err := os.Stat(extractedBinaryPath)
+	if err != nil {
+		return "", fmt.Errorf("error stating extracted binary path %s: %v", extractedBinaryPath, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("extracted binary path %s is a directory", extractedBinaryPath)
+	}
+
+	// Copy to destination path.
+	if err := copyBinary(extractedBinaryPath, destPath, info.Mode()); err != nil {
+		fmt.Println("Error copying binary to PATH. Maybe you need sudo?:", err)
+		return "", fmt.Errorf("error copying binary to PATH: %v", err)
 	}
 
 	// Make the binary executable (only needed for Unix-like systems)
 	if HostOS.OS == "darwin" || HostOS.OS == "linux" {
+		// #nosec G703 -- destPath is constrained to a trusted install directory and expected binary name.
 		if err := os.Chmod(destPath, 0755); err != nil {
 			fmt.Println("Error setting executable permissions:", err)
 			return "", fmt.Errorf("error setting executable permissions: %v", err)
@@ -274,16 +287,21 @@ func DownloadFromGithubAndInstall(tool string) (string, error) {
 	output.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully downloaded ", tool, " to ", toolFullPath)
 
 	// Unzip the file
-	extractedFilePath, err := Unzip(toolFullPath, tempDirPath)
+	_, err = Unzip(toolFullPath, tempDirPath)
 	if err != nil {
 		fmt.Println("Error unzipping file:", err)
 		return "", fmt.Errorf("error unzipping tool: %v", err)
 	}
 
-	output.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully unzipped ", tool, " to ", extractedFilePath)
+	extractedBinaryPath, err := findExtractedBinary(tool, tempDirPath)
+	if err != nil {
+		return "", fmt.Errorf("error locating extracted binary for %s: %v", tool, err)
+	}
+
+	output.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully unzipped ", tool, " to ", extractedBinaryPath)
 
 	// Install it
-	binaryPath, err := InstallBinary(extractedFilePath)
+	binaryPath, err := InstallBinary(tool, extractedBinaryPath)
 	if err != nil {
 		return "", fmt.Errorf("error installing %s: %v", tool, err)
 	}
@@ -291,4 +309,76 @@ func DownloadFromGithubAndInstall(tool string) (string, error) {
 	output.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully installed ", tool, " in path directory: ", binaryPath)
 
 	return binaryPath, nil
+}
+
+func expectedBinaryName(tool string) (string, error) {
+	switch tool {
+	case "cloudfox":
+		if HostOS.OS == "windows" {
+			return "cloudfox.exe", nil
+		}
+		return "cloudfox", nil
+	default:
+		return "", fmt.Errorf("unsupported tool to install binary for: %s", tool)
+	}
+}
+
+func findExtractedBinary(tool, extractedRoot string) (string, error) {
+	binaryName, err := expectedBinaryName(tool)
+	if err != nil {
+		return "", err
+	}
+
+	root := filepath.Clean(extractedRoot)
+	var binaryPath string
+
+	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Base(path) == binaryName && binaryPath == "" {
+			binaryPath = path
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return "", fmt.Errorf("error walking extracted directory: %v", walkErr)
+	}
+	if binaryPath == "" {
+		return "", fmt.Errorf("binary %s not found under %s", binaryName, extractedRoot)
+	}
+
+	return binaryPath, nil
+}
+
+func copyBinary(sourcePath, destPath string, mode os.FileMode) error {
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("error opening source binary %s: %v", sourcePath, err)
+	}
+	defer func(sourceFile *os.File) {
+		_ = sourceFile.Close()
+	}(sourceFile)
+
+	// #nosec G703 -- destPath is constrained to a trusted install directory and expected binary name.
+	destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode.Perm())
+	if err != nil {
+		return fmt.Errorf("error opening destination binary %s: %v", destPath, err)
+	}
+	defer func(destFile *os.File) {
+		_ = destFile.Close()
+	}(destFile)
+
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return fmt.Errorf("error copying binary data: %v", err)
+	}
+
+	if err := destFile.Sync(); err != nil {
+		return fmt.Errorf("error syncing destination binary: %v", err)
+	}
+
+	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
-	"os"
 )
 
 func Run(provider string, OptVVerbose *bool) {
@@ -36,8 +35,6 @@ func Run(provider string, OptVVerbose *bool) {
 
 	// Leaving pmapper out for now as I can't manage to make conda work inside a container and pmapper needs python 3.8
 	// runTool("pmapper", provider, fmt.Sprintf("%spmapper/", providerDir), OptVVerbose)
-
-	os.Exit(0)
 }
 
 // runTool runs the specified tool

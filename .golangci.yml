@@ -1,128 +1,129 @@
+version: "2"
 run:
-  timeout: 5m
   tests: true
-
-linters:
-  enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - misspell
-    - revive
-    - gosec
-
-linters-settings:
-  errcheck:
-    check-blank: false
-    check-type-assertions: false
-
-  govet:
-    enable-all: false
-    enable:
-      - printf
-      - stdmethods
-      - unmarshal
-    disable:
-      - shadow
-      - fieldalignment  # Micro-optimization not needed
-
-  revive:
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-        disabled: true  # Too noisy
-      - name: increment-decrement
-        disabled: true  # Style preference
-      - name: var-naming
-        disabled: true  # Allow targetUrl, sweptHostTcp, etc.
-      - name: package-comments
-        disabled: true  # Not enforcing package comments
-      - name: range
-      - name: receiver-naming
-      - name: indent-error-flow
-        disabled: true  # Style preference
-      - name: superfluous-else
-        disabled: true  # Style preference
-      - name: unreachable-code
-
-  gosec:
-    excludes:
-      - G104  # Audit errors not checked - handled by errcheck
-      - G107  # HTTP request with variable - needed for downloads
-      - G110  # Decompression bomb - false positive for zip extraction
-      - G204  # Subprocess with variable - expected in pentesting tool
-      - G304  # File path as taint input - expected behavior
-      - G305  # File traversal - expected in zip extraction
-      - G301  # Poor file permissions - may be intentional
-      - G302  # Poor file permissions - may be intentional
-      - G306  # Poor file permissions - may be intentional
-
-  gofmt:
-    simplify: true
-
-  goimports:
-    local-prefixes: github.com/0x5ubt13/enumeraga
-
-issues:
-  exclude-use-default: true
-  max-issues-per-linter: 50
-  max-same-issues: 3
-  exclude-dirs:
-    - vendor
-
-  exclude-rules:
-    # Exclude some linters from running on test files
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
-
-    # Allow globals in utils package
-    - path: internal/utils/
-      text: "(global variable|G101)"
-
-    # Allow command execution - this is a pentesting tool
-    - path: internal/(commands|portsIterator|scans)/
-      linters:
-        - gosec
-      text: "G204"
-
-    # Allow file operations in infra package
-    - path: internal/infra/
-      linters:
-        - gosec
-      text: "G30[1246]"
-
-    # Exclude deprecated warnings
-    - linters:
-        - staticcheck
-      text: "SA1019:"
-
-  exclude:
-    # Code style exclusions
-    - "should have( a package)? comment"
-    - "comment on exported"
-    - "do not define dynamic errors"
-    - "File is not `gofmt`-ed"
-    - "File is not `goimports`-ed"
-    # Allow necessary complexity
-    - "cyclomatic complexity"
-    - "cognitive complexity"
-    - "Function .* is too long"
-    # Common false positives
-    - "G104: Errors unhandled"
-    - "weak cryptographic primitive"
-    - "response body must be closed"  # Many are deferred
-    - "declaration of .* shadows"  # Acceptable in limited scope
-
 output:
   formats:
-    - format: colored-line-number
-  sort-results: true
+    text:
+      path: stdout
+linters:
+  enable:
+    - gosec
+    - misspell
+    - revive
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+    gosec:
+      excludes:
+        - G104
+        - G107
+        - G110
+        - G204
+        - G304
+        - G305
+        - G301
+        - G302
+        - G306
+    govet:
+      enable:
+        - printf
+        - stdmethods
+        - unmarshal
+      disable:
+        - shadow
+        - fieldalignment
+      enable-all: false
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true
+        - name: increment-decrement
+          disabled: true
+        - name: var-naming
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: indent-error-flow
+          disabled: true
+        - name: superfluous-else
+          disabled: true
+        - name: unreachable-code
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+          - gosec
+        path: _test\.go
+      - path: internal/utils/
+        text: (global variable|G101)
+      - linters:
+          - gosec
+        path: internal/(commands|portsIterator|scans)/
+        text: G204
+      - linters:
+          - gosec
+        path: internal/infra/
+        text: G30[1246]
+      - linters:
+          - staticcheck
+        text: 'SA1019:'
+      - path: (.+)\.go$
+        text: should have( a package)? comment
+      - path: (.+)\.go$
+        text: comment on exported
+      - path: (.+)\.go$
+        text: do not define dynamic errors
+      - path: (.+)\.go$
+        text: File is not `gofmt`-ed
+      - path: (.+)\.go$
+        text: File is not `goimports`-ed
+      - path: (.+)\.go$
+        text: cyclomatic complexity
+      - path: (.+)\.go$
+        text: cognitive complexity
+      - path: (.+)\.go$
+        text: Function .* is too long
+      - path: (.+)\.go$
+        text: 'G104: Errors unhandled'
+      - path: (.+)\.go$
+        text: weak cryptographic primitive
+      - path: (.+)\.go$
+        text: response body must be closed
+      - path: (.+)\.go$
+        text: declaration of .* shadows
+    paths:
+      - vendor
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 3
+formatters:
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/0x5ubt13/enumeraga
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
