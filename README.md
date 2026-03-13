@@ -290,6 +290,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 ## To Do
 
+- [ ] Update flow chart to include the new Cloud enum flow
 - [ ] Test thoroughly on various targets
 - [ ] Release v1.0
 - [ ] Add a flag to pass `vhosts` and functionality to use them
