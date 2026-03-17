@@ -105,7 +105,7 @@ RUN CLOUDFOX_VERSION=$(curl -s https://api.github.com/repos/BishopFox/cloudfox/r
 RUN pip3 install --user oci-cli || true
 
 # Install Python-based cloud security tools via pipx
-RUN pipx install prowler && pipx install scoutsuite
+RUN pipx install "prowler>=5.0.0" && pipx install scoutsuite
 
 # Switch back to root for final setup
 # USER root
