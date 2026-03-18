@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/0x5ubt13/enumeraga/internal/config"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
@@ -343,4 +344,24 @@ func BenchmarkFilePathJoin(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = filepath.Join(base, target, tool+"_output.txt")
 	}
+}
+
+func TestPrepCloudToolCredInjection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping cloud tool test in short mode")
+	}
+
+	dir := t.TempDir()
+	verbose := false
+
+	cfg := &config.CloudConfig{
+		Provider:  "gcp",
+		CredsFile: "/tmp/fake.json",
+	}
+
+	// Should not panic — tool not installed returns error gracefully
+	err := PrepCloudTool("scoutsuite", dir, cfg, &verbose)
+	// err may or may not be nil depending on whether scout is installed
+	// We just verify no panic occurred
+	_ = err
 }

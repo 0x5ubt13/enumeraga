@@ -1,6 +1,10 @@
 package config
 
 type CloudConfig struct {
+	// Active run settings
+	Provider  string // active provider for this single run
+	CredsFile string // path to credentials file, empty if not supplied
+
 	// Tool settings
 	PMMapperEnabled   bool
 	ScoutSuiteEnabled bool

@@ -1,23 +1,120 @@
 package cloud
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
+	"github.com/0x5ubt13/enumeraga/internal/config"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/pborman/getopt/v2"
 )
+
+// optCreds is intentionally unexported — it is only read within this package.
+// The spec uses OptCreds (uppercase) as a naming suggestion; we keep it lowercase
+// since it never needs to be accessed from outside the cloud package.
+var optCreds = getopt.StringLong("creds", 'c', "", "Path to credentials file (e.g. GCP service account JSON)")
+
+// validateCredsFile validates the credentials file path and sets GOOGLE_APPLICATION_CREDENTIALS for GCP.
+// Returns nil if credsFile is empty (no-op) or if provider is not GCP (warning only).
+func validateCredsFile(provider, credsFile string) error {
+	if credsFile == "" {
+		return nil
+	}
+	if provider != "gcp" {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", " --creds is not yet supported for ", provider, ", ignoring")
+		return nil
+	}
+	if strings.Contains(credsFile, " ") {
+		return fmt.Errorf("credentials file path must not contain spaces: %s", credsFile)
+	}
+	if _, err := os.Stat(credsFile); err != nil {
+		return fmt.Errorf("credentials file not found: %s", credsFile)
+	}
+	data, err := os.ReadFile(credsFile)
+	if err != nil {
+		return fmt.Errorf("could not read credentials file: %w", err)
+	}
+	if !json.Valid(data) {
+		return fmt.Errorf("credentials file is not valid JSON: %s", credsFile)
+	}
+	if err := os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", credsFile); err != nil {
+		return fmt.Errorf("failed to set GOOGLE_APPLICATION_CREDENTIALS: %w", err)
+	}
+	return nil
+}
+
+// gcpAuthPreflight authenticates with a GCP service account before running enumeration tools.
+// providerDir must already exist (created by caller).
+func gcpAuthPreflight(credsFile, providerDir string) error {
+	if !utils.CheckToolExists("gcloud") {
+		return fmt.Errorf("gcloud is required for --creds authentication but was not found. Install the Google Cloud SDK")
+	}
+
+	logPath := fmt.Sprintf("%sgcloud_auth_login.log", providerDir)
+	cmd := exec.Command("gcloud", "auth", "activate-service-account", "--key-file", credsFile)
+	output, cmdErr := cmd.CombinedOutput()
+
+	return checkGcpAuthOutput(output, cmdErr, logPath)
+}
+
+// checkGcpAuthOutput writes output to logPath, checks exit code first, then verifies the success string.
+// Extracted for testability.
+func checkGcpAuthOutput(output []byte, cmdErr error, logPath string) error {
+	_ = os.WriteFile(logPath, output, 0644)
+
+	if cmdErr != nil {
+		return fmt.Errorf("GCP authentication failed. Check your credentials file and see %s for details", logPath)
+	}
+	if !strings.Contains(string(output), "Activated service account credentials for:") {
+		return fmt.Errorf("GCP authentication failed (unexpected output). Check %s for details", logPath)
+	}
+
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+]", " Authenticated with given creds file")
+	return nil
+}
+
+// knownProviderAliases is the full set of strings parseCSP accepts.
+// Used by extractProviderArg to find the provider before flag parsing.
+var knownProviderAliases = map[string]bool{
+	"aws": true, "amazon": true,
+	"az": true, "azure": true,
+	"gcp": true, "gcloud": true, "g": true,
+	"ay": true, "ali": true, "aliy": true, "aliyun": true, "alibaba": true,
+	"oci": true, "oracle": true,
+	"do": true, "digital": true, "digitalocean": true,
+}
+
+// extractProviderArg pre-scans args for a cloud provider name, removes it from the
+// slice, and returns it separately. This allows flags to appear before or after the
+// provider name without confusing getopt's POSIX stop-at-first-non-flag behaviour.
+func extractProviderArg(args []string) (provider string, filtered []string) {
+	filtered = append(filtered, args[0]) // keep program name
+	for _, arg := range args[1:] {
+		if knownProviderAliases[arg] && provider == "" {
+			provider = arg
+		} else {
+			filtered = append(filtered, arg)
+		}
+	}
+	return
+}
 
 // Run launches the main entrypoint for enumeraga cloud
 func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	// Timing the execution
 	start := time.Now()
 
-	// Parse optional cloud arguments, getting rid of the `enumeraga cloud` args
-	// Keep os.Args[0] as program name for getopt, remove "cloud" subcommand
+	// Remove "cloud" subcommand, then extract the provider name before flag parsing.
+	// pborman/getopt uses POSIX mode (stops at first non-flag arg), so we pull the
+	// provider out first to let flags appear anywhere relative to the provider name.
 	os.Args = append(os.Args[:1], os.Args[2:]...)
+	providerArg, filteredArgs := extractProviderArg(os.Args)
+	os.Args = filteredArgs
 	getopt.Parse()
 
 	// Assign basedir of OptOutput to avoid cyclic import hell
@@ -38,11 +135,8 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 		return utils.ErrHelpRequested
 	}
 
-	// Get remaining args after flag parsing
-	remainingArgs := getopt.Args()
-
-	// Check 2: Args passed fine?
-	if len(remainingArgs) == 0 {
+	// Check 2: Provider must have been found in args
+	if providerArg == "" {
 		utils.ErrorMsg("No arguments were provided.")
 		printCloudUsage()
 		utils.PrintCloudUsageExamples()
@@ -50,9 +144,16 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	}
 
 	// Check 3: Ensure there is a valid CSP target
-	provider, err := parseCSP(remainingArgs[0])
+	provider, err := parseCSP(providerArg)
 	if err != nil {
 		return fmt.Errorf("invalid cloud provider: %w", err)
+	}
+
+	// Check 3b: Validate credentials file if provided
+	credsFile := *optCreds
+	if err := validateCredsFile(provider, credsFile); err != nil {
+		utils.ErrorMsg(err)
+		return fmt.Errorf("credentials validation failed: %w", err)
 	}
 
 	// Check 4: I AM GROOT!!!!
@@ -70,6 +171,18 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Using '", name, "' as base directory to save the ", "cloud output ", "files")
 	}
 
+	// Check 5b: GCP pre-flight authentication
+	if provider == "gcp" && credsFile != "" {
+		providerDir := fmt.Sprintf("%s/%s/", utils.BaseDir, provider)
+		if _, mkErr := utils.CustomMkdir(providerDir); mkErr != nil {
+			utils.ErrorMsg(mkErr)
+		}
+		if err := gcpAuthPreflight(credsFile, providerDir); err != nil {
+			utils.ErrorMsg(err)
+			return fmt.Errorf("GCP authentication failed: %w", err)
+		}
+	}
+
 	// Checks done
 	if !*OptQuiet {
 		fmt.Printf("%s%s%s\n\n", utils.Cyan("[*] ---------- "), utils.Green("Checks phase complete"), utils.Cyan(" ----------"))
@@ -77,7 +190,11 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	}
 
 	// Scan start: changing into cloudScanner's Run function
-	cloudScanner.Run(provider, OptVVerbose)
+	cfg := &config.CloudConfig{
+		Provider:  provider,
+		CredsFile: credsFile,
+	}
+	cloudScanner.Run(cfg, OptVVerbose)
 
 	// Finish and show elapsed time
 	utils.FinishLine(start, utils.Interrupted)
@@ -99,6 +216,7 @@ func printCloudUsage() {
 	fmt.Println("  aliyun, alibaba      Alibaba Cloud")
 	fmt.Println("  do, digitalocean     DigitalOcean")
 	fmt.Println("\nOptions:")
+	fmt.Println("  -c, --creds FILE     Path to credentials file (e.g. GCP service account JSON)")
 	fmt.Println("  -h, --help           Display this help and exit")
 	fmt.Println("  -o, --output DIR     Select a different base folder for output (default: /tmp/enumeraga_output)")
 	fmt.Println("  -q, --quiet          Don't print the banner and decrease overall verbosity")

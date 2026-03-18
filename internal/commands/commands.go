@@ -701,7 +701,7 @@ func InstallWithPipxOSAgnostic(tool string) error {
 
 // PrepCloudTool preps the program to run a cloud tool
 // To add more cloud enumeration capabilities, add new switch cases here
-func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
+func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *bool) error {
 	var commandToRun string
 
 	// Get name of the tool first
@@ -715,8 +715,10 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 			}
 		}
 
-		// Future: Add CLI flags to pass Azure credentials for non-interactive auth
-		commandToRun = fmt.Sprintf("scout %s --no-browser --report-dir %s", provider, filePath)
+		commandToRun = fmt.Sprintf("scout %s --no-browser --report-dir %s", cfg.Provider, filePath)
+		if cfg.Provider == "gcp" && cfg.CredsFile != "" {
+			commandToRun += fmt.Sprintf(" --service-account %s", cfg.CredsFile)
+		}
 
 	case "prowler":
 		if !utils.CheckToolExists("prowler") {
@@ -726,7 +728,10 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 				return err
 			}
 		}
-		commandToRun = fmt.Sprintf("prowler %s -o %s", provider, filePath)
+		commandToRun = fmt.Sprintf("prowler %s -o %s", cfg.Provider, filePath)
+		if cfg.Provider == "gcp" && cfg.CredsFile != "" {
+			commandToRun += fmt.Sprintf(" --credentials-file %s", cfg.CredsFile)
+		}
 
 	case "cloudfox":
 		if !utils.CheckToolExists("cloudfox") {
@@ -736,13 +741,14 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 				return fmt.Errorf("error downloading cloudfox: %v", err)
 			}
 
-			commandToRun = fmt.Sprintf("%s %s all-checks --outdir %s", binaryPath, provider, filePath)
+			commandToRun = fmt.Sprintf("%s %s all-checks --outdir %s", binaryPath, cfg.Provider, filePath)
 		} else {
-			commandToRun = fmt.Sprintf("cloudfox %s all-checks --outdir %s", provider, filePath)
+			commandToRun = fmt.Sprintf("cloudfox %s all-checks --outdir %s", cfg.Provider, filePath)
 		}
+		// cloudfox relies on GOOGLE_APPLICATION_CREDENTIALS env var set by validateCredsFile
 
 	case "pmapper":
-		if provider != "aws" {
+		if cfg.Provider != "aws" {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
 			break
 		}
@@ -755,7 +761,7 @@ func PrepCloudTool(tool, filePath, provider string, OptVVerbose *bool) error {
 
 		commandToRun = fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
 	case "kubenumerate":
-		if provider != "k8s" {
+		if cfg.Provider != "k8s" {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " Kubenumerate ", "must be run with the", " k8s ", "flag. Skipping it...")
 			break
 		}
