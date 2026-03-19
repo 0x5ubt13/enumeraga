@@ -16,12 +16,36 @@ func Run(cfg *config.CloudConfig, OptVVerbose *bool) {
 	}
 	fmt.Println(utils.Debug("[?] Debug -> providerDir = ", providerDir))
 
-	// Launch cloud scanning tools sequentially to avoid rate limiting from cloud providers
-	// Add more tools here, then complete switch case in commands.PrepCloudTool()
-	runTool("scoutsuite", cfg, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
-	runTool("prowler", cfg, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
-	runTool("cloudfox", cfg, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
-	runTool("kubenumerate", cfg, fmt.Sprintf("%skubenumerate/", providerDir), OptVVerbose)
+	// Launch cloud scanning tools sequentially to avoid rate limiting from cloud providers.
+	// Add more tools here, then complete the switch case in commands.PrepCloudTool().
+	// Order matters: provider-specific inventory tools run first so later tools (e.g. cloudfox)
+	// can rely on project/account context already being established.
+	switch cfg.Provider {
+	case "gcp":
+		// 1. Raw inventory first — answers "what can these creds access?" before deeper scans
+		runTool("gcp_scanner", cfg, fmt.Sprintf("%sgcp_scanner/", providerDir), OptVVerbose)
+		// 2. Compliance and misconfiguration checks
+		runTool("scoutsuite", cfg, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
+		runTool("prowler", cfg, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
+		// 3. Deeper enumeration once project context is known
+		runTool("cloudfox", cfg, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
+	case "k8s":
+		runTool("kubenumerate", cfg, fmt.Sprintf("%skubenumerate/", providerDir), OptVVerbose)
+	case "azure":
+		// 1. monkey365 first — broad Azure + M365 inventory (IAM, Entra ID, subscriptions)
+		//    before deeper compliance tools run so project/subscription context is clear.
+		runTool("monkey365", cfg, fmt.Sprintf("%smonkey365/", providerDir), OptVVerbose)
+		// 2. Compliance and misconfiguration checks
+		runTool("scoutsuite", cfg, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
+		runTool("prowler", cfg, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
+		// 3. Deeper enumeration
+		runTool("cloudfox", cfg, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
+	default:
+		// AWS and other providers
+		runTool("scoutsuite", cfg, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
+		runTool("prowler", cfg, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
+		runTool("cloudfox", cfg, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
+	}
 	// runTool("cloudsplaining", cfg, fmt.Sprintf("%scloud_peass/", providerDir), OptVVerbose) // https://github.com/salesforce/cloudsplaining
 
 	// Tried AWSPeass.py and while it's great, I need to figure out how to run it programatically as it prompts for input from time to time

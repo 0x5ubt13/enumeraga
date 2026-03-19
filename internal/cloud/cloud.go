@@ -19,6 +19,11 @@ import (
 // since it never needs to be accessed from outside the cloud package.
 var optCreds = getopt.StringLong("creds", 'c', "", "Path to credentials file (e.g. GCP service account JSON)")
 
+// Azure service principal flags — used by monkey365 and future Azure tools.
+var optAzureTenantID     = getopt.StringLong("tenant", 0, "", "Azure Tenant ID (for service principal auth)")
+var optAzureClientID     = getopt.StringLong("client-id", 0, "", "Azure Client ID / App ID (for service principal auth)")
+var optAzureClientSecret = getopt.StringLong("client-secret", 0, "", "Azure Client Secret (for service principal auth)")
+
 // validateCredsFile validates the credentials file path and sets GOOGLE_APPLICATION_CREDENTIALS for GCP.
 // Returns nil if credsFile is empty (no-op) or if provider is not GCP (warning only).
 func validateCredsFile(provider, credsFile string) error {
@@ -32,10 +37,10 @@ func validateCredsFile(provider, credsFile string) error {
 	if strings.Contains(credsFile, " ") {
 		return fmt.Errorf("credentials file path must not contain spaces: %s", credsFile)
 	}
-	if _, err := os.Stat(credsFile); err != nil {
+	if _, err := os.Stat(credsFile); err != nil { //nolint:gosec // path validated above
 		return fmt.Errorf("credentials file not found: %s", credsFile)
 	}
-	data, err := os.ReadFile(credsFile)
+	data, err := os.ReadFile(credsFile) //nolint:gosec // path validated above
 	if err != nil {
 		return fmt.Errorf("could not read credentials file: %w", err)
 	}
@@ -65,7 +70,7 @@ func gcpAuthPreflight(credsFile, providerDir string) error {
 // checkGcpAuthOutput writes output to logPath, checks exit code first, then verifies the success string.
 // Extracted for testability.
 func checkGcpAuthOutput(output []byte, cmdErr error, logPath string) error {
-	_ = os.WriteFile(logPath, output, 0644)
+	_ = os.WriteFile(logPath, output, 0644) //nolint:gosec // logPath is constructed internally, not user input
 
 	if cmdErr != nil {
 		return fmt.Errorf("GCP authentication failed. Check your credentials file and see %s for details", logPath)
@@ -191,8 +196,11 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 
 	// Scan start: changing into cloudScanner's Run function
 	cfg := &config.CloudConfig{
-		Provider:  provider,
-		CredsFile: credsFile,
+		Provider:          provider,
+		CredsFile:         credsFile,
+		AzureTenantID:     *optAzureTenantID,
+		AzureClientID:     *optAzureClientID,
+		AzureClientSecret: *optAzureClientSecret,
 	}
 	cloudScanner.Run(cfg, OptVVerbose)
 
@@ -216,11 +224,14 @@ func printCloudUsage() {
 	fmt.Println("  aliyun, alibaba      Alibaba Cloud")
 	fmt.Println("  do, digitalocean     DigitalOcean")
 	fmt.Println("\nOptions:")
-	fmt.Println("  -c, --creds FILE     Path to credentials file (e.g. GCP service account JSON)")
-	fmt.Println("  -h, --help           Display this help and exit")
-	fmt.Println("  -o, --output DIR     Select a different base folder for output (default: /tmp/enumeraga_output)")
-	fmt.Println("  -q, --quiet          Don't print the banner and decrease overall verbosity")
-	fmt.Println("  -V, --vv             Flood your terminal with plenty of verbosity!")
+	fmt.Println("  -c, --creds FILE         Path to credentials file (e.g. GCP service account JSON)")
+	fmt.Println("      --tenant ID          Azure Tenant ID (service principal auth, used by monkey365)")
+	fmt.Println("      --client-id ID       Azure Client/App ID (service principal auth, used by monkey365)")
+	fmt.Println("      --client-secret SEC  Azure Client Secret (service principal auth, used by monkey365)")
+	fmt.Println("  -h, --help               Display this help and exit")
+	fmt.Println("  -o, --output DIR         Select a different base folder for output (default: /tmp/enumeraga_output)")
+	fmt.Println("  -q, --quiet              Don't print the banner and decrease overall verbosity")
+	fmt.Println("  -V, --vv                 Flood your terminal with plenty of verbosity!")
 }
 
 // parseCSP parses the provider the user wants to enumerate

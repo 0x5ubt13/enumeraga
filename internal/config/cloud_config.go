@@ -6,10 +6,12 @@ type CloudConfig struct {
 	CredsFile string // path to credentials file, empty if not supplied
 
 	// Tool settings
-	PMMapperEnabled   bool
-	ScoutSuiteEnabled bool
-	ProwlerEnabled    bool
-	CloudFoxEnabled   bool
+	PMMapperEnabled    bool
+	ScoutSuiteEnabled  bool
+	ProwlerEnabled     bool
+	CloudFoxEnabled    bool
+	GCPScannerEnabled  bool
+	Monkey365Enabled   bool
 
 	// Output settings
 	OutputPath   string
@@ -19,6 +21,9 @@ type CloudConfig struct {
 	Providers         []string
 	AWSProfile        string
 	AzureSubscription string
+	AzureTenantID     string
+	AzureClientID     string
+	AzureClientSecret string
 	GCPProject        string
 
 	// Runtime settings
@@ -33,6 +38,8 @@ func NewCloudConfig() *CloudConfig {
 		ScoutSuiteEnabled: true,
 		ProwlerEnabled:    true,
 		CloudFoxEnabled:   true,
+		GCPScannerEnabled: true,
+		Monkey365Enabled:  true,
 		ReportFormat:      "xlsx",
 		Concurrent:        true,
 		InstallMissing:    true,

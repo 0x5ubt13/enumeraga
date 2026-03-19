@@ -104,8 +104,25 @@ RUN CLOUDFOX_VERSION=$(curl -s https://api.github.com/repos/BishopFox/cloudfox/r
 # Install OCI CLI via pip (more reliable than homebrew)
 RUN pip3 install --user oci-cli || true
 
+# Install PowerShell Core (required for monkey365)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        wget apt-transport-https software-properties-common \
+    && wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb" \
+    && dpkg -i packages-microsoft-prod.deb \
+    && rm packages-microsoft-prod.deb \
+    && apt-get update && apt-get install -y --no-install-recommends powershell \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install monkey365 PowerShell module from the Gallery
+# https://github.com/silverhack/monkey365
+RUN pwsh -NonInteractive -Command "Install-Module -Name monkey365 -Scope AllUsers -Force -AllowClobber"
+
 # Install Python-based cloud security tools via pipx
 RUN pipx install "prowler>=5.0.0" && pipx install scoutsuite
+
+# Install gcp_scanner (Google's credential-based GCP inventory enumeration tool)
+# https://github.com/google/gcp_scanner
+RUN pipx install gcp-scanner
 
 # Switch back to root for final setup
 # USER root

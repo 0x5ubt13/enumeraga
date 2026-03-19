@@ -734,18 +734,37 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 		}
 
 	case "cloudfox":
+		binary := "cloudfox"
 		if !utils.CheckToolExists("cloudfox") {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-] CloudFox ", "not found. Attempting to download it now from GitHub...")
 			binaryPath, err := utils.DownloadFromGithubAndInstall("cloudfox")
 			if err != nil {
 				return fmt.Errorf("error downloading cloudfox: %v", err)
 			}
-
-			commandToRun = fmt.Sprintf("%s %s all-checks --outdir %s", binaryPath, cfg.Provider, filePath)
-		} else {
-			commandToRun = fmt.Sprintf("cloudfox %s all-checks --outdir %s", cfg.Provider, filePath)
+			binary = binaryPath
 		}
-		// cloudfox relies on GOOGLE_APPLICATION_CREDENTIALS env var set by validateCredsFile
+
+		switch cfg.Provider {
+		case "aws":
+			// AWS: all-checks is fully supported; optionally scope to a profile
+			commandToRun = fmt.Sprintf("%s aws all-checks --outdir %s", binary, filePath)
+			if cfg.AWSProfile != "" {
+				commandToRun += fmt.Sprintf(" --profile %s", cfg.AWSProfile)
+			}
+		case "gcp":
+			// GCP: all-checks requires a project ID; falls back to whatever ADC resolves if none given.
+			// GOOGLE_APPLICATION_CREDENTIALS env var is set by validateCredsFile upstream.
+			commandToRun = fmt.Sprintf("%s gcp all-checks --outdir %s", binary, filePath)
+			if cfg.GCPProject != "" {
+				commandToRun += fmt.Sprintf(" --project %s", cfg.GCPProject)
+			}
+		case "azure":
+			// Azure has no all-checks subcommand; run individual modules that exist
+			commandToRun = fmt.Sprintf("%s azure inventory --outdir %s", binary, filePath)
+		default:
+			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] CloudFox ", "does not support provider '", cfg.Provider, "'. Skipping...")
+			return nil
+		}
 
 	case "pmapper":
 		if cfg.Provider != "aws" {
@@ -766,6 +785,40 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 			break
 		}
 		commandToRun = fmt.Sprintf("python3 kubenumerate.py -o %s", filePath)
+
+	case "gcp_scanner":
+		if cfg.Provider != "gcp" {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " gcp_scanner ", "must be run with the", " gcp ", "flag. Skipping it...")
+			break
+		}
+		if !utils.CheckToolExists("gcp_scanner") {
+			err := InstallWithPipxOSAgnostic("gcp-scanner")
+			if err != nil {
+				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing gcp_scanner via pipx")
+				return err
+			}
+		}
+		// gcp_scanner outputs a JSON report to the given directory.
+		// It uses GOOGLE_APPLICATION_CREDENTIALS env var (set by validateCredsFile) or ADC automatically.
+		commandToRun = fmt.Sprintf("gcp_scanner -o %s -g", filePath)
+		if cfg.GCPProject != "" {
+			commandToRun += fmt.Sprintf(" -p %s", cfg.GCPProject)
+		}
+		if cfg.CredsFile != "" {
+			commandToRun += fmt.Sprintf(" -sa %s", cfg.CredsFile)
+		}
+
+	case "monkey365":
+		if cfg.Provider != "azure" {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " monkey365 ", "must be run with the", " azure ", "flag. Skipping it...")
+			return nil
+		}
+		if !utils.CheckToolExists("pwsh") {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] monkey365 ", "requires PowerShell Core (pwsh) but it was not found. Skipping...")
+			return nil
+		}
+		return runMonkey365(cfg, filePath)
+
 	default:
 		// Case not registered, try and run it anyway see what could go wrong
 		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
@@ -782,6 +835,103 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 	cmd := strings.Split(commandToRun, " ")
 	runCloudTool(cmd, toolOutput, OptVVerbose)
 
+	return nil
+}
+
+// runMonkey365 generates a temporary PowerShell script and executes it with pwsh.
+// monkey365 is a PowerShell module so it cannot be invoked as a plain CLI command;
+// instead we write a .ps1 that imports the module and calls Invoke-Monkey365 with
+// the appropriate parameters, then run it non-interactively via pwsh.
+func runMonkey365(cfg *config.CloudConfig, filePath string) error {
+	// Build the Invoke-Monkey365 parameter block dynamically.
+	// ClientSecret must be converted to a SecureString inline.
+	var psLines []string
+	psLines = append(psLines, `Import-Module monkey365 -ErrorAction Stop`)
+	psLines = append(psLines, `$param = @{`)
+	psLines = append(psLines, `    Instance = 'Azure'`)
+	psLines = append(psLines, `    Collect  = 'All'`)
+	psLines = append(psLines, `    ExportTo = @("JSON","HTML")`)
+	psLines = append(psLines, fmt.Sprintf(`    OutDir   = '%s'`, filePath))
+
+	if cfg.AzureTenantID != "" {
+		psLines = append(psLines, fmt.Sprintf(`    TenantID = '%s'`, cfg.AzureTenantID))
+	}
+	if cfg.AzureSubscription != "" {
+		psLines = append(psLines, fmt.Sprintf(`    Subscriptions = '%s'`, cfg.AzureSubscription))
+	}
+	if cfg.AzureClientID != "" {
+		psLines = append(psLines, fmt.Sprintf(`    ClientId = '%s'`, cfg.AzureClientID))
+	}
+	if cfg.AzureClientSecret != "" {
+		// Avoid embedding the secret as a plain string in the script —
+		// read it from an env var that we set in the child process environment instead.
+		psLines = append(psLines, `    ClientSecret = ($env:MONKEY365_CLIENT_SECRET | ConvertTo-SecureString -AsPlainText -Force)`)
+	}
+
+	psLines = append(psLines, `}`)
+	psLines = append(psLines, `Invoke-Monkey365 @param`)
+
+	script := strings.Join(psLines, "\n")
+
+	// Write to a temp file so we don't need to escape the whole block for -Command.
+	tmpFile, err := os.CreateTemp("", "monkey365-*.ps1")
+	if err != nil {
+		return fmt.Errorf("monkey365: failed to create temp script: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(script); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("monkey365: failed to write temp script: %w", err)
+	}
+	tmpFile.Close()
+
+	toolOutput := fmt.Sprintf("%soutput.out", filePath)
+	args := []string{"-NonInteractive", "-File", tmpFile.Name()}
+
+	// Pass the client secret via env var to avoid it appearing in the script file on disk.
+	ctx := utils.GetGlobalContext()
+	cmd := exec.CommandContext(ctx, "pwsh", args...) //nolint:gosec // args are constructed from validated config fields, not raw user input
+	if cfg.AzureClientSecret != "" {
+		cmd.Env = append(os.Environ(), fmt.Sprintf("MONKEY365_CLIENT_SECRET=%s", cfg.AzureClientSecret))
+	} else {
+		cmd.Env = os.Environ()
+	}
+
+	announceCloudTool("monkey365")
+
+	file, err := os.Create(toolOutput)
+	if err != nil {
+		return fmt.Errorf("monkey365: failed to create output file: %w", err)
+	}
+	defer file.Close()
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("monkey365: stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("monkey365: stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("monkey365: failed to start pwsh: %w", err)
+	}
+
+	multiWriter := io.MultiWriter(os.Stdout, file)
+	go func() { _, _ = io.Copy(multiWriter, stdout) }()
+	go func() { _, _ = io.Copy(os.Stderr, stderr) }()
+
+	if err := cmd.Wait(); err != nil {
+		if ctx.Err() == context.Canceled {
+			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] monkey365 terminated due to shutdown")
+			return nil
+		}
+		return fmt.Errorf("monkey365: pwsh exited with error: %w", err)
+	}
+
+	utils.PrintCustomBiColourMsg("green", "cyan", "[+] monkey365 finished. Output: ", filePath)
 	return nil
 }
 

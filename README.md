@@ -14,60 +14,86 @@ Automatic multiprocess Linux CLI tool that aims for a quick enumeration wrapping
 
 ## Features
 
-- **Fast parallel scanning** - Runs multiple tools concurrently with configurable worker pool (default: 20 concurrent tools)
+- **Fast parallel infrastructure scanning** - Runs multiple tools concurrently with configurable worker pool (default: 20 concurrent tools)
 - **Smart protocol detection** - Groups ports by protocol and runs appropriate enumeration tools
 - **Graceful shutdown** - Ctrl+C cleanly terminates all running tools
 - **Configurable timeouts** - Prevent long-running tools from blocking scans (default: 10 minutes)
 - **Progress tracking** - Real-time progress counter showing completed/total tools
 - **Docker support** - Containerised versions for both infrastructure and cloud scanning
-- **Cloud scanning** - Supports AWS, Azure, GCP, OCI, AliCloud, and DigitalOcean
+- **Cloud scanning** - Supports the major Cloud Service Providers
 
-## The motivation
+## Wrapped Tools
 
-Working as pentesters, or playing CTFs, or fiddling around with practice labs, we come across the same initial phases of recon and enumeration over and over again. Or how many times we have to spawn a new clean testing machine and reinstall everything? I thought it would be an amazing opportunity to practice my coding skills if I automated the installation process and the initial tools that I always run in new engagements. Then, after seeing the first results in Bash (if you're curious: [autoEnum](https://github.com/0x5ubt13/autoenum)), I liked what I had done, and I kept adding on more features, until the Bash script grew up so much that I started thinking: "what if I actually use Go and compile this to a binary? Would I be able to pull it off...?" And, well, I'm a sucker for a good challenge if learning is a joyful side effect.
+### Infrastructure Scanning
 
-## Flow chart
+| Category | Tools |
+|----------|-------|
+| **Port Scanning** | Nmap |
+| **Web Enumeration** | Nikto, Dirsearch, Ffuf, Gobuster, WPScan, WhatWeb, WafW00f, CeWL |
+| **SMB/NetBIOS** | CrackMapExec, SMBMap, Enum4linux-ng, Nmblookup, Nbtscan-unixwiz |
+| **LDAP** | Ldapsearch |
+| **SNMP** | SNMPWalk, Onesixtyone, Braa |
+| **Database** | ODAT (Oracle), Hydra (MySQL brute) |
+| **SSH** | SSH-Audit, Hydra |
+| **SSL/TLS** | Testssl |
+| **Other** | Metasploit, Ident-user-enum, Responder-RunFinger, RPCDump, Rusers, Rwho, Nuclei |
+| **Brute Force** | Hydra (FTP, SSH, MySQL, RDP) |
 
-![Enumeraga flow chart](./img/enumeraga_flowchart_v2.jpg)
+### Cloud Scanning
+
+| Provider | Tools |
+|----------|-------|
+| **AWS** | ScoutSuite, Prowler, CloudFox |
+| **Azure** | monkey365, ScoutSuite, Prowler, CloudFox |
+| **GCP** | gcp_scanner, ScoutSuite, Prowler, CloudFox |
+| **OCI** | ScoutSuite |
+| **AliCloud** | ScoutSuite |
+| **DigitalOcean** | ScoutSuite |
+
+Tools run sequentially per provider to avoid cloud API rate limiting. Provider-specific inventory tools (`gcp_scanner`, `monkey365`) run first to establish project/subscription context before deeper compliance scanners.
 
 ## Usage
 
-Give `Enumeraga` either a single IP address or a file containing a list of IPs. Sit back, relax, and laugh maniacally while it handles all enumeration for you, going through every open port on your target on your behalf:
+### Enumeraga Infra
 
-```
-enumeraga infra -h
+Give `enumeraga infra` either a single IP address or a file containing a list of IPs. Sit back, relax, and laugh maniacally while it handles all enumeration for you, going through every open port on your target on your behalf:
 
-                                                      v0.3.3-beta
- __________                                    ______________________
- ___  ____/__________  ________ __________________    |_  ____/__    |
- __  __/  __  __ \  / / /_  __ `__ \  _ \_  ___/_  /| |  / __ __  /| |
- _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ / /_/ / _  ___ |
- /_____/  /_/ /_/\__,_/ /_/ /_/ /_/\___//_/    /_/  |_\____/  /_/  |_|
-                        by 0x5ubt13
+    enumeraga infra -h
+
+                                                        dev
+    __________                                    ______________________ 
+    ___  ____/__________  ________ __________________    |_  ____/__    |
+    __  __/  __  __ \  / / /_  __ `__ \  _ \_  ___/_  /| |  / __ __  /| |
+    _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ / /_/ / _  ___ |
+    /_____/  /_/ /_/\__,_/ /_/ /_/ /_/\___//_/    /_/  |_\____/  /_/  |_|
+                                by 0x5ubt13
+
+    Usage: enumeraga infra [OPTIONS]
+
+    Options:
+    -b, --brute          Activate all fuzzing and bruteforce in the tool
+    -g, --gentle         Throttle scans and tools for a gentler scan profile
+    -h, --help           Display this help and exit
+    -i, --install        Only try to install pre-requisite tools and exit
+    -n, --nmap-only      Activate nmap scans only and ignore all other tools
+    -o, --output DIR     Select a different base folder for output (default: /tmp/enumeraga_output)
+    -p, --top-ports N    Run port sweep with nmap --top-ports=N
+    -q, --quiet          Don't print the banner and decrease overall verbosity
+    -r, --range CIDR     Specify a CIDR range to use tools for whole subnets
+    -t, --target TARGET  Specify target single IP / List of IPs file (required)
+    -T, --timeout MINS   Maximum time in minutes for long-running tools (default: 10)
+    -V, --vv             Flood your terminal with plenty of verbosity!
 
 
-Usage: enumeraga infra [-bhinqV] [-o value] [-p value] [-r value] [-T value] [-t value]
- -b, --brute        Activate all fuzzing and bruteforcing in the script.
- -h, --help         Display this help and exit.
- -i, --install      Only try to install pre-requisite tools and exit.
- -n, --nmap-only    Only run nmap scans. Skip other tools.
- -o, --output=value
-                    Select a different base folder for the output.
-                    [/tmp/enumeraga_output]
- -p, --top-ports=value
-                    Run port sweep with nmap and the flag --top-ports=<your
-                    input>
- -q, --quiet        Don't print the banner and decrease overall verbosity.
- -r, --range=value  Specify a CIDR range to use tools for whole subnets.
- -T, --timeout=value
-                    Maximum time in minutes for long-running tools (nikto,
-                    dirsearch, etc). Default: 10
- -t, --target=value
-                    Specify target single IP / List of IPs file.
- -V, --vv           Flood your terminal with plenty of verbosity!
-```
+    Examples:
+    enumeraga -i
+    enumeraga -bq -t 10.10.11.230
+    enumeraga -V -r 10.129.121.0/24 -t 10.129.121.60
+    enumeraga -t targets_file.txt -r 10.10.8.0/24
+    exit status 1
 
-### Examples
+
+#### Examples
 
 ```bash
 # Basic scan of a single target
@@ -93,6 +119,35 @@ sudo enumeraga infra -t targets.txt
 
 # Quiet mode (minimal output)
 sudo enumeraga infra -t 192.168.1.100 -q
+```
+
+### Enumeraga Cloud 
+
+Give `enumeraga cloud` a CSP, and depending on which, a couple more parameters for it to go through your fave cloud enumeration tools. Just like enumeraga infra, sit back, relax, and laugh maniacally while it handles all enumeration for you, going through every relevant cloud tool on your behalf:
+
+
+
+
+#### Examples
+
+```bash
+# AWS — uses ~/.aws credentials
+enumeraga cloud aws
+
+# Azure — Application Default Credentials
+enumeraga cloud azure
+
+# Azure — service principal (required for monkey365 full M365 + Entra ID coverage)
+enumeraga cloud azure --tenant <tenant-id> --client-id <app-id> --client-secret <secret>
+
+# GCP — Application Default Credentials
+enumeraga cloud gcp
+
+# GCP — service account key file with explicit project
+enumeraga cloud gcp --creds /path/to/sa-key.json --project <project-id>
+
+# Kubernetes
+enumeraga cloud k8s
 ```
 
 ## Installation
@@ -166,57 +221,143 @@ docker pull gagarter/enumeraga_cloud
 # Run against AWS (mount AWS credentials)
 docker run -v ~/.aws:/root/.aws -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud aws
 
-# Run against Azure (mount Azure credentials)
+# Run against Azure with ADC (mount Azure CLI session)
 docker run -v ~/.azure:/root/.azure -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud azure
 
-# Run against GCP (mount GCP credentials)
+# Run against Azure with a service principal (required for monkey365 full coverage)
+docker run -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud azure \
+  --tenant <tenant-id> --client-id <app-id> --client-secret <secret>
+
+# Run against GCP using Application Default Credentials
 docker run -v ~/.config/gcloud:/root/.config/gcloud -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud gcp
+
+# Run against GCP with a service account key file
+docker run -v ./sa-key.json:/creds/sa-key.json -v ./output:/tmp/enumeraga_output \
+  gagarter/enumeraga_cloud gcp --creds /creds/sa-key.json
+
+# Run against GCP with a service account key and explicit project ID
+docker run -v ./sa-key.json:/creds/sa-key.json -v ./output:/tmp/enumeraga_output \
+  gagarter/enumeraga_cloud gcp --creds /creds/sa-key.json --project <project-id>
 ```
 
 **Key points for cloud scanning:**
 - Mount the appropriate credentials directory for your target cloud provider
 - Mount an output directory to persist scan results: `-v ./output:/tmp/enumeraga_output`
 - Supports AWS, Azure, GCP, OCI, AliCloud, and DigitalOcean
+- **Azure:** pass `--tenant`, `--client-id`, and `--client-secret` for service principal auth — required for [monkey365](https://github.com/silverhack/monkey365) to enumerate M365, Entra ID, Exchange Online, and SharePoint alongside Azure resources
+- **GCP:** pass `--creds /path/to/sa-key.json` to authenticate with a service account key file; without it, [gcp_scanner](https://github.com/google/gcp_scanner) and other tools fall back to Application Default Credentials
 
-## Disclaimer
+## Flow chart
 
-This tool has to run as `root`, and despite my nickname, it's not precisely a subtle tool! Contrarily, it will create a ton of noise. Given its aggressive nature, please ensure you know what you're doing before launching it, and of course double-check you have absolute permission to enumerate your target(s).
+```mermaid
+flowchart TD
+    START([START]) --> INFRA_MODE & CLOUD_MODE
 
-## Similar tools out there
+    %% ─────────────────────────────────────
+    %% INFRA COLUMN
+    %% ─────────────────────────────────────
+    subgraph INFRA["infra"]
+        direction TB
+        INFRA_MODE(["enumeraga infra"])
 
-I am aware other enumeration tools exist, but this one aims to be very fast and concise. So far by the current testing times, Enumeraga is able to run its core logic in about 20 to 60 seconds per host, depending on the number of ports open.
+        subgraph INFRA_CHECKS["Checks phase"]
+            direction TB
+            TOOL_CHECK{Missing tool?}
+            INSTALL_TOOL([Install tool])
+            MULTI{Multiple targets?}
+            FOR_TARGET([For each target])
+            SINGLE_IP{Single IP}
 
-Enumeraga's bottleneck is clearly identified at the port sweeping phase. Once that's out the way the rest of logic gets triggered almost instantly, grouping up several ports in their respective protocols and targeting protocols for enumeration instead.
+            TOOL_CHECK -- yes --> INSTALL_TOOL --> TOOL_CHECK
+            TOOL_CHECK -- all ok --> MULTI
+            MULTI -- yes --> FOR_TARGET --> SINGLE_IP
+            MULTI -- no --> SINGLE_IP
+        end
 
-If you have new ideas to implement in this tool or have any feedback please reach out!
+        subgraph INFRA_ENUM["Enumeration phase"]
+            direction TB
+            SWEEP([Sweep open ports])
+            ALL_PORTS([All open ports\nNmap scan])
+            PARSE([Parse open protocols])
+            FOR_PROTO{For each protocol}
+            PROTO_NMAP([Dedicated protocol\nNmap scan])
+            PROTO_TOOLS([Run specific\nenumeration tools])
+            INFRA_DONE([Finish in parallel])
 
-## Wrapped Tools
+            SWEEP --> ALL_PORTS & PARSE
+            PARSE --> FOR_PROTO
+            FOR_PROTO --> PROTO_NMAP & PROTO_TOOLS
+            PROTO_NMAP & PROTO_TOOLS --> INFRA_DONE
+        end
 
-### Infrastructure Scanning
+        INFRA_MODE --> INFRA_CHECKS
+        SINGLE_IP --> INFRA_ENUM
+    end
 
-| Category | Tools |
-|----------|-------|
-| **Port Scanning** | Nmap |
-| **Web Enumeration** | Nikto, Dirsearch, Ffuf, Gobuster, WPScan, WhatWeb, WafW00f, CeWL |
-| **SMB/NetBIOS** | CrackMapExec, SMBMap, Enum4linux-ng, Nmblookup, Nbtscan-unixwiz |
-| **LDAP** | Ldapsearch |
-| **SNMP** | SNMPWalk, Onesixtyone, Braa |
-| **Database** | ODAT (Oracle), Hydra (MySQL brute) |
-| **SSH** | SSH-Audit, Hydra |
-| **SSL/TLS** | Testssl |
-| **Other** | Metasploit, Ident-user-enum, Responder-RunFinger, RPCDump, Rusers, Rwho, Nuclei |
-| **Brute Force** | Hydra (FTP, SSH, MySQL, RDP) |
+    %% ─────────────────────────────────────
+    %% CLOUD COLUMN
+    %% ─────────────────────────────────────
+    subgraph CLOUD["cloud"]
+        direction TB
+        CLOUD_MODE(["enumeraga cloud"])
 
-### Cloud Scanning
+        subgraph CLOUD_CHECKS["Checks phase"]
+            direction TB
+            PROVIDER{Provider?}
+            VALIDATE([Validate credentials])
+            AUTH([Auth preflight\ngcloud / ADC / SP])
 
-| Provider | Tools |
-|----------|-------|
-| **AWS** | ScoutSuite, Prowler, CloudFox |
-| **Azure** | ScoutSuite, Prowler |
-| **GCP** | ScoutSuite, Prowler |
-| **OCI** | ScoutSuite |
-| **AliCloud** | ScoutSuite |
-| **DigitalOcean** | ScoutSuite |
+            PROVIDER --> VALIDATE --> AUTH
+        end
+
+        subgraph CLOUD_ENUM["Enumeration phase — sequential"]
+            direction TB
+            PSWITCH{Provider switch}
+
+            subgraph GCP_PIPE["GCP"]
+                direction TB
+                GCP1([gcp_scanner\ninventory])
+                GCP2([ScoutSuite\ncompliance])
+                GCP3([Prowler\nCIS checks])
+                GCP4([CloudFox\ndeep enum])
+                GCP1 --> GCP2 --> GCP3 --> GCP4
+            end
+
+            subgraph AZ_PIPE["Azure"]
+                direction TB
+                AZ1([monkey365\nM365 + Entra ID])
+                AZ2([ScoutSuite\ncompliance])
+                AZ3([Prowler\nCIS checks])
+                AZ4([CloudFox\ndeep enum])
+                AZ1 --> AZ2 --> AZ3 --> AZ4
+            end
+
+            subgraph AWS_PIPE["AWS / other"]
+                direction TB
+                AWS1([ScoutSuite\ncompliance])
+                AWS2([Prowler\nCIS checks])
+                AWS3([CloudFox\ndeep enum])
+                AWS1 --> AWS2 --> AWS3
+            end
+
+            subgraph K8S_PIPE["k8s"]
+                direction TB
+                K8S1([kubenumerate])
+            end
+
+            PSWITCH -- GCP --> GCP_PIPE
+            PSWITCH -- Azure --> AZ_PIPE
+            PSWITCH -- AWS/other --> AWS_PIPE
+            PSWITCH -- k8s --> K8S_PIPE
+
+            OUTPUT([Write output reports])
+            GCP_PIPE & AZ_PIPE & AWS_PIPE & K8S_PIPE --> OUTPUT
+        end
+
+        CLOUD_MODE --> CLOUD_CHECKS
+        AUTH --> PSWITCH
+    end
+```
 
 ## Protocols Enumerated
 
@@ -278,11 +419,27 @@ enumeraga/
 └── internal/cloud/Dockerfile # Cloud scanning container
 ```
 
+## The motivation
+
+Working as pentesters, or playing CTFs, or fiddling around with practice labs, we come across the same initial phases of recon and enumeration over and over again. Or how many times we have to spawn a new clean testing machine and reinstall everything? I thought it would be an amazing opportunity to practice my coding skills if I automated the installation process and the initial tools that I always run in new engagements. Then, after seeing the first results in Bash (if you're curious: [autoEnum](https://github.com/0x5ubt13/autoenum)), I liked what I had done, and I kept adding on more features, until the Bash script grew up so much that I started thinking: "what if I actually use Go and compile this to a binary? Would I be able to pull it off...?" And, well, I'm a sucker for a good challenge if learning is a joyful side effect.
+
 ## The name
 
 Doing a casual search looking for my tool, I found out that the name "autoEnum" was already taken by a tool also written in Bash doing similar things developed years ago, so I decided to give my tool a different name. I thought of this version as the third iteration of the program, being the first one [autoNmap](https://github.com/0x5ubt13/myToolkit/tree/main/autoNmap), and the second one [autoEnum](https://github.com/0x5ubt13/autoenum).
 
 The next name had to be some sort of third iteration. It was quite fun and creative trying to come up with a new name, and after brainstorming several possibilities, I tried Pokemon, but I could not think of cool name for a second "evolution" using "auto" as a prefix. It made sense borrowing from the spell naming convention of the Final Fantasy universe, which also includes a G in the third version of their spells, and so to honour the decision to use Go, and develop the third stage of a script that does automatic enumeration for you, `Enumeraga` was born.
+
+## Disclaimer
+
+This tool has to run as `root`, and despite my nickname, it's not precisely a subtle tool! Contrarily, it will create a ton of noise. Given its aggressive nature, please ensure you know what you're doing before launching it, and of course double-check you have absolute permission to enumerate your target(s).
+
+## Similar tools out there
+
+I am aware other enumeration tools exist, but this one aims to be very fast and concise. So far by the current testing times, Enumeraga is able to run its core logic in about 20 to 60 seconds per host, depending on the number of ports open.
+
+Enumeraga's bottleneck is clearly identified at the port sweeping phase. Once that's out the way the rest of logic gets triggered almost instantly, grouping up several ports in their respective protocols and targeting protocols for enumeration instead.
+
+If you have new ideas to implement in this tool or have any feedback please reach out!
 
 ## Contributing
 
@@ -290,7 +447,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 ## To Do
 
-- [ ] Update flow chart to include the new Cloud enum flow
+- [x] Update flow chart to include the new Cloud enum flow
 - [ ] Test thoroughly on various targets
 - [ ] Release v1.0
 - [ ] Add a flag to pass `vhosts` and functionality to use them
