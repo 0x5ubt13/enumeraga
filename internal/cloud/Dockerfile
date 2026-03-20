@@ -124,6 +124,23 @@ RUN pipx install "prowler>=5.0.0" && pipx install scoutsuite
 # https://github.com/google/gcp_scanner
 RUN pipx install gcp-scanner
 
+# Install gcp-iam-brute (GCP IAM permission enumeration via testIamPermissions API)
+# https://github.com/hac01/gcp-iam-brute
+RUN git clone --depth=1 https://github.com/hac01/gcp-iam-brute /usr/share/gcp-iam-brute \
+    && pip3 install -r /usr/share/gcp-iam-brute/requirements.txt --break-system-packages
+
+# Download iam-dataset roles/ via sparse checkout (data directory only, no full history)
+# https://github.com/iann0036/iam-dataset
+RUN git clone --depth=1 --filter=blob:none --sparse https://github.com/iann0036/iam-dataset /tmp/iam-dataset \
+    && cd /tmp/iam-dataset && git sparse-checkout set data/ \
+    && cp -r /tmp/iam-dataset/data/ /usr/share/gcp-iam-brute/roles/ \
+    && rm -rf /tmp/iam-dataset
+
+# Wrapper script: gcp-iam-brute hard-codes roles_directory = "roles" as a relative path,
+# so invoke the tool from its install directory.
+RUN printf '#!/bin/sh\ncd /usr/share/gcp-iam-brute && exec python3 main.py "$@"\n' \
+    > /usr/local/bin/gcp-iam-brute && chmod +x /usr/local/bin/gcp-iam-brute
+
 # Switch back to root for final setup
 # USER root
 WORKDIR /app

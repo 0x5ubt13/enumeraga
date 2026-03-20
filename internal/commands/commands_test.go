@@ -346,6 +346,40 @@ func BenchmarkFilePathJoin(b *testing.B) {
 	}
 }
 
+func TestPrepCloudToolNucleiSkipsWithoutTarget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	tmpDir := t.TempDir() + "/"
+	verbose := false
+	cfg := &config.CloudConfig{
+		Provider:        "aws",
+		NucleiEnabled:   true,
+		NucleiTargetURL: "", // no target -- should return nil immediately
+	}
+	err := PrepCloudTool("nuclei", tmpDir, cfg, &verbose)
+	if err != nil {
+		t.Errorf("expected nil error when no target URL, got: %v", err)
+	}
+}
+
+func TestPrepCloudToolNucleiDisabled(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	tmpDir := t.TempDir() + "/"
+	verbose := false
+	cfg := &config.CloudConfig{
+		Provider:        "aws",
+		NucleiEnabled:   false,
+		NucleiTargetURL: "https://example.com",
+	}
+	err := PrepCloudTool("nuclei", tmpDir, cfg, &verbose)
+	if err != nil {
+		t.Errorf("expected nil error when disabled, got: %v", err)
+	}
+}
+
 func TestPrepCloudToolCredInjection(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping cloud tool test in short mode")
@@ -364,4 +398,80 @@ func TestPrepCloudToolCredInjection(t *testing.T) {
 	// err may or may not be nil depending on whether scout is installed
 	// We just verify no panic occurred
 	_ = err
+}
+
+func TestPrepCloudToolGCPIAMBruteSkipsNonGCP(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	tmpDir := t.TempDir() + "/"
+	verbose := false
+	cfg := &config.CloudConfig{
+		Provider:           "aws",
+		GCPIAMBruteEnabled: true,
+	}
+	err := PrepCloudTool("gcp_iam_brute", tmpDir, cfg, &verbose)
+	if err != nil {
+		t.Errorf("expected nil error for non-GCP provider, got: %v", err)
+	}
+}
+
+func TestPrepCloudToolGCPIAMBruteSkipsWhenDisabled(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	tmpDir := t.TempDir() + "/"
+	verbose := false
+	cfg := &config.CloudConfig{
+		Provider:           "gcp",
+		GCPIAMBruteEnabled: false,
+	}
+	err := PrepCloudTool("gcp_iam_brute", tmpDir, cfg, &verbose)
+	if err != nil {
+		t.Errorf("expected nil error when disabled, got: %v", err)
+	}
+}
+
+func TestResolveGCPIAMBruteEmailFromConfig(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	cfg := &config.CloudConfig{
+		GCPIAMBruteEmail: "test@project.iam.gserviceaccount.com",
+	}
+	email, err := resolveGCPIAMBruteEmail(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if email != "test@project.iam.gserviceaccount.com" {
+		t.Errorf("expected override email, got %q", email)
+	}
+}
+
+func TestResolveGCPIAMBruteEmailFromCredsFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	// Write a minimal service account JSON to a temp file
+	credsJSON := `{"type":"service_account","client_email":"sa@my-project.iam.gserviceaccount.com"}`
+	f, err := os.CreateTemp("", "creds-*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString(credsJSON); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	cfg := &config.CloudConfig{
+		CredsFile: f.Name(),
+	}
+	email, err := resolveGCPIAMBruteEmail(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if email != "sa@my-project.iam.gserviceaccount.com" {
+		t.Errorf("expected email from creds file, got %q", email)
+	}
 }

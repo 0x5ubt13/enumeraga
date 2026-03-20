@@ -218,6 +218,19 @@ func enumerateHTTPPort80(dir string) {
 	dirsearch80Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("http://%s:80", utils.Target), "-o", dirsearch80Path, "--max-time", common.GetTimeoutSeconds(), "--quiet"}
 	commands.CallRunTool(dirsearch80Args, dirsearch80Path, checks.OptVVerbose)
 
+	// Nuclei template scan on port 80
+	nuclei80Args := []string{
+		"nuclei",
+		"-u", fmt.Sprintf("http://%s:80", utils.Target),
+		"-t", "http/",
+		"-silent",
+		"-no-interactivity",
+		"-no-color",
+		"-timeout", common.GetTimeoutSeconds(),
+	}
+	nuclei80Path := fmt.Sprintf("%snuclei_80.out", dir)
+	commands.CallRunTool(nuclei80Args, nuclei80Path, checks.OptVVerbose)
+
 	if *checks.OptBrute {
 		// CeWL + Ffuf Keywords Bruteforcing
 		commands.CallRunCewlandFfufKeywords(utils.Target, dir, "80", checks.OptVVerbose)
@@ -249,6 +262,19 @@ func enumerateHTTPPort443(dir string) {
 	dirsearch443Args := []string{"dirsearch", "-t", "10", "-u", fmt.Sprintf("https://%s:443", utils.Target), "-o", dirsearch443Path, "--max-time", common.GetTimeoutSeconds(), "--quiet"}
 	commands.CallRunTool(dirsearch443Args, dirsearch443Path, checks.OptVVerbose)
 
+	// Nuclei template scan on port 443
+	nuclei443Args := []string{
+		"nuclei",
+		"-u", fmt.Sprintf("https://%s:443", utils.Target),
+		"-t", "http/",
+		"-silent",
+		"-no-interactivity",
+		"-no-color",
+		"-timeout", common.GetTimeoutSeconds(),
+	}
+	nuclei443Path := fmt.Sprintf("%snuclei_443.out", dir)
+	commands.CallRunTool(nuclei443Args, nuclei443Path, checks.OptVVerbose)
+
 	// TestSSL on port 443
 	testssl := "testssl"
 	if !utils.CheckToolExists("testssl") {
@@ -269,4 +295,17 @@ func enumerateHTTPPort8080(dir string) {
 
 	// Tomcat
 	commands.CallTomcatEnumeration(utils.Target, fmt.Sprintf("http://%s:8080/docs", utils.Target), dir, "8080", checks.OptBrute, checks.OptVVerbose)
+
+	// Nuclei template scan on port 8080
+	nuclei8080Args := []string{
+		"nuclei",
+		"-u", fmt.Sprintf("http://%s:8080", utils.Target),
+		"-t", "http/",
+		"-silent",
+		"-no-interactivity",
+		"-no-color",
+		"-timeout", common.GetTimeoutSeconds(),
+	}
+	nuclei8080Path := fmt.Sprintf("%snuclei_8080.out", dir)
+	commands.CallRunTool(nuclei8080Args, nuclei8080Path, checks.OptVVerbose)
 }

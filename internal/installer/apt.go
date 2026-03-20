@@ -202,3 +202,37 @@ func installEnum4linuxNg() error {
 	fmt.Println(output.Green("Done!"))
 	return nil
 }
+
+// InstallGCPIAMBrute installs gcp-iam-brute and its role definitions.
+// Called on demand when the wrapper binary is not found at /usr/local/bin/gcp-iam-brute.
+func InstallGCPIAMBrute() error {
+	output.PrintCustomBiColourMsg("yellow", "cyan", "[!] Installing '", "gcp-iam-brute", "' ...")
+
+	// Clone the tool
+	if err := gitCloneCmd("gcp-iam-brute", "https://github.com/hac01/gcp-iam-brute"); err != nil {
+		return fmt.Errorf("git clone gcp-iam-brute: %w", err)
+	}
+
+	// Install Python dependencies using pip3 explicitly
+	pip3 := exec.Command("pip3", "install", "-r", "/usr/share/gcp-iam-brute/requirements.txt", "--break-system-packages")
+	pip3.Stderr = os.Stderr
+	if err := pip3.Run(); err != nil {
+		return fmt.Errorf("pip3 install gcp-iam-brute requirements: %w", err)
+	}
+
+	// Download iam-dataset roles/ via GitHub API
+	if err := downloadIAMDatasetRoles("/usr/share/gcp-iam-brute/roles/"); err != nil {
+		return fmt.Errorf("download iam-dataset roles: %w", err)
+	}
+
+	// Create wrapper script so the tool can be invoked from any working directory.
+	// gcp-iam-brute hard-codes roles_directory = "roles" as a relative path,
+	// so the script cd's to the install directory before calling main.py.
+	wrapper := "#!/bin/sh\ncd /usr/share/gcp-iam-brute && exec python3 main.py \"$@\"\n"
+	if err := os.WriteFile("/usr/local/bin/gcp-iam-brute", []byte(wrapper), 0755); err != nil { //nolint:gosec // fixed trusted path
+		return fmt.Errorf("create gcp-iam-brute wrapper: %w", err)
+	}
+
+	output.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully installed ", "gcp-iam-brute")
+	return nil
+}

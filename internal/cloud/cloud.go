@@ -24,6 +24,10 @@ var optAzureTenantID     = getopt.StringLong("tenant", 0, "", "Azure Tenant ID (
 var optAzureClientID     = getopt.StringLong("client-id", 0, "", "Azure Client ID / App ID (for service principal auth)")
 var optAzureClientSecret = getopt.StringLong("client-secret", 0, "", "Azure Client Secret (for service principal auth)")
 
+// GCP IAM brute-force flags
+var optGCPIAMBruteEmail = getopt.StringLong("iam-brute-email", 0, "", "Override service account email for gcp-iam-brute (GCP only)")
+var optNoIAMBrute       = getopt.BoolLong("no-iam-brute", 0, "Disable gcp-iam-brute permission enumeration (GCP only)")
+
 // validateCredsFile validates the credentials file path and sets GOOGLE_APPLICATION_CREDENTIALS for GCP.
 // Returns nil if credsFile is empty (no-op) or if provider is not GCP (warning only).
 func validateCredsFile(provider, credsFile string) error {
@@ -196,11 +200,13 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 
 	// Scan start: changing into cloudScanner's Run function
 	cfg := &config.CloudConfig{
-		Provider:          provider,
-		CredsFile:         credsFile,
-		AzureTenantID:     *optAzureTenantID,
-		AzureClientID:     *optAzureClientID,
-		AzureClientSecret: *optAzureClientSecret,
+		Provider:             provider,
+		CredsFile:            credsFile,
+		AzureTenantID:        *optAzureTenantID,
+		AzureClientID:        *optAzureClientID,
+		AzureClientSecret:    *optAzureClientSecret,
+		GCPIAMBruteEnabled:   !*optNoIAMBrute,
+		GCPIAMBruteEmail:     *optGCPIAMBruteEmail,
 	}
 	cloudScanner.Run(cfg, OptVVerbose)
 
@@ -228,6 +234,8 @@ func printCloudUsage() {
 	fmt.Println("      --tenant ID          Azure Tenant ID (service principal auth, used by monkey365)")
 	fmt.Println("      --client-id ID       Azure Client/App ID (service principal auth, used by monkey365)")
 	fmt.Println("      --client-secret SEC  Azure Client Secret (service principal auth, used by monkey365)")
+	fmt.Println("      --iam-brute-email EMAIL  Override service account email for gcp-iam-brute (GCP only)")
+	fmt.Println("      --no-iam-brute           Disable gcp-iam-brute permission enumeration (GCP only)")
 	fmt.Println("  -h, --help               Display this help and exit")
 	fmt.Println("  -o, --output DIR         Select a different base folder for output (default: /tmp/enumeraga_output)")
 	fmt.Println("  -q, --quiet              Don't print the banner and decrease overall verbosity")

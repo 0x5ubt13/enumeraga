@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/config"
+	"github.com/0x5ubt13/enumeraga/internal/installer"
 	"github.com/0x5ubt13/enumeraga/internal/scans"
 	"github.com/0x5ubt13/enumeraga/internal/types"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
@@ -699,6 +700,47 @@ func InstallWithPipxOSAgnostic(tool string) error {
 	return cmd.Run()
 }
 
+// resolveGCPIAMBruteEmail determines the service account email to use with gcp-iam-brute.
+// Priority: explicit config override → client_email from creds JSON → gcloud config get-value account.
+func resolveGCPIAMBruteEmail(cfg *config.CloudConfig) (string, error) {
+	if cfg.GCPIAMBruteEmail != "" {
+		return cfg.GCPIAMBruteEmail, nil
+	}
+	if cfg.CredsFile != "" {
+		data, err := os.ReadFile(cfg.CredsFile) //nolint:gosec // path already validated by validateCredsFile
+		if err == nil {
+			var creds struct {
+				ClientEmail string `json:"client_email"`
+			}
+			if jsonErr := json.Unmarshal(data, &creds); jsonErr == nil && creds.ClientEmail != "" {
+				return creds.ClientEmail, nil
+			}
+		}
+	}
+	out, err := exec.Command("gcloud", "config", "get-value", "account").Output()
+	if err == nil {
+		email := strings.TrimSpace(string(out))
+		if email != "" && email != "(unset)" {
+			return email, nil
+		}
+	}
+	return "", fmt.Errorf("could not determine service account email; use --iam-brute-email to set it explicitly")
+}
+
+// resolveGCPIAMBruteToken obtains a GCP access token via gcloud.
+// gcpAuthPreflight has already activated the correct account before this is called.
+func resolveGCPIAMBruteToken(_ *config.CloudConfig) (string, error) {
+	out, err := exec.Command("gcloud", "auth", "print-access-token").Output()
+	if err != nil {
+		return "", fmt.Errorf("gcloud auth print-access-token failed: %w", err)
+	}
+	token := strings.TrimSpace(string(out))
+	if token == "" {
+		return "", fmt.Errorf("gcloud auth print-access-token returned an empty token")
+	}
+	return token, nil
+}
+
 // PrepCloudTool preps the program to run a cloud tool
 // To add more cloud enumeration capabilities, add new switch cases here
 func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *bool) error {
@@ -818,6 +860,59 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 			return nil
 		}
 		return runMonkey365(cfg, filePath)
+
+	case "nuclei":
+		if !cfg.NucleiEnabled {
+			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei", "disabled. Skipping cloud template scan...")
+			return nil
+		}
+		if cfg.NucleiTargetURL == "" {
+			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei", "skipped: no target URL provided (set NucleiTargetURL in config to enable cloud template scans)")
+			return nil
+		}
+		if !utils.CheckToolExists("nuclei") {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] nuclei", "not found. Install it via: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest")
+			return nil
+		}
+		templatePath := fmt.Sprintf("cloud/%s/", cfg.Provider)
+		commandToRun = fmt.Sprintf(
+			"nuclei -u %s -t %s -silent -no-interactivity -no-color",
+			cfg.NucleiTargetURL, templatePath,
+		)
+
+	case "gcp_iam_brute":
+		if cfg.Provider != "gcp" {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " gcp_iam_brute ", "must be run with the", " gcp ", "flag. Skipping it...")
+			return nil
+		}
+		if !cfg.GCPIAMBruteEnabled {
+			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] gcp_iam_brute", "disabled. Skipping...")
+			return nil
+		}
+		if cfg.GCPProject == "" {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", "requires --project to be set. Skipping...")
+			return nil
+		}
+		if !utils.CheckToolExists("gcp_iam_brute") {
+			if installErr := installer.InstallGCPIAMBrute(); installErr != nil {
+				return fmt.Errorf("gcp_iam_brute install failed: %w", installErr)
+			}
+		}
+		email, emailErr := resolveGCPIAMBruteEmail(cfg)
+		if emailErr != nil {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf("could not determine service account email: %v. Skipping...", emailErr))
+			return nil
+		}
+		token, tokenErr := resolveGCPIAMBruteToken(cfg)
+		if tokenErr != nil {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf("could not obtain access token: %v. Skipping...", tokenErr))
+			return nil
+		}
+		// Access tokens are alphanumeric (ya29.*) — no spaces, safe to interpolate into commandToRun.
+		commandToRun = fmt.Sprintf(
+			"gcp-iam-brute --access-token %s --project-id %s --service-account-email %s",
+			token, cfg.GCPProject, email,
+		)
 
 	default:
 		// Case not registered, try and run it anyway see what could go wrong

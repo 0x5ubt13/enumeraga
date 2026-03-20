@@ -24,11 +24,13 @@ func Run(cfg *config.CloudConfig, OptVVerbose *bool) {
 	case "gcp":
 		// 1. Raw inventory first — answers "what can these creds access?" before deeper scans
 		runTool("gcp_scanner", cfg, fmt.Sprintf("%sgcp_scanner/", providerDir), OptVVerbose)
+		runTool("gcp_iam_brute", cfg, fmt.Sprintf("%sgcp_iam_brute/", providerDir), OptVVerbose)
 		// 2. Compliance and misconfiguration checks
 		runTool("scoutsuite", cfg, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
 		runTool("prowler", cfg, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
 		// 3. Deeper enumeration once project context is known
 		runTool("cloudfox", cfg, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
+		runTool("nuclei", cfg, fmt.Sprintf("%snuclei/", providerDir), OptVVerbose)
 	case "k8s":
 		runTool("kubenumerate", cfg, fmt.Sprintf("%skubenumerate/", providerDir), OptVVerbose)
 	case "azure":
@@ -40,11 +42,13 @@ func Run(cfg *config.CloudConfig, OptVVerbose *bool) {
 		runTool("prowler", cfg, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
 		// 3. Deeper enumeration
 		runTool("cloudfox", cfg, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
+		runTool("nuclei", cfg, fmt.Sprintf("%snuclei/", providerDir), OptVVerbose)
 	default:
 		// AWS and other providers
 		runTool("scoutsuite", cfg, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
 		runTool("prowler", cfg, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
 		runTool("cloudfox", cfg, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
+		runTool("nuclei", cfg, fmt.Sprintf("%snuclei/", providerDir), OptVVerbose)
 	}
 	// runTool("cloudsplaining", cfg, fmt.Sprintf("%scloud_peass/", providerDir), OptVVerbose) // https://github.com/salesforce/cloudsplaining
 

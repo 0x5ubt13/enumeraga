@@ -61,6 +61,10 @@ func CheckToolExists(tool string) bool {
 		_, err := os.Stat("/usr/share/seclists")
 		return err == nil
 	}
+	if tool == "gcp_iam_brute" {
+		_, err := os.Stat("/usr/local/bin/gcp-iam-brute")
+		return err == nil
+	}
 	_, lookPatherr := exec.LookPath(tool)
 	return lookPatherr == nil
 }
@@ -97,9 +101,11 @@ func getKeyTools() []string {
 // getKeyCloudTools returns the list of key cloud scanning tools
 func getKeyCloudTools() []string {
 	return []string{
-		"prowler",    // (https://github.com/prowler-cloud/prowler)
-		"scoutsuite", // (https://github.com/nccgroup/scoutsuite)
-		"cloudfox",   // (https://github.com/BishopFox/cloudfox)
+		"nuclei",        // (https://github.com/projectdiscovery/nuclei)
+		"gcp_iam_brute", // (https://github.com/hac01/gcp-iam-brute)
+		"prowler",       // (https://github.com/prowler-cloud/prowler)
+		"scoutsuite",    // (https://github.com/nccgroup/scoutsuite)
+		"cloudfox",      // (https://github.com/BishopFox/cloudfox)
 		/*
 			Note: it'd be good if pmapper was installed alongside cloudfox, with their integration it could also have it generate the default privesc query and images as output
 				- Pmapper (https://github.com/nccgroup/PMapper)

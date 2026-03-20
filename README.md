@@ -41,16 +41,17 @@ Automatic multiprocess Linux CLI tool that aims for a quick enumeration wrapping
 
 ### Cloud Scanning
 
-| Provider | Tools |
-|----------|-------|
-| **AWS** | ScoutSuite, Prowler, CloudFox |
-| **Azure** | monkey365, ScoutSuite, Prowler, CloudFox |
-| **GCP** | gcp_scanner, ScoutSuite, Prowler, CloudFox |
-| **OCI** | ScoutSuite |
-| **AliCloud** | ScoutSuite |
-| **DigitalOcean** | ScoutSuite |
+| Provider | Tools | Scan order |
+|----------|-------|------------|
+| **AWS** | ScoutSuite, Prowler, CloudFox, Nuclei | sequential |
+| **Azure** | monkey365, ScoutSuite, Prowler, CloudFox, Nuclei | sequential |
+| **GCP** | gcp_scanner, gcp-iam-brute, ScoutSuite, Prowler, CloudFox, Nuclei | sequential |
+| **OCI** | ScoutSuite | sequential |
+| **AliCloud** | ScoutSuite | sequential |
+| **DigitalOcean** | ScoutSuite | sequential |
+| **Kubernetes** | kubenumerate | — |
 
-Tools run sequentially per provider to avoid cloud API rate limiting. Provider-specific inventory tools (`gcp_scanner`, `monkey365`) run first to establish project/subscription context before deeper compliance scanners.
+Tools run sequentially per provider to avoid cloud API rate limiting. Inventory tools run first (`gcp_scanner`, `monkey365`), then IAM permission testing (`gcp-iam-brute`), then compliance/misconfiguration scanners, and finally external template checks (Nuclei).
 
 ## Usage
 
@@ -60,7 +61,7 @@ Give `enumeraga infra` either a single IP address or a file containing a list of
 
     enumeraga infra -h
 
-                                                        dev
+                                                            dev
     __________                                    ______________________ 
     ___  ____/__________  ________ __________________    |_  ____/__    |
     __  __/  __  __ \  / / /_  __ `__ \  _ \_  ___/_  /| |  / __ __  /| |
@@ -121,14 +122,48 @@ sudo enumeraga infra -t targets.txt
 sudo enumeraga infra -t 192.168.1.100 -q
 ```
 
-### Enumeraga Cloud 
+### Enumeraga Cloud
 
 Give `enumeraga cloud` a CSP, and depending on which, a couple more parameters for it to go through your fave cloud enumeration tools. Just like enumeraga infra, sit back, relax, and laugh maniacally while it handles all enumeration for you, going through every relevant cloud tool on your behalf:
 
+    enumeraga cloud -h
 
+                                                            dev
+    __________                                    ______________________ 
+    ___  ____/__________  ________ __________________    |_  ____/__    |
+    __  __/  __  __ \  / / /_  __ `__ \  _ \_  ___/_  /| |  / __ __  /| |
+    _  /___  _  / / / /_/ /_  / / / / /  __/  /   _  ___ / /_/ / _  ___ |
+    /_____/  /_/ /_/\__,_/ /_/ /_/ /_/\___//_/    /_/  |_\____/  /_/  |_|
+                                by 0x5ubt13
 
+    Usage: enumeraga cloud [OPTIONS] <provider>
+    
+    Cloud Providers:
+      aws, amazon          Amazon Web Services
+      azure, az            Microsoft Azure
+      gcp, gcloud, g       Google Cloud Platform
+      oci, oracle          Oracle Cloud Infrastructure
+      aliyun, alibaba      Alibaba Cloud
+      do, digitalocean     DigitalOcean
+    
+    Options:
+      -c, --creds FILE         Path to credentials file (e.g. GCP service     account JSON)
+          --tenant ID          Azure Tenant ID (service principal auth, used     by monkey365)
+          --client-id ID       Azure Client/App ID (service principal auth,     used by monkey365)
+          --client-secret SEC  Azure Client Secret (service principal auth,     used by monkey365)
+          --iam-brute-email EMAIL  Override service account email for     gcp-iam-brute (GCP only)
+          --no-iam-brute           Disable gcp-iam-brute permission     enumeration (GCP only)
+      -h, --help               Display this help and exit
+      -o, --output DIR         Select a different base folder for output     (default: /tmp/enumeraga_output)
+      -q, --quiet              Don't print the banner and decrease overall     verbosity
+      -V, --vv                 Flood your terminal with plenty of verbosity!
+    
+    Examples:
+     enumeraga cloud aws
+     enumeraga cloud gcp --creds sa-key.json --project <project-id>
+     enumeraga cloud azure --tenant <tenant-id> --client-id <app-id>     --client-secret <secret>
 
-#### Examples
+#### Examples
 
 ```bash
 # AWS — uses ~/.aws credentials
@@ -140,11 +175,17 @@ enumeraga cloud azure
 # Azure — service principal (required for monkey365 full M365 + Entra ID coverage)
 enumeraga cloud azure --tenant <tenant-id> --client-id <app-id> --client-secret <secret>
 
-# GCP — Application Default Credentials
+# GCP — Application Default Credentials (gcp-iam-brute runs automatically)
 enumeraga cloud gcp
 
 # GCP — service account key file with explicit project
 enumeraga cloud gcp --creds /path/to/sa-key.json --project <project-id>
+
+# GCP — override the service account email used by gcp-iam-brute
+enumeraga cloud gcp --creds /path/to/sa-key.json --project <project-id> --iam-brute-email sa@project.iam.gserviceaccount.com
+
+# GCP — skip gcp-iam-brute (e.g. if testIamPermissions is restricted by policy)
+enumeraga cloud gcp --creds /path/to/sa-key.json --project <project-id> --no-iam-brute
 
 # Kubernetes
 enumeraga cloud k8s
@@ -238,6 +279,10 @@ docker run -v ./sa-key.json:/creds/sa-key.json -v ./output:/tmp/enumeraga_output
 # Run against GCP with a service account key and explicit project ID
 docker run -v ./sa-key.json:/creds/sa-key.json -v ./output:/tmp/enumeraga_output \
   gagarter/enumeraga_cloud gcp --creds /creds/sa-key.json --project <project-id>
+
+# Run against GCP, skipping gcp-iam-brute
+docker run -v ./sa-key.json:/creds/sa-key.json -v ./output:/tmp/enumeraga_output \
+  gagarter/enumeraga_cloud gcp --creds /creds/sa-key.json --project <project-id> --no-iam-brute
 ```
 
 **Key points for cloud scanning:**
@@ -246,6 +291,7 @@ docker run -v ./sa-key.json:/creds/sa-key.json -v ./output:/tmp/enumeraga_output
 - Supports AWS, Azure, GCP, OCI, AliCloud, and DigitalOcean
 - **Azure:** pass `--tenant`, `--client-id`, and `--client-secret` for service principal auth — required for [monkey365](https://github.com/silverhack/monkey365) to enumerate M365, Entra ID, Exchange Online, and SharePoint alongside Azure resources
 - **GCP:** pass `--creds /path/to/sa-key.json` to authenticate with a service account key file; without it, [gcp_scanner](https://github.com/google/gcp_scanner) and other tools fall back to Application Default Credentials
+- **GCP:** [gcp-iam-brute](https://github.com/hac01/gcp-iam-brute) runs automatically after `gcp_scanner` to actively test IAM permissions via the `testIamPermissions` API; use `--no-iam-brute` to disable it or `--iam-brute-email` to override the detected service account email
 
 ## Flow chart
 
@@ -317,10 +363,12 @@ flowchart TD
             subgraph GCP_PIPE["GCP"]
                 direction TB
                 GCP1([gcp_scanner\ninventory])
-                GCP2([ScoutSuite\ncompliance])
-                GCP3([Prowler\nCIS checks])
-                GCP4([CloudFox\ndeep enum])
-                GCP1 --> GCP2 --> GCP3 --> GCP4
+                GCP2([gcp-iam-brute\nIAM permissions])
+                GCP3([ScoutSuite\ncompliance])
+                GCP4([Prowler\nCIS checks])
+                GCP5([CloudFox\ndeep enum])
+                GCP6([Nuclei\nexternal checks])
+                GCP1 --> GCP2 --> GCP3 --> GCP4 --> GCP5 --> GCP6
             end
 
             subgraph AZ_PIPE["Azure"]
@@ -329,7 +377,8 @@ flowchart TD
                 AZ2([ScoutSuite\ncompliance])
                 AZ3([Prowler\nCIS checks])
                 AZ4([CloudFox\ndeep enum])
-                AZ1 --> AZ2 --> AZ3 --> AZ4
+                AZ5([Nuclei\nexternal checks])
+                AZ1 --> AZ2 --> AZ3 --> AZ4 --> AZ5
             end
 
             subgraph AWS_PIPE["AWS / other"]
@@ -337,7 +386,8 @@ flowchart TD
                 AWS1([ScoutSuite\ncompliance])
                 AWS2([Prowler\nCIS checks])
                 AWS3([CloudFox\ndeep enum])
-                AWS1 --> AWS2 --> AWS3
+                AWS4([Nuclei\nexternal checks])
+                AWS1 --> AWS2 --> AWS3 --> AWS4
             end
 
             subgraph K8S_PIPE["k8s"]

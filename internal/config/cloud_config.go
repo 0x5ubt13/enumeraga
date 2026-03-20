@@ -12,6 +12,10 @@ type CloudConfig struct {
 	CloudFoxEnabled    bool
 	GCPScannerEnabled  bool
 	Monkey365Enabled   bool
+	NucleiEnabled      bool
+	NucleiTargetURL    string // optional target URL for nuclei cloud template scans; leave empty to skip
+	GCPIAMBruteEnabled bool
+	GCPIAMBruteEmail   string // overrides auto-detected service account email
 
 	// Output settings
 	OutputPath   string
@@ -34,14 +38,16 @@ type CloudConfig struct {
 
 func NewCloudConfig() *CloudConfig {
 	return &CloudConfig{
-		PMMapperEnabled:   true,
-		ScoutSuiteEnabled: true,
-		ProwlerEnabled:    true,
-		CloudFoxEnabled:   true,
-		GCPScannerEnabled: true,
-		Monkey365Enabled:  true,
-		ReportFormat:      "xlsx",
-		Concurrent:        true,
-		InstallMissing:    true,
+		PMMapperEnabled:    true,
+		ScoutSuiteEnabled:  true,
+		ProwlerEnabled:     true,
+		CloudFoxEnabled:    true,
+		GCPScannerEnabled:  true,
+		Monkey365Enabled:   true,
+		NucleiEnabled:      true,
+		GCPIAMBruteEnabled: true,
+		ReportFormat:       "xlsx",
+		Concurrent:         true,
+		InstallMissing:     true,
 	}
 }

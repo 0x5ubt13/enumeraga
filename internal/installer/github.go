@@ -382,3 +382,48 @@ func copyBinary(sourcePath, destPath string, mode os.FileMode) error {
 
 	return nil
 }
+
+// downloadIAMDatasetRoles fetches GCP IAM role definitions from the iam-dataset
+// GitHub repository and writes each JSON file into destDir.
+// Uses the GitHub Contents API so only the data/ subtree is fetched.
+func downloadIAMDatasetRoles(destDir string) error {
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("create roles dir: %w", err)
+	}
+
+	apiURL := "https://api.github.com/repos/iann0036/iam-dataset/contents/data/"
+	resp, err := http.Get(apiURL) //nolint:gosec // URL is a hardcoded trusted constant
+	if err != nil {
+		return fmt.Errorf("fetch iam-dataset listing: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var entries []struct {
+		Name        string `json:"name"`
+		DownloadURL string `json:"download_url"`
+		Type        string `json:"type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return fmt.Errorf("decode iam-dataset listing: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.Type != "file" || !strings.HasSuffix(entry.Name, ".json") {
+			continue
+		}
+		fileResp, err := http.Get(entry.DownloadURL) //nolint:gosec // URL comes from GitHub API response for a trusted repo
+		if err != nil {
+			return fmt.Errorf("download %s: %w", entry.Name, err)
+		}
+		data, readErr := io.ReadAll(fileResp.Body)
+		fileResp.Body.Close()
+		if readErr != nil {
+			return fmt.Errorf("read %s: %w", entry.Name, readErr)
+		}
+		destPath := filepath.Join(destDir, entry.Name)
+		if err := os.WriteFile(destPath, data, 0644); err != nil { //nolint:gosec // destDir is a trusted constant path
+			return fmt.Errorf("write %s: %w", entry.Name, err)
+		}
+	}
+	return nil
+}

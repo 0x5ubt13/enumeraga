@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/0x5ubt13/enumeraga/internal/config"
 )
 
 func TestValidateCredsFile(t *testing.T) {
@@ -154,4 +156,14 @@ func TestGcpAuthPreflight(t *testing.T) {
 			t.Fatal("expected error when success string absent")
 		}
 	})
+}
+
+func TestCloudConfigNucleiDefaults(t *testing.T) {
+	cfg := config.NewCloudConfig()
+	if !cfg.NucleiEnabled {
+		t.Error("expected NucleiEnabled to default to true")
+	}
+	if cfg.NucleiTargetURL != "" {
+		t.Errorf("expected NucleiTargetURL to default to empty, got %q", cfg.NucleiTargetURL)
+	}
 }
