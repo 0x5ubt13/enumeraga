@@ -129,11 +129,11 @@ RUN pipx install gcp-scanner
 RUN git clone --depth=1 https://github.com/hac01/gcp-iam-brute /usr/share/gcp-iam-brute \
     && pip3 install -r /usr/share/gcp-iam-brute/requirements.txt --break-system-packages
 
-# Download iam-dataset roles/ via sparse checkout (data directory only, no full history)
+# Download iam-dataset GCP roles via sparse checkout (gcp/roles/ subtree only, no full history)
 # https://github.com/iann0036/iam-dataset
 RUN git clone --depth=1 --filter=blob:none --sparse https://github.com/iann0036/iam-dataset /tmp/iam-dataset \
-    && cd /tmp/iam-dataset && git sparse-checkout set data/ \
-    && cp -r /tmp/iam-dataset/data/ /usr/share/gcp-iam-brute/roles/ \
+    && cd /tmp/iam-dataset && git sparse-checkout set gcp/roles/ \
+    && cp -r /tmp/iam-dataset/gcp/roles/. /usr/share/gcp-iam-brute/roles/ \
     && rm -rf /tmp/iam-dataset
 
 # Wrapper script: gcp-iam-brute hard-codes roles_directory = "roles" as a relative path,

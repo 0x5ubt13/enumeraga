@@ -391,7 +391,7 @@ func downloadIAMDatasetRoles(destDir string) error {
 		return fmt.Errorf("create roles dir: %w", err)
 	}
 
-	apiURL := "https://api.github.com/repos/iann0036/iam-dataset/contents/data/"
+	apiURL := "https://api.github.com/repos/iann0036/iam-dataset/contents/gcp/roles/"
 	resp, err := http.Get(apiURL) //nolint:gosec // URL is a hardcoded trusted constant
 	if err != nil {
 		return fmt.Errorf("fetch iam-dataset listing: %w", err)
