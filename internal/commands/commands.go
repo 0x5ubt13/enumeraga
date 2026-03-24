@@ -92,36 +92,11 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, 
 	CallRunTool(hydraArgs, hydraPath, OptVVerbose)
 }
 
-func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
-	if port == "80" {
-		keywordsList := fmt.Sprintf("%scewl_keywordslist_80.out", caseDir)
-		targetURL := fmt.Sprintf("http://%s:80", target)
-		cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
-		cewlPath := fmt.Sprintf("%scewl_80.out", caseDir)
-		if err := runTool(cewlArgs, cewlPath, port, OptVVerbose); err == nil {
-			printToolSuccess(port, "cewl", cewlPath, -1, -1)
-		}
-
-		ffufArgs := []string{
-			"ffuf",
-			"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", utils.DirListMedium, keywordsList, utils.ExtensionsList),
-			"-u", fmt.Sprintf("http://%s/FOLDERS/KEYWORDSEXTENSIONS", target),
-			"-v",
-			"-maxtime", getTimeoutSeconds(),
-			"-maxtime-job", getTimeoutSeconds(),
-		}
-		utils.PrintSafe("%s\n", utils.Debug("[?] Debug: ffuf keywords command:", ffufArgs))
-		ffufPath := fmt.Sprintf("%sffuf_keywords_80.out", caseDir)
-		if err := runTool(ffufArgs, ffufPath, port, OptVVerbose); err == nil {
-			printToolSuccess(port, "ffuf", ffufPath, -1, -1)
-		}
-		return
-	}
-
-	keywordsList := fmt.Sprintf("%scewl_keywordslist_443.out", caseDir)
-	targetURL := fmt.Sprintf("https://%s:443", target)
+func runCewlAndFfuf(target, caseDir, port, scheme string, OptVVerbose *bool) {
+	keywordsList := fmt.Sprintf("%scewl_keywordslist_%s.out", caseDir, port)
+	targetURL := fmt.Sprintf("%s://%s:%s", scheme, target, port)
 	cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
-	cewlPath := fmt.Sprintf("%scewl_443.out", caseDir)
+	cewlPath := fmt.Sprintf("%scewl_%s.out", caseDir, port)
 	if err := runTool(cewlArgs, cewlPath, port, OptVVerbose); err == nil {
 		printToolSuccess(port, "cewl", cewlPath, -1, -1)
 	}
@@ -129,15 +104,24 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 	ffufArgs := []string{
 		"ffuf",
 		"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", utils.DirListMedium, keywordsList, utils.ExtensionsList),
-		"-u", fmt.Sprintf("https://%s/FOLDERS/KEYWORDSEXTENSIONS", target),
+		"-u", fmt.Sprintf("%s://%s/FOLDERS/KEYWORDSEXTENSIONS", scheme, target),
 		"-v",
 		"-maxtime", getTimeoutSeconds(),
 		"-maxtime-job", getTimeoutSeconds(),
 	}
-	ffufPath := fmt.Sprintf("%sffuf_keywords_443.out", caseDir)
+	utils.PrintSafe("%s\n", utils.Debug("[?] Debug: ffuf keywords command:", ffufArgs))
+	ffufPath := fmt.Sprintf("%sffuf_keywords_%s.out", caseDir, port)
 	if err := runTool(ffufArgs, ffufPath, port, OptVVerbose); err == nil {
 		printToolSuccess(port, "ffuf", ffufPath, -1, -1)
 	}
+}
+
+func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
+	if port == "80" {
+		runCewlAndFfuf(target, caseDir, port, "http", OptVVerbose)
+		return
+	}
+	runCewlAndFfuf(target, caseDir, port, "https", OptVVerbose)
 }
 
 func printToolSuccess(command, tool, filePath string, completed, total int) {
@@ -163,33 +147,29 @@ func printToolSuccess(command, tool, filePath string, completed, total int) {
 	utils.PrintCustomBiColourMsg("yellow", "cyan",
 		fmt.Sprintf("    Shortcut: less -R '%s'", filePath))
 
-	if len(runningTools) > 0 && len(runningTools) <= 10 {
+	n := len(runningTools)
+	if n > 0 && n <= 10 {
 		utils.PrintCustomBiColourMsg("cyan", "white",
 			fmt.Sprintf("    Still running: %s", strings.Join(runningTools, ", ")))
-	} else if len(runningTools) > 10 {
+	} else if n > 10 {
 		utils.PrintCustomBiColourMsg("cyan", "white",
-			fmt.Sprintf("    Still running: %d tools", len(runningTools)))
+			fmt.Sprintf("    Still running: %d tools", n))
 	}
 }
 
 // Handle messages for HTTP tools to avoid confusion
-func announceTool(command, tool string) {
+func announceTool(tool, port string) {
 	total := utils.ToolRegistry.GetTotal()
 	running := len(utils.ToolRegistry.GetRunningTools())
 
-	if strings.Contains(command, "80") {
-		utils.PrintCustomBiColourMsg("yellow", "cyan",
-			fmt.Sprintf("[!] Running '%s on port 80' (%d tools total, %d running)",
-				tool, total, running))
-	} else if strings.Contains(command, "443") {
-		utils.PrintCustomBiColourMsg("yellow", "cyan",
-			fmt.Sprintf("[!] Running '%s on port 443' (%d tools total, %d running)",
-				tool, total, running))
+	var label string
+	if port != "" {
+		label = fmt.Sprintf("%s on port %s", tool, port)
 	} else {
-		utils.PrintCustomBiColourMsg("yellow", "cyan",
-			fmt.Sprintf("[!] Running '%s' (%d tools total, %d running)",
-				tool, total, running))
+		label = tool
 	}
+	utils.PrintCustomBiColourMsg("yellow", "cyan",
+		fmt.Sprintf("[!] Running '%s' (%d tools total, %d running)", label, total, running))
 }
 
 // Handle messages for HTTP tools to avoid confusion
@@ -208,8 +188,7 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) err
 
 	tool := args[0]
 	cmdArgs := args[1:]
-	command := strings.Join(cmdArgs, " ")
-	announceTool(command, tool)
+	announceTool(tool, port)
 
 	if delay := utils.ToolStartDelay(); delay > 0 {
 		time.Sleep(delay)
@@ -390,22 +369,19 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	}(confirmed)
 
 	scanner := bufio.NewScanner(file)
-	if err := scanner.Err(); err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Error while creating new scanner on file %s: %s", msfEternalBluePath, err))
-		return
-	}
-
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Grep -i likely
 		if strings.Contains(strings.ToLower(line), "likely") {
 			confirmedVuln = true
-			_, err := confirmed.WriteString(line + "\n")
-			if err != nil {
+			if _, err := confirmed.WriteString(line + "\n"); err != nil {
 				utils.ErrorMsg(fmt.Sprintf("Error writing string: %s", err))
 				return
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error scanning file %s: %s", msfEternalBluePath, err))
 	}
 
 	if !confirmedVuln {
@@ -538,35 +514,46 @@ func setFlagValue(args []string, flag string, value string) []string {
 	return append(args, flag, value)
 }
 
-// extractPortFromPath extracts port number from file path for tool naming
-func extractPortFromPath(filePath string) string {
-	// Check for explicit port numbers in filename or path
-	if strings.Contains(filePath, "_80.out") || strings.Contains(filePath, "/80/") {
-		return "80"
-	} else if strings.Contains(filePath, "_443.out") || strings.Contains(filePath, "/443/") || strings.Contains(filePath, "testssl.out") {
-		return "443"
-	} else if strings.Contains(filePath, "_8080.out") || strings.Contains(filePath, "/8080/") {
-		return "8080"
-	} else if strings.Contains(filePath, "_8443.out") || strings.Contains(filePath, "/8443/") {
-		return "8443"
-	}
+// portPatternTable maps ports to the path substrings that unambiguously identify them.
+var portPatternTable = []struct {
+	port     string
+	patterns []string
+}{
+	{"80", []string{"_80.out", "/80/"}},
+	{"443", []string{"_443.out", "/443/", "testssl.out"}},
+	{"8080", []string{"_8080.out", "/8080/"}},
+	{"8443", []string{"_8443.out", "/8443/"}},
+}
 
-	// Check for /http/ directory (ports 80, 443, 8080, 8443)
-	if strings.Contains(filePath, "/http/") {
-		basename := filepath.Base(filePath)
-		// Tools that are specific to certain ports
-		if strings.HasPrefix(basename, "wafw00f") || strings.HasPrefix(basename, "whatweb") ||
-			strings.HasPrefix(basename, "dirsearch") || strings.HasPrefix(basename, "nikto") {
-			// These could be 80 or 443 - check filename more carefully
-			if strings.Contains(basename, "80") {
-				return "80"
-			} else if strings.Contains(basename, "443") {
-				return "443"
+// httpPortTools are tools whose output filenames embed the port number within /http/ paths.
+var httpPortTools = []string{"wafw00f", "whatweb", "dirsearch", "nikto"}
+
+// extractPortFromPath extracts the port number from an output file path.
+func extractPortFromPath(filePath string) string {
+	for _, entry := range portPatternTable {
+		for _, pat := range entry.patterns {
+			if strings.Contains(filePath, pat) {
+				return entry.port
 			}
 		}
 	}
 
-	// Try to extract port from path pattern like "tool_PORT.out"
+	if strings.Contains(filePath, "/http/") {
+		basename := filepath.Base(filePath)
+		for _, tool := range httpPortTools {
+			if strings.HasPrefix(basename, tool) {
+				if strings.Contains(basename, "80") {
+					return "80"
+				}
+				if strings.Contains(basename, "443") {
+					return "443"
+				}
+				break
+			}
+		}
+	}
+
+	// Fall back to "tool_PORT.out" filename convention
 	parts := strings.Split(filepath.Base(filePath), "_")
 	if len(parts) >= 2 {
 		portStr := strings.TrimSuffix(parts[len(parts)-1], ".out")
@@ -743,194 +730,197 @@ func resolveGCPIAMBruteToken(_ *config.CloudConfig) (string, error) {
 
 // PrepCloudTool preps the program to run a cloud tool
 // To add more cloud enumeration capabilities, add new switch cases here
+// PrepCloudTool preps the program to run a cloud tool.
+// To add more cloud enumeration capabilities, add a new case and a corresponding prep function.
 func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *bool) error {
-	var commandToRun string
+	var (
+		commandToRun string
+		err          error
+	)
 
-	// Get name of the tool first
 	switch tool {
 	case "scoutsuite":
-		if !utils.CheckToolExists("scout") {
-			err := InstallWithPipxOSAgnostic("scoutsuite")
-			if err != nil {
-				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing scout via pipx")
-				return err
-			}
-		}
-
-		commandToRun = fmt.Sprintf("scout %s --no-browser --report-dir %s", cfg.Provider, filePath)
-		if cfg.Provider == "gcp" && cfg.CredsFile != "" {
-			commandToRun += fmt.Sprintf(" --service-account %s", cfg.CredsFile)
-		}
-
+		commandToRun, err = prepScoutsuite(cfg, filePath)
 	case "prowler":
-		if !utils.CheckToolExists("prowler") {
-			err := InstallWithPipxOSAgnostic("prowler")
-			if err != nil {
-				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing prowler via pipx")
-				return err
-			}
-		}
-		commandToRun = fmt.Sprintf("prowler %s -o %s", cfg.Provider, filePath)
-		if cfg.Provider == "gcp" && cfg.CredsFile != "" {
-			commandToRun += fmt.Sprintf(" --credentials-file %s", cfg.CredsFile)
-		}
-
+		commandToRun, err = prepProwler(cfg, filePath)
 	case "cloudfox":
-		binary := "cloudfox"
-		if !utils.CheckToolExists("cloudfox") {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-] CloudFox ", "not found. Attempting to download it now from GitHub...")
-			binaryPath, err := utils.DownloadFromGithubAndInstall("cloudfox")
-			if err != nil {
-				return fmt.Errorf("error downloading cloudfox: %v", err)
-			}
-			binary = binaryPath
-		}
-
-		switch cfg.Provider {
-		case "aws":
-			// AWS: all-checks is fully supported; optionally scope to a profile
-			commandToRun = fmt.Sprintf("%s aws all-checks --outdir %s", binary, filePath)
-			if cfg.AWSProfile != "" {
-				commandToRun += fmt.Sprintf(" --profile %s", cfg.AWSProfile)
-			}
-		case "gcp":
-			// GCP: all-checks requires a project ID; falls back to whatever ADC resolves if none given.
-			// GOOGLE_APPLICATION_CREDENTIALS env var is set by validateCredsFile upstream.
-			commandToRun = fmt.Sprintf("%s gcp all-checks --outdir %s", binary, filePath)
-			if cfg.GCPProject != "" {
-				commandToRun += fmt.Sprintf(" --project %s", cfg.GCPProject)
-			}
-		case "azure":
-			// Azure has no all-checks subcommand; run individual modules that exist
-			commandToRun = fmt.Sprintf("%s azure inventory --outdir %s", binary, filePath)
-		default:
-			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] CloudFox ", "does not support provider '", cfg.Provider, "'. Skipping...")
-			return nil
-		}
-
+		commandToRun, err = prepCloudfox(cfg, filePath)
 	case "pmapper":
-		if cfg.Provider != "aws" {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
-			break
-		}
-
-		// // Run conda init
-		// condaErr := exec.Command("conda", "init", "bash")
-		// if condaErr != nil {
-		// 	return fmt.Errorf("error running conda init: %v", condaErr)
-		// }
-
-		commandToRun = fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath)
+		commandToRun, err = prepPmapper(cfg, filePath)
 	case "kubenumerate":
-		if cfg.Provider != "k8s" {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " Kubenumerate ", "must be run with the", " k8s ", "flag. Skipping it...")
-			break
-		}
-		commandToRun = fmt.Sprintf("python3 kubenumerate.py -o %s", filePath)
-
+		commandToRun, err = prepKubenumerate(cfg, filePath)
 	case "gcp_scanner":
-		if cfg.Provider != "gcp" {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " gcp_scanner ", "must be run with the", " gcp ", "flag. Skipping it...")
-			break
-		}
-		if !utils.CheckToolExists("gcp_scanner") {
-			err := InstallWithPipxOSAgnostic("gcp-scanner")
-			if err != nil {
-				utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing gcp_scanner via pipx")
-				return err
-			}
-		}
-		// gcp_scanner outputs a JSON report to the given directory.
-		// It uses GOOGLE_APPLICATION_CREDENTIALS env var (set by validateCredsFile) or ADC automatically.
-		commandToRun = fmt.Sprintf("gcp_scanner -o %s -g", filePath)
-		if cfg.GCPProject != "" {
-			commandToRun += fmt.Sprintf(" -p %s", cfg.GCPProject)
-		}
-		if cfg.CredsFile != "" {
-			commandToRun += fmt.Sprintf(" -sa %s", cfg.CredsFile)
-		}
-
+		commandToRun, err = prepGcpScanner(cfg, filePath)
 	case "monkey365":
-		if cfg.Provider != "azure" {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " monkey365 ", "must be run with the", " azure ", "flag. Skipping it...")
-			return nil
-		}
-		if !utils.CheckToolExists("pwsh") {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-] monkey365 ", "requires PowerShell Core (pwsh) but it was not found. Skipping...")
-			return nil
-		}
 		return runMonkey365(cfg, filePath)
-
 	case "nuclei":
-		if !cfg.NucleiEnabled {
-			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei", "disabled. Skipping cloud template scan...")
-			return nil
-		}
-		if cfg.NucleiTargetURL == "" {
-			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei", "skipped: no target URL provided (set NucleiTargetURL in config to enable cloud template scans)")
-			return nil
-		}
-		if !utils.CheckToolExists("nuclei") {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-] nuclei", "not found. Install it via: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest")
-			return nil
-		}
-		templatePath := fmt.Sprintf("cloud/%s/", cfg.Provider)
-		commandToRun = fmt.Sprintf(
-			"nuclei -u %s -t %s -silent -no-interactivity -no-color",
-			cfg.NucleiTargetURL, templatePath,
-		)
-
+		commandToRun, err = prepNuclei(cfg)
 	case "gcp_iam_brute":
-		if cfg.Provider != "gcp" {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " gcp_iam_brute ", "must be run with the", " gcp ", "flag. Skipping it...")
-			return nil
-		}
-		if !cfg.GCPIAMBruteEnabled {
-			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] gcp_iam_brute", "disabled. Skipping...")
-			return nil
-		}
-		if cfg.GCPProject == "" {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", "requires --project to be set. Skipping...")
-			return nil
-		}
-		if !utils.CheckToolExists("gcp_iam_brute") {
-			if installErr := installer.InstallGCPIAMBrute(); installErr != nil {
-				return fmt.Errorf("gcp_iam_brute install failed: %w", installErr)
-			}
-		}
-		email, emailErr := resolveGCPIAMBruteEmail(cfg)
-		if emailErr != nil {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf("could not determine service account email: %v. Skipping...", emailErr))
-			return nil
-		}
-		token, tokenErr := resolveGCPIAMBruteToken(cfg)
-		if tokenErr != nil {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf("could not obtain access token: %v. Skipping...", tokenErr))
-			return nil
-		}
-		// Access tokens are alphanumeric (ya29.*) — no spaces, safe to interpolate into commandToRun.
-		commandToRun = fmt.Sprintf(
-			"gcp-iam-brute --access-token %s --project-id %s --service-account-email %s",
-			token, cfg.GCPProject, email,
-		)
-
+		commandToRun, err = prepGcpIAMBrute(cfg)
 	default:
-		// Case not registered, try and run it anyway see what could go wrong
 		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
 	}
 
-	// Run the tool
-	toolOutput := fmt.Sprintf("%soutput.out", filePath)
-	// Ensure path exists
-	_, err := utils.CustomMkdir(filePath)
 	if err != nil {
-		utils.ErrorMsg(fmt.Sprintf("Error creating custom dir %s: %v", filePath, err))
+		return err
+	}
+	if commandToRun == "" {
+		return nil
 	}
 
-	cmd := strings.Split(commandToRun, " ")
-	runCloudTool(cmd, toolOutput, OptVVerbose)
-
+	toolOutput := fmt.Sprintf("%soutput.out", filePath)
+	if _, mkErr := utils.CustomMkdir(filePath); mkErr != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error creating custom dir %s: %v", filePath, mkErr))
+	}
+	runCloudTool(strings.Split(commandToRun, " "), toolOutput, OptVVerbose)
 	return nil
+}
+
+func prepScoutsuite(cfg *config.CloudConfig, filePath string) (string, error) {
+	if !utils.CheckToolExists("scout") {
+		if err := InstallWithPipxOSAgnostic("scoutsuite"); err != nil {
+			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing scout via pipx")
+			return "", err
+		}
+	}
+	cmd := fmt.Sprintf("scout %s --no-browser --report-dir %s", cfg.Provider, filePath)
+	if cfg.Provider == "gcp" && cfg.CredsFile != "" {
+		cmd += fmt.Sprintf(" --service-account %s", cfg.CredsFile)
+	}
+	return cmd, nil
+}
+
+func prepProwler(cfg *config.CloudConfig, filePath string) (string, error) {
+	if !utils.CheckToolExists("prowler") {
+		if err := InstallWithPipxOSAgnostic("prowler"); err != nil {
+			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing prowler via pipx")
+			return "", err
+		}
+	}
+	cmd := fmt.Sprintf("prowler %s -o %s", cfg.Provider, filePath)
+	if cfg.Provider == "gcp" && cfg.CredsFile != "" {
+		cmd += fmt.Sprintf(" --credentials-file %s", cfg.CredsFile)
+	}
+	return cmd, nil
+}
+
+func prepCloudfox(cfg *config.CloudConfig, filePath string) (string, error) {
+	binary := "cloudfox"
+	if !utils.CheckToolExists("cloudfox") {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] CloudFox ", "not found. Attempting to download it now from GitHub...")
+		binaryPath, err := utils.DownloadFromGithubAndInstall("cloudfox")
+		if err != nil {
+			return "", fmt.Errorf("error downloading cloudfox: %v", err)
+		}
+		binary = binaryPath
+	}
+
+	switch cfg.Provider {
+	case "aws":
+		cmd := fmt.Sprintf("%s aws all-checks --outdir %s", binary, filePath)
+		if cfg.AWSProfile != "" {
+			cmd += fmt.Sprintf(" --profile %s", cfg.AWSProfile)
+		}
+		return cmd, nil
+	case "gcp":
+		// GOOGLE_APPLICATION_CREDENTIALS env var is set by validateCredsFile upstream.
+		cmd := fmt.Sprintf("%s gcp all-checks --outdir %s", binary, filePath)
+		if cfg.GCPProject != "" {
+			cmd += fmt.Sprintf(" --project %s", cfg.GCPProject)
+		}
+		return cmd, nil
+	case "azure":
+		return fmt.Sprintf("%s azure inventory --outdir %s", binary, filePath), nil
+	default:
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] CloudFox ", "does not support provider '", cfg.Provider, "'. Skipping...")
+		return "", nil
+	}
+}
+
+func prepPmapper(cfg *config.CloudConfig, filePath string) (string, error) {
+	if cfg.Provider != "aws" {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
+		return "", nil
+	}
+	return fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath), nil
+}
+
+func prepKubenumerate(cfg *config.CloudConfig, filePath string) (string, error) {
+	if cfg.Provider != "k8s" {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " Kubenumerate ", "must be run with the", " k8s ", "flag. Skipping it...")
+		return "", nil
+	}
+	return fmt.Sprintf("python3 kubenumerate.py -o %s", filePath), nil
+}
+
+func prepGcpScanner(cfg *config.CloudConfig, filePath string) (string, error) {
+	if cfg.Provider != "gcp" {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " gcp_scanner ", "must be run with the", " gcp ", "flag. Skipping it...")
+		return "", nil
+	}
+	if !utils.CheckToolExists("gcp_scanner") {
+		if err := InstallWithPipxOSAgnostic("gcp-scanner"); err != nil {
+			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing gcp_scanner via pipx")
+			return "", err
+		}
+	}
+	// Uses GOOGLE_APPLICATION_CREDENTIALS env var (set by validateCredsFile) or ADC automatically.
+	cmd := fmt.Sprintf("gcp_scanner -o %s -g", filePath)
+	if cfg.GCPProject != "" {
+		cmd += fmt.Sprintf(" -p %s", cfg.GCPProject)
+	}
+	if cfg.CredsFile != "" {
+		cmd += fmt.Sprintf(" -sa %s", cfg.CredsFile)
+	}
+	return cmd, nil
+}
+
+func prepNuclei(cfg *config.CloudConfig) (string, error) {
+	if !cfg.NucleiEnabled {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei", "disabled. Skipping cloud template scan...")
+		return "", nil
+	}
+	if cfg.NucleiTargetURL == "" {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei", "skipped: no target URL provided (set NucleiTargetURL in config to enable cloud template scans)")
+		return "", nil
+	}
+	if !utils.CheckToolExists("nuclei") {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] nuclei", "not found. Install it via: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest")
+		return "", nil
+	}
+	return fmt.Sprintf("nuclei -u %s -t cloud/%s/ -silent -no-interactivity -no-color", cfg.NucleiTargetURL, cfg.Provider), nil
+}
+
+func prepGcpIAMBrute(cfg *config.CloudConfig) (string, error) {
+	if cfg.Provider != "gcp" {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " gcp_iam_brute ", "must be run with the", " gcp ", "flag. Skipping it...")
+		return "", nil
+	}
+	if !cfg.GCPIAMBruteEnabled {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] gcp_iam_brute", "disabled. Skipping...")
+		return "", nil
+	}
+	if cfg.GCPProject == "" {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", "requires --project to be set. Skipping...")
+		return "", nil
+	}
+	if !utils.CheckToolExists("gcp_iam_brute") {
+		if err := installer.InstallGCPIAMBrute(); err != nil {
+			return "", fmt.Errorf("gcp_iam_brute install failed: %w", err)
+		}
+	}
+	email, err := resolveGCPIAMBruteEmail(cfg)
+	if err != nil {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf("could not determine service account email: %v. Skipping...", err))
+		return "", nil
+	}
+	token, err := resolveGCPIAMBruteToken(cfg)
+	if err != nil {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf("could not obtain access token: %v. Skipping...", err))
+		return "", nil
+	}
+	// Access tokens are alphanumeric (ya29.*) — no spaces, safe to interpolate into the command.
+	return fmt.Sprintf("gcp-iam-brute --access-token %s --project-id %s --service-account-email %s", token, cfg.GCPProject, email), nil
 }
 
 // runMonkey365 generates a temporary PowerShell script and executes it with pwsh.

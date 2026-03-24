@@ -1,6 +1,7 @@
 package network
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -10,60 +11,51 @@ import (
 
 // ValidateIP checks if the provided string is a valid IPv4 or IPv6 address
 func ValidateIP(ip string) error {
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
+	if net.ParseIP(ip) == nil {
 		return fmt.Errorf("invalid IP address: %s", ip)
 	}
 	return nil
 }
 
-// ResolveHostToIP resolves a hostname or URL to an IP address
-// It accepts domain names (example.com), URLs (http://example.com), and already-valid IPs
-// Returns the resolved IP address or error if resolution fails
+// ResolveHostToIP resolves a hostname or URL to an IP address.
+// Accepts domain names, URLs (any scheme), and already-valid IPs.
 func ResolveHostToIP(host string) (string, error) {
-	// First, try to parse as IP address - if it's already an IP, return it
 	if ip := net.ParseIP(host); ip != nil {
 		return host, nil
 	}
 
-	// Remove common URL schemes if present (http://, https://, etc.)
-	host = strings.TrimPrefix(host, "http://")
-	host = strings.TrimPrefix(host, "https://")
-	host = strings.TrimPrefix(host, "ftp://")
-
-	// Remove path components if URL contains them
-	if idx := strings.Index(host, "/"); idx != -1 {
-		host = host[:idx]
+	// Strip scheme (http://, https://, ftp://, …)
+	if _, after, ok := strings.Cut(host, "://"); ok {
+		host = after
 	}
 
-	// Remove port if present
-	if idx := strings.Index(host, ":"); idx != -1 {
-		host = host[:idx]
+	// Strip path and port
+	if h, _, ok := strings.Cut(host, "/"); ok {
+		host = h
+	}
+	if h, _, ok := strings.Cut(host, ":"); ok {
+		host = h
 	}
 
-	// Try to parse again after cleanup - maybe it was a URL with an IP
+	// Re-check: might have been a URL containing a bare IP
 	if ip := net.ParseIP(host); ip != nil {
 		return host, nil
 	}
 
-	// Perform DNS lookup
 	ips, err := net.LookupIP(host)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve hostname %s: %v", host, err)
 	}
-
 	if len(ips) == 0 {
 		return "", fmt.Errorf("no IP addresses found for hostname: %s", host)
 	}
 
-	// Return the first IPv4 address found, or first IPv6 if no IPv4 exists
+	// Prefer IPv4; fall back to first IPv6
 	for _, ip := range ips {
 		if ipv4 := ip.To4(); ipv4 != nil {
 			return ipv4.String(), nil
 		}
 	}
-
-	// If no IPv4 found, return first IPv6
 	return ips[0].String(), nil
 }
 
@@ -88,35 +80,42 @@ func ValidatePort(port string) error {
 	return nil
 }
 
-// ValidatePorts checks if the provided comma-separated port list is valid
+// validatePortRange validates a single "start-end" port range token.
+func validatePortRange(token string) error {
+	parts := strings.SplitN(token, "-", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid port range format: %s", token)
+	}
+	if err := ValidatePort(parts[0]); err != nil {
+		return err
+	}
+	if err := ValidatePort(parts[1]); err != nil {
+		return err
+	}
+	start, _ := strconv.Atoi(parts[0])
+	end, _ := strconv.Atoi(parts[1])
+	if start > end {
+		return fmt.Errorf("invalid port range: %s - start port greater than end port", token)
+	}
+	return nil
+}
+
+// ValidatePorts checks if the provided comma-separated port list is valid.
+// Supports individual ports and ranges (e.g. "80,443,8000-9000").
 func ValidatePorts(ports string) error {
-	portList := strings.Split(ports, ",")
-	for _, port := range portList {
-		port = strings.TrimSpace(port)
-		if port == "" {
+	for _, token := range strings.Split(ports, ",") {
+		token = strings.TrimSpace(token)
+		if token == "" {
 			continue
 		}
-		// Handle port ranges like "1-100"
-		if strings.Contains(port, "-") {
-			rangeParts := strings.Split(port, "-")
-			if len(rangeParts) != 2 {
-				return fmt.Errorf("invalid port range format: %s", port)
-			}
-			if err := ValidatePort(rangeParts[0]); err != nil {
+		if strings.Contains(token, "-") {
+			if err := validatePortRange(token); err != nil {
 				return err
 			}
-			if err := ValidatePort(rangeParts[1]); err != nil {
-				return err
-			}
-			start, _ := strconv.Atoi(rangeParts[0])
-			end, _ := strconv.Atoi(rangeParts[1])
-			if start > end {
-				return fmt.Errorf("invalid port range: %s - start port greater than end port", port)
-			}
-		} else {
-			if err := ValidatePort(port); err != nil {
-				return err
-			}
+			continue
+		}
+		if err := ValidatePort(token); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -125,7 +124,7 @@ func ValidatePorts(ports string) error {
 // ValidateFilePath checks if the provided file path exists and is readable
 func ValidateFilePath(path string) error {
 	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("file does not exist: %s", path)
 	}
 	if err != nil {

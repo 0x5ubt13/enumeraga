@@ -28,7 +28,7 @@ type Release struct {
 	ZipballURL string  `json:"zipball_url"`
 }
 
-// Host is a struct that holds the OS and architecture of the host
+// Host holds the OS and architecture of the host
 type Host struct {
 	OS   string
 	Arch string
@@ -40,27 +40,26 @@ var HostOS = Host{
 	Arch: runtime.GOARCH,
 }
 
-// GetDownloadURL returns the download URL for the tool according to the user's host OS and architecture
+// cloudfoxAssets maps a "os-arch" key to the expected cloudfox release asset filename.
+var cloudfoxAssets = map[string]string{
+	"linux-amd64":   "cloudfox-linux-amd64.zip",
+	"linux-386":     "cloudfox-linux-386.zip",
+	"darwin-amd64":  "cloudfox-macos-amd64.zip",
+	"darwin-arm64":  "cloudfox-macos-arm64.zip",
+	"windows-amd64": "cloudfox-windows-amd64.zip",
+}
+
+// GetDownloadURL returns the download URL for the tool matching the host platform.
 func GetDownloadURL(tool string, latest Release) (string, error) {
 	switch tool {
 	case "cloudfox":
-		// Map of platform-specific filenames
-		platformAssets := map[string]string{
-			"linux-amd64":   "cloudfox-linux-amd64.zip",
-			"linux-386":     "cloudfox-linux-386.zip",
-			"darwin-amd64":  "cloudfox-macos-amd64.zip",
-			"darwin-arm64":  "cloudfox-macos-arm64.zip",
-			"windows-amd64": "cloudfox-windows-amd64.zip",
-		}
-
 		platformKey := fmt.Sprintf("%s-%s", HostOS.OS, HostOS.Arch)
-		expectedAsset, exists := platformAssets[platformKey]
+		expectedAsset, exists := cloudfoxAssets[platformKey]
 		if !exists {
 			return "", fmt.Errorf("unsupported platform: %s", platformKey)
 		}
-
 		for _, asset := range latest.Assets {
-			if asset.Name == expectedAsset && filepath.Ext(asset.Name) == ".zip" {
+			if asset.Name == expectedAsset {
 				return asset.BrowserDownloadURL, nil
 			}
 		}
@@ -73,62 +72,42 @@ func GetDownloadURL(tool string, latest Release) (string, error) {
 	return "", fmt.Errorf("no suitable asset found")
 }
 
-// DownloadFileFromURL downloads a file from a URL to the specified filepath
-func DownloadFileFromURL(url string, filepath string) error {
-	resp, err := http.Get(url)
+// downloadToFile is the shared implementation for downloading a URL to a local file.
+func downloadToFile(url, path string) error {
+	resp, err := http.Get(url) //nolint:gosec // callers are responsible for trusted URLs
 	if err != nil {
-		return err
+		return fmt.Errorf("error downloading %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 
-	out, err := os.Create(filepath)
+	out, err := os.Create(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating file %s: %w", path, err)
 	}
-	defer out.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	return err
-}
-
-// DownloadFromGithub downloads a file from GitHub to the specified path
-func DownloadFromGithub(toolFullPath, downloadURL string) error {
-	// Making the tool download OS-agnostic, instead of using wget
-	out, err := os.Create(toolFullPath)
-	if err != nil {
-		return fmt.Errorf("error creating file: %v", err)
-	}
-	defer func(out *os.File) {
-		err := out.Close()
-		if err != nil {
-			output.PrintCustomBiColourMsg("red", "cyan", "[-] Error: ", "error closing file")
+	defer func() {
+		if closeErr := out.Close(); closeErr != nil {
+			output.PrintCustomBiColourMsg("red", "cyan", "[-] Error: ", fmt.Sprintf("error closing file %s: %v", path, closeErr))
 		}
-	}(out)
+	}()
 
-	// Get the data
-	downloadResp, err := http.Get(downloadURL)
-	if err != nil {
-		return fmt.Errorf("error downloading file: %v", err)
+	if _, err = io.Copy(out, resp.Body); err != nil {
+		return fmt.Errorf("error writing to file %s: %w", path, err)
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			output.PrintCustomBiColourMsg("red", "cyan", "[-] Error: ", fmt.Sprintf("Error closing the request body: %v", err))
-		}
-	}(downloadResp.Body)
-
-	// Write the data to the file
-	_, err = io.Copy(out, downloadResp.Body)
-	if err != nil {
-		return fmt.Errorf("error writing to file: %v", err)
-	}
-
 	return nil
 }
 
-// FetchAndDownloadLatestVersionFromGitHub fetches the latest release from GitHub and downloads the tool
+// DownloadFileFromURL downloads a file from url to the specified filepath.
+func DownloadFileFromURL(url string, filepath string) error {
+	return downloadToFile(url, filepath)
+}
+
+// DownloadFromGithub downloads a file from GitHub to toolFullPath.
+func DownloadFromGithub(toolFullPath, downloadURL string) error {
+	return downloadToFile(downloadURL, toolFullPath)
+}
+
+// FetchAndDownloadLatestVersionFromGitHub fetches the latest release from GitHub and downloads the tool.
 func FetchAndDownloadLatestVersionFromGitHub(tool string) (string, string, error) {
-	// Create an OS-agnostic temp directory for the tool
 	toolTmpDir := filepath.Join(os.TempDir(), tool)
 	if err := os.MkdirAll(toolTmpDir, os.ModePerm); err != nil {
 		return "", "", fmt.Errorf("error while creating tmp dir: %v", err)
@@ -141,16 +120,11 @@ func FetchAndDownloadLatestVersionFromGitHub(tool string) (string, string, error
 		toolFullPath = filepath.Join(toolTmpDir, tool+".zip")
 	}
 
-	assetResp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo))
+	assetResp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)) //nolint:gosec // URL is constructed from a hardcoded trusted constant
 	if err != nil {
 		return "", "", fmt.Errorf("error while fetching latest release: %v", err)
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			output.PrintCustomBiColourMsg("red", "cyan", "[-] Error: ", fmt.Sprintf("Error closing the request body: %v", err))
-		}
-	}(assetResp.Body)
+	defer assetResp.Body.Close()
 
 	var latestReleaseData Release
 	if err := json.NewDecoder(assetResp.Body).Decode(&latestReleaseData); err != nil {
@@ -164,88 +138,78 @@ func FetchAndDownloadLatestVersionFromGitHub(tool string) (string, string, error
 
 	output.PrintCustomBiColourMsg("yellow", "cyan", "[!] Suitable URL found for '", tool, "' for OS ", HostOS.OS, " and arch ", HostOS.Arch, ": ", downloadURL)
 
-	err = DownloadFromGithub(toolFullPath, downloadURL)
-	if err != nil {
+	if err = DownloadFromGithub(toolFullPath, downloadURL); err != nil {
 		return "", "", err
 	}
 
 	return toolTmpDir, toolFullPath, nil
 }
 
-// Unzip extracts files from zip archives
+// extractZipEntry extracts a single zip entry into dest, handling both directories and files.
+func extractZipEntry(f *zip.File, dest string) error {
+	fpath := filepath.Join(dest, f.Name)
+	if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+		return fmt.Errorf("illegal file path: %s", fpath)
+	}
+
+	if f.FileInfo().IsDir() {
+		_, err := files.CustomMkdir(fpath)
+		return err
+	}
+
+	if _, err := files.CustomMkdir(filepath.Dir(fpath)); err != nil {
+		return err
+	}
+
+	outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	_, err = io.Copy(outFile, rc)
+	return err
+}
+
+// Unzip extracts all files from src into dest and returns the path of the last extracted entry.
 func Unzip(src, dest string) (string, error) {
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return "", err
 	}
-	defer func(r *zip.ReadCloser) {
-		err := r.Close()
-		if err != nil {
-			output.PrintCustomBiColourMsg("red", "cyan", "[-] Error: ", fmt.Sprintf("Error closing the zip reader: %v", err))
-		}
-	}(r)
+	defer r.Close()
 
 	var fpath string
 	for _, f := range r.File {
 		fpath = filepath.Join(dest, f.Name)
-		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
-			return "", fmt.Errorf("illegal file path: %s", fpath)
-		}
-
-		if f.FileInfo().IsDir() {
-			_, err = files.CustomMkdir(fpath)
-			if err != nil {
-				return "", err
-			}
-			continue
-		}
-
-		if _, err = files.CustomMkdir(filepath.Dir(fpath)); err != nil {
-			return "", err
-		}
-
-		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
-		if err != nil {
-			return "", err
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			return "", err
-		}
-
-		_, err = io.Copy(outFile, rc)
-		if err != nil {
-			return "", err
-		}
-
-		err = outFile.Close()
-		if err != nil {
-			return "", err
-		}
-
-		err = rc.Close()
-		if err != nil {
+		if err := extractZipEntry(f, dest); err != nil {
 			return "", err
 		}
 	}
 	return fpath, nil
 }
 
-// InstallBinary installs a binary to the system PATH
+// InstallBinary installs a binary to the system PATH.
 func InstallBinary(tool, extractedBinaryPath string) (string, error) {
-	// Determine the destination path based on the operating system.
 	binaryName, err := expectedBinaryName(tool)
 	if err != nil {
 		return "", err
 	}
 
 	var destPath string
+	var needsChmod bool
 	switch HostOS.OS {
 	case "windows":
 		destPath = filepath.Join(os.Getenv("ProgramFiles"), binaryName)
 	case "darwin", "linux":
-		destPath = fmt.Sprintf("%s/%s", filepath.Join("/usr/local/bin"), binaryName)
+		destPath = filepath.Join("/usr/local/bin", binaryName)
+		needsChmod = true
 	default:
 		return "", fmt.Errorf("unsupported operating system to install binary: %s/%s. Please open PR or let me know to fix it", HostOS.OS, HostOS.Arch)
 	}
@@ -258,17 +222,13 @@ func InstallBinary(tool, extractedBinaryPath string) (string, error) {
 		return "", fmt.Errorf("extracted binary path %s is a directory", extractedBinaryPath)
 	}
 
-	// Copy to destination path.
 	if err := copyBinary(extractedBinaryPath, destPath, info.Mode()); err != nil {
-		fmt.Println("Error copying binary to PATH. Maybe you need sudo?:", err)
-		return "", fmt.Errorf("error copying binary to PATH: %v", err)
+		return "", fmt.Errorf("error copying binary to PATH (maybe you need sudo?): %v", err)
 	}
 
-	// Make the binary executable (only needed for Unix-like systems)
-	if HostOS.OS == "darwin" || HostOS.OS == "linux" {
+	if needsChmod {
 		// #nosec G703 -- destPath is constrained to a trusted install directory and expected binary name.
 		if err := os.Chmod(destPath, 0755); err != nil {
-			fmt.Println("Error setting executable permissions:", err)
 			return "", fmt.Errorf("error setting executable permissions: %v", err)
 		}
 	}
@@ -276,7 +236,7 @@ func InstallBinary(tool, extractedBinaryPath string) (string, error) {
 	return destPath, nil
 }
 
-// DownloadFromGithubAndInstall downloads and installs a tool from GitHub
+// DownloadFromGithubAndInstall downloads and installs a tool from GitHub.
 func DownloadFromGithubAndInstall(tool string) (string, error) {
 	tempDirPath, toolFullPath, err := FetchAndDownloadLatestVersionFromGitHub(tool)
 	if err != nil {
@@ -286,10 +246,7 @@ func DownloadFromGithubAndInstall(tool string) (string, error) {
 
 	output.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully downloaded ", tool, " to ", toolFullPath)
 
-	// Unzip the file
-	_, err = Unzip(toolFullPath, tempDirPath)
-	if err != nil {
-		fmt.Println("Error unzipping file:", err)
+	if _, err = Unzip(toolFullPath, tempDirPath); err != nil {
 		return "", fmt.Errorf("error unzipping tool: %v", err)
 	}
 
@@ -300,14 +257,12 @@ func DownloadFromGithubAndInstall(tool string) (string, error) {
 
 	output.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully unzipped ", tool, " to ", extractedBinaryPath)
 
-	// Install it
 	binaryPath, err := InstallBinary(tool, extractedBinaryPath)
 	if err != nil {
 		return "", fmt.Errorf("error installing %s: %v", tool, err)
 	}
 
 	output.PrintCustomBiColourMsg("green", "cyan", "[+] Successfully installed ", tool, " in path directory: ", binaryPath)
-
 	return binaryPath, nil
 }
 
@@ -339,8 +294,9 @@ func findExtractedBinary(tool, extractedRoot string) (string, error) {
 		if d.IsDir() {
 			return nil
 		}
-		if filepath.Base(path) == binaryName && binaryPath == "" {
+		if filepath.Base(path) == binaryName {
 			binaryPath = path
+			return fs.SkipAll
 		}
 		return nil
 	})
@@ -359,18 +315,14 @@ func copyBinary(sourcePath, destPath string, mode os.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("error opening source binary %s: %v", sourcePath, err)
 	}
-	defer func(sourceFile *os.File) {
-		_ = sourceFile.Close()
-	}(sourceFile)
+	defer sourceFile.Close()
 
 	// #nosec G703 -- destPath is constrained to a trusted install directory and expected binary name.
 	destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode.Perm())
 	if err != nil {
 		return fmt.Errorf("error opening destination binary %s: %v", destPath, err)
 	}
-	defer func(destFile *os.File) {
-		_ = destFile.Close()
-	}(destFile)
+	defer destFile.Close()
 
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		return fmt.Errorf("error copying binary data: %v", err)
@@ -385,13 +337,12 @@ func copyBinary(sourcePath, destPath string, mode os.FileMode) error {
 
 // downloadIAMDatasetRoles fetches GCP IAM role definitions from the iam-dataset
 // GitHub repository and writes each JSON file into destDir.
-// Uses the GitHub Contents API so only the data/ subtree is fetched.
 func downloadIAMDatasetRoles(destDir string) error {
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("create roles dir: %w", err)
 	}
 
-	apiURL := "https://api.github.com/repos/iann0036/iam-dataset/contents/gcp/roles/"
+	const apiURL = "https://api.github.com/repos/iann0036/iam-dataset/contents/gcp/roles/"
 	resp, err := http.Get(apiURL) //nolint:gosec // URL is a hardcoded trusted constant
 	if err != nil {
 		return fmt.Errorf("fetch iam-dataset listing: %w", err)
@@ -420,8 +371,7 @@ func downloadIAMDatasetRoles(destDir string) error {
 		if readErr != nil {
 			return fmt.Errorf("read %s: %w", entry.Name, readErr)
 		}
-		destPath := filepath.Join(destDir, entry.Name)
-		if err := os.WriteFile(destPath, data, 0644); err != nil { //nolint:gosec // destDir is a trusted constant path
+		if err := os.WriteFile(filepath.Join(destDir, entry.Name), data, 0644); err != nil { //nolint:gosec // destDir is a trusted constant path
 			return fmt.Errorf("write %s: %w", entry.Name, err)
 		}
 	}
