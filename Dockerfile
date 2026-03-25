@@ -1,4 +1,32 @@
-# Base: using Kali Linux for broad tool coverage
+# Stage 1: Go builder - compiles enumeraga and ProjectDiscovery tools
+# Using official Go image ensures correct version and avoids old apt package
+FROM golang:1.23-bookworm AS builder
+LABEL authors="0x5ubt13"
+
+WORKDIR /build
+
+# Cache dependency downloads separately from source changes
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source and build - -s -w strips debug symbols (30-50% smaller binary)
+COPY . .
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+RUN go build -ldflags="-s -w \
+    -X github.com/0x5ubt13/enumeraga/internal/utils.Version=${VERSION} \
+    -X github.com/0x5ubt13/enumeraga/internal/utils.GitCommit=${GIT_COMMIT} \
+    -X github.com/0x5ubt13/enumeraga/internal/utils.BuildDate=${BUILD_DATE}" \
+    -o enumeraga main.go
+
+# Install ProjectDiscovery tools - binaries land in /go/bin/
+RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
+    && go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest \
+    && go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+
+# Stage 2: Final image - Kali rolling without Go toolchain
+# Removing Go + module cache saves 400-600MB from the final image
 FROM kalilinux/kali-rolling
 LABEL authors="0x5ubt13"
 LABEL description="Enumeraga Infrastructure Scanner - Automated penetration testing enumeration"
@@ -6,11 +34,12 @@ LABEL description="Enumeraga Infrastructure Scanner - Automated penetration test
 WORKDIR /opt/enumeraga
 
 # Update and install required tools in a single layer to reduce image size
+# git and unzip removed - not needed at runtime; Go module downloads happen in builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core utilities
-    git curl wget unzip jq ca-certificates \
-    # Go and Python
-    golang python3 python3-pip pipx \
+    curl wget jq ca-certificates \
+    # Python (no golang - compiled binaries are copied from builder)
+    python3 python3-pip pipx \
     # Network scanning tools
     nmap masscan amass gobuster ffuf dnsenum dnsrecon whois \
     # NFS and filesystem tools
@@ -62,39 +91,15 @@ RUN ln -sf /usr/share/responder/tools/RunFinger.py /usr/local/bin/responder-RunF
     && ln -sf /usr/bin/testssl.sh /usr/local/bin/testssl 2>/dev/null || true \
     && ln -sf /usr/bin/testssl.sh /usr/local/bin/testssl.sh 2>/dev/null || true
 
-# Install ProjectDiscovery tools
-RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
-    && go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest \
-    && go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
-
-ENV PATH="/root/go/bin:${PATH}"
-
-# Copy local source instead of cloning from GitHub
-# This ensures local changes are included in the build
-COPY . .
-
-# Accept build arguments for version information
-ARG VERSION=dev
-ARG GIT_COMMIT=unknown
-ARG BUILD_DATE=unknown
-
-# Build Enumeraga binary with version info
-RUN go build -ldflags="-X github.com/0x5ubt13/enumeraga/internal/utils.Version=${VERSION} \
-    -X github.com/0x5ubt13/enumeraga/internal/utils.GitCommit=${GIT_COMMIT} \
-    -X github.com/0x5ubt13/enumeraga/internal/utils.BuildDate=${BUILD_DATE}" \
-    -o enumeraga main.go
+# Copy compiled Go binaries from builder - --chmod avoids a separate RUN chmod layer
+COPY --chmod=755 --from=builder /build/enumeraga /opt/enumeraga/enumeraga
+COPY --from=builder /go/bin/subfinder /go/bin/httpx /go/bin/nuclei /usr/local/bin/
 
 # Copy and setup entrypoint script
-COPY entrypoint-infra.sh /opt/enumeraga/entrypoint.sh
-RUN chmod +x /opt/enumeraga/entrypoint.sh /opt/enumeraga/enumeraga
-
-# Create output directory
-RUN mkdir -p /tmp/enumeraga_output
-
-# Set default output directory as environment variable
-ENV ENUMERAGA_OUTPUT="/tmp/enumeraga_output"
+COPY --chmod=755 entrypoint-infra.sh /opt/enumeraga/entrypoint.sh
 
 # Volume for output persistence - mount this to get results on host
+ENV ENUMERAGA_OUTPUT="/tmp/enumeraga_output"
 VOLUME ["/tmp/enumeraga_output"]
 
 # BUILD AND RUN INSTRUCTIONS:
