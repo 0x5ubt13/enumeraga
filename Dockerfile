@@ -1,5 +1,6 @@
-# Stage 1: Go builder - compiles enumeraga and ProjectDiscovery tools
-# Using official Go image ensures correct version and avoids old apt package
+# Stage 1: Go builder - compiles enumeraga only
+# ProjectDiscovery tools are downloaded as pre-built binaries in the final stage
+# to avoid CGO/libpcap build dependency issues in CI
 FROM golang:1.23-bookworm AS builder
 LABEL authors="0x5ubt13"
 
@@ -8,6 +9,10 @@ WORKDIR /build
 # Cache dependency downloads separately from source changes
 COPY go.mod go.sum ./
 RUN go mod download
+
+# GITHUB_TOKEN is optional but strongly recommended in CI to avoid API rate limits
+# Pass via: --build-arg GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+ARG GITHUB_TOKEN=""
 
 # Copy source and build - -s -w strips debug symbols (30-50% smaller binary)
 COPY . .
@@ -20,11 +25,6 @@ RUN go build -ldflags="-s -w \
     -X github.com/0x5ubt13/enumeraga/internal/utils.BuildDate=${BUILD_DATE}" \
     -o enumeraga main.go
 
-# Install ProjectDiscovery tools - binaries land in /go/bin/
-RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
-    && go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest \
-    && go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-
 # Stage 2: Final image - Kali rolling without Go toolchain
 # Removing Go + module cache saves 400-600MB from the final image
 FROM kalilinux/kali-rolling
@@ -34,10 +34,11 @@ LABEL description="Enumeraga Infrastructure Scanner - Automated penetration test
 WORKDIR /opt/enumeraga
 
 # Update and install required tools in a single layer to reduce image size
-# git and unzip removed - not needed at runtime; Go module downloads happen in builder
+# git removed - not needed at runtime (Go module downloads happen in builder)
+# unzip kept - needed to extract ProjectDiscovery pre-built binaries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core utilities
-    curl wget jq ca-certificates \
+    curl wget jq ca-certificates unzip \
     # Python (no golang - compiled binaries are copied from builder)
     python3 python3-pip pipx \
     # Network scanning tools
@@ -46,7 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nfs-common tree \
     # Enumeration tools
     cewl enum4linux-ng dirsearch finger fping hydra \
-    nbtscan nikto smbclient smbmap crackmapexec \
+    nbtscan nikto smbclient smbmap \
     # Security tools
     ssh-audit wafw00f whatweb testssl.sh python3-impacket \
     # Additional infra tools
@@ -74,6 +75,12 @@ RUN mkdir -p /usr/share/seclists/Discovery/Web-Content \
     && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/SNMP/snmp-onesixtyone.txt \
         -o /usr/share/seclists/Discovery/SNMP/snmp-onesixtyone.txt
 
+# crackmapexec is being phased out in kali-rolling (renamed to netexec/nxc upstream)
+# Install both so the crackmapexec binary path still resolves
+RUN apt-get update && apt-get install -y --no-install-recommends crackmapexec netexec || \
+    apt-get install -y --no-install-recommends netexec || true \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Install ODAT if available (may not be on all architectures)
 RUN apt-get update && apt-get install -y odat || true \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -91,9 +98,25 @@ RUN ln -sf /usr/share/responder/tools/RunFinger.py /usr/local/bin/responder-RunF
     && ln -sf /usr/bin/testssl.sh /usr/local/bin/testssl 2>/dev/null || true \
     && ln -sf /usr/bin/testssl.sh /usr/local/bin/testssl.sh 2>/dev/null || true
 
-# Copy compiled Go binaries from builder - --chmod avoids a separate RUN chmod layer
+# Copy compiled enumeraga binary from builder
 COPY --chmod=755 --from=builder /build/enumeraga /opt/enumeraga/enumeraga
-COPY --from=builder /go/bin/subfinder /go/bin/httpx /go/bin/nuclei /usr/local/bin/
+
+# Download ProjectDiscovery pre-built binaries - avoids CGO/libpcap build issues
+# Release zip naming: tag=v{VER}, filename={tool}_{VER}_linux_amd64.zip
+RUN GH_AUTH="${GITHUB_TOKEN:+-H \"Authorization: Bearer $GITHUB_TOKEN\"}" \
+    && SF_VER=$(curl -s $GH_AUTH https://api.github.com/repos/projectdiscovery/subfinder/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
+    && curl -sL "https://github.com/projectdiscovery/subfinder/releases/download/v${SF_VER}/subfinder_${SF_VER}_linux_amd64.zip" -o /tmp/subfinder.zip \
+    && unzip -q /tmp/subfinder.zip subfinder -d /usr/local/bin/ \
+    && rm /tmp/subfinder.zip \
+    && HTTPX_VER=$(curl -s $GH_AUTH https://api.github.com/repos/projectdiscovery/httpx/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
+    && curl -sL "https://github.com/projectdiscovery/httpx/releases/download/v${HTTPX_VER}/httpx_${HTTPX_VER}_linux_amd64.zip" -o /tmp/httpx.zip \
+    && unzip -q /tmp/httpx.zip httpx -d /usr/local/bin/ \
+    && rm /tmp/httpx.zip \
+    && NUCLEI_VER=$(curl -s $GH_AUTH https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
+    && curl -sL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VER}/nuclei_${NUCLEI_VER}_linux_amd64.zip" -o /tmp/nuclei.zip \
+    && unzip -q /tmp/nuclei.zip nuclei -d /usr/local/bin/ \
+    && rm /tmp/nuclei.zip \
+    && chmod +x /usr/local/bin/subfinder /usr/local/bin/httpx /usr/local/bin/nuclei
 
 # Copy and setup entrypoint script
 COPY --chmod=755 entrypoint-infra.sh /opt/enumeraga/entrypoint.sh

@@ -14,6 +14,10 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
+# GITHUB_TOKEN is optional but strongly recommended in CI to avoid API rate limits
+# Pass via: --build-arg GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+ARG GITHUB_TOKEN=""
+
 # Copy source and build - -s -w strips debug symbols (30-50% smaller binary)
 COPY . .
 ARG VERSION=dev
@@ -59,7 +63,10 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     && rm -rf awscliv2.zip aws
 
 # Install cloudfox from pre-built binary
-RUN CLOUDFOX_VERSION=$(curl -s https://api.github.com/repos/BishopFox/cloudfox/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') \
+# GITHUB_TOKEN (build arg) prevents API rate limit failures on shared CI runners
+RUN CLOUDFOX_VERSION=$(curl -s ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+        https://api.github.com/repos/BishopFox/cloudfox/releases/latest \
+        | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') \
     && curl -sL "https://github.com/BishopFox/cloudfox/releases/download/${CLOUDFOX_VERSION}/cloudfox-linux-amd64" -o /usr/local/bin/cloudfox \
     && chmod +x /usr/local/bin/cloudfox
 
