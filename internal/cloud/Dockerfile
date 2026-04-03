@@ -39,6 +39,7 @@ LABEL description="Enumeraga Cloud Scanner - Multi-cloud security enumeration"
 # gnupg2 removed - it's a meta-package; gpg (below) is the actual binary
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
+    file \
     gpg \
     curl \
     ca-certificates \
@@ -62,13 +63,24 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     && ./aws/install \
     && rm -rf awscliv2.zip aws
 
-# Install cloudfox from pre-built binary
-# GITHUB_TOKEN (build arg) prevents API rate limit failures on shared CI runners
-RUN CLOUDFOX_VERSION=$(curl -s ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+# Install cloudfox from pre-built binary.
+# Soft-fail: if GitHub rate-limits the build, prepCloudfox() will download it at runtime instead.
+# Pass --build-arg GITHUB_TOKEN=<token> on CI to avoid rate limits.
+RUN CLOUDFOX_VERSION=$(curl -sL \
+        ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
         https://api.github.com/repos/BishopFox/cloudfox/releases/latest \
         | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') \
-    && curl -sL "https://github.com/BishopFox/cloudfox/releases/download/${CLOUDFOX_VERSION}/cloudfox-linux-amd64" -o /usr/local/bin/cloudfox \
-    && chmod +x /usr/local/bin/cloudfox
+    && if [ -z "${CLOUDFOX_VERSION}" ]; then \
+        echo "[!] WARNING: could not resolve cloudfox version (GitHub rate limit?). It will be downloaded at first use." >&2; \
+    elif curl -sL "https://github.com/BishopFox/cloudfox/releases/download/${CLOUDFOX_VERSION}/cloudfox-linux-amd64" \
+            -o /usr/local/bin/cloudfox \
+        && file /usr/local/bin/cloudfox | grep -q 'ELF'; then \
+        chmod +x /usr/local/bin/cloudfox; \
+        echo "[+] cloudfox ${CLOUDFOX_VERSION} installed"; \
+    else \
+        echo "[!] WARNING: cloudfox download invalid — removing. It will be downloaded at first use." >&2; \
+        rm -f /usr/local/bin/cloudfox; \
+    fi
 
 # Install PowerShell Core (required for monkey365)
 # Using curl + debian/12 package - no wget or lsb_release needed
@@ -87,6 +99,14 @@ RUN pipx install "prowler>=5.0.0" \
     && pipx install scoutsuite \
     && pipx install gcp-scanner \
     && pipx install oci-cli || true
+
+# Newer gcp-scanner PyPI releases install as "gcp-scanner" (hyphen); older ones as "gcp_scanner".
+# Symlink both names so enumeraga finds the binary regardless of which version is installed.
+RUN if command -v gcp-scanner >/dev/null 2>&1; then \
+        ln -sf "$(command -v gcp-scanner)" /usr/local/bin/gcp_scanner; \
+    elif command -v gcp_scanner >/dev/null 2>&1; then \
+        ln -sf "$(command -v gcp_scanner)" /usr/local/bin/gcp-scanner; \
+    fi
 
 # Install gcp-iam-brute (GCP IAM permission enumeration via testIamPermissions API)
 # https://github.com/hac01/gcp-iam-brute

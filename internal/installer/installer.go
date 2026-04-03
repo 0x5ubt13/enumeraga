@@ -62,8 +62,14 @@ func CheckToolExists(tool string) bool {
 		return err == nil
 	}
 	if tool == "gcp_iam_brute" {
-		_, err := os.Stat("/usr/local/bin/gcp-iam-brute")
-		return err == nil
+		if _, err := os.Stat("/usr/local/bin/gcp-iam-brute"); err == nil {
+			return true
+		}
+		if home, err := os.UserHomeDir(); err == nil {
+			_, err := os.Stat(home + "/.local/bin/gcp-iam-brute")
+			return err == nil
+		}
+		return false
 	}
 	_, lookPatherr := exec.LookPath(tool)
 	return lookPatherr == nil

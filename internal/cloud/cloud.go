@@ -1,8 +1,14 @@
 package cloud
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -28,6 +34,17 @@ var optAzureClientSecret = getopt.StringLong("client-secret", 0, "", "Azure Clie
 var optGCPIAMBruteEmail = getopt.StringLong("iam-brute-email", 0, "", "Override service account email for gcp-iam-brute (GCP only)")
 var optNoIAMBrute       = getopt.BoolLong("no-iam-brute", 0, "Disable gcp-iam-brute permission enumeration (GCP only)")
 
+// optGCPToken accepts a file containing a raw GCP access token (ya29.xxx).
+// The token is injected into GOOGLE_OAUTH_ACCESS_TOKEN / CLOUDSDK_AUTH_ACCESS_TOKEN so
+// all downstream tools can use it via ADC without needing a service account key file.
+var optGCPToken = getopt.StringLong("gcp-token", 0, "", "Path to file containing a raw GCP access token (ya29.xxx)")
+
+// optGCPProject overrides the GCP project ID used by cloud tools.
+var optGCPProject = getopt.StringLong("project", 0, "", "GCP project ID (overrides auto-detection from gcloud / env vars)")
+
+// optNucleiURL enables nuclei cloud template scans against the given target URL.
+var optNucleiURL = getopt.StringLong("nuclei-url", 0, "", "Target URL for nuclei cloud template scans (omit to skip nuclei)")
+
 // validateCredsFile validates the credentials file path and sets GOOGLE_APPLICATION_CREDENTIALS for GCP.
 // Returns nil if credsFile is empty (no-op) or if provider is not GCP (warning only).
 func validateCredsFile(provider, credsFile string) error {
@@ -37,9 +54,6 @@ func validateCredsFile(provider, credsFile string) error {
 	if provider != "gcp" {
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", " --creds is not yet supported for ", provider, ", ignoring")
 		return nil
-	}
-	if strings.Contains(credsFile, " ") {
-		return fmt.Errorf("credentials file path must not contain spaces: %s", credsFile)
 	}
 	if _, err := os.Stat(credsFile); err != nil { //nolint:gosec // path validated above
 		return fmt.Errorf("credentials file not found: %s", credsFile)
@@ -198,16 +212,41 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 		fmt.Printf("%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting enumeration phase"), utils.Cyan(" ----------"))
 	}
 
-	// Scan start: changing into cloudScanner's Run function
-	cfg := &config.CloudConfig{
-		Provider:             provider,
-		CredsFile:            credsFile,
-		AzureTenantID:        *optAzureTenantID,
-		AzureClientID:        *optAzureClientID,
-		AzureClientSecret:    *optAzureClientSecret,
-		GCPIAMBruteEnabled:   !*optNoIAMBrute,
-		GCPIAMBruteEmail:     *optGCPIAMBruteEmail,
+	// If --gcp-token was given, read the raw access token from the file and set it in the
+	// environment so that injectTokenADC() and gcp-iam-brute token resolution pick it up.
+	if *optGCPToken != "" && credsFile == "" {
+		tokenBytes, tokenReadErr := os.ReadFile(*optGCPToken)
+		if tokenReadErr != nil {
+			utils.ErrorMsg(fmt.Errorf("could not read --gcp-token file: %w", tokenReadErr))
+			return fmt.Errorf("gcp-token read failed: %w", tokenReadErr)
+		}
+		rawToken := strings.TrimSpace(string(tokenBytes))
+		_ = os.Setenv("GOOGLE_OAUTH_ACCESS_TOKEN", rawToken)
+		_ = os.Setenv("CLOUDSDK_AUTH_ACCESS_TOKEN", rawToken)
 	}
+
+	// Inject access token into ADC so Python/Go google-auth tools (prowler, scoutsuite,
+	// cloudfox) pick it up via GOOGLE_APPLICATION_CREDENTIALS.
+	if credsFile == "" {
+		if _, cleanup, adcErr := injectTokenADC(); adcErr != nil {
+			utils.ErrorMsg(fmt.Errorf("ADC token injection failed: %w", adcErr))
+		} else if cleanup != nil {
+			defer cleanup()
+			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Injected access token as ADC via local token proxy")
+		}
+	}
+
+	// Scan start: changing into cloudScanner's Run function
+	cfg := config.NewCloudConfig()
+	cfg.Provider = provider
+	cfg.CredsFile = credsFile
+	cfg.AzureTenantID = *optAzureTenantID
+	cfg.AzureClientID = *optAzureClientID
+	cfg.AzureClientSecret = *optAzureClientSecret
+	cfg.GCPIAMBruteEnabled = !*optNoIAMBrute
+	cfg.GCPIAMBruteEmail = *optGCPIAMBruteEmail
+	cfg.GCPProject = *optGCPProject
+	cfg.NucleiTargetURL = *optNucleiURL
 	cloudScanner.Run(cfg, OptVVerbose)
 
 	// Finish and show elapsed time
@@ -217,6 +256,116 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	utils.Wg.Wait()
 
 	return utils.ErrCloudComplete
+}
+
+// injectTokenADC sets up a local token proxy so that all ADC-based tools (Python and Go)
+// can authenticate using a raw GCP access token from the environment.
+//
+// How it works:
+//  1. A temporary HTTP server is started on localhost. It returns the stolen access token
+//     for any OAuth2 token exchange POST, regardless of the JWT assertion presented.
+//  2. A real RSA key pair is generated and a service_account ADC JSON is written that
+//     points token_uri at the local server.
+//  3. GOOGLE_APPLICATION_CREDENTIALS is set to the ADC file.
+//
+// Tools sign a JWT with the generated key and POST it to our server; the server ignores
+// the JWT and returns the real token. This bypasses the invalid_client/invalid_grant
+// failures that arise from using fake OAuth2 client credentials.
+//
+// Returns a cleanup func that stops the server and removes the temp file.
+// Returns ("", nil, nil) when no access token is found in the environment.
+func injectTokenADC() (string, func(), error) {
+	token := strings.TrimSpace(os.Getenv("GOOGLE_OAUTH_ACCESS_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("CLOUDSDK_AUTH_ACCESS_TOKEN"))
+	}
+	if token == "" {
+		return "", nil, nil
+	}
+
+	// Start local token server
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to start token server: %w", err)
+	}
+	tokenJSON := fmt.Sprintf(`{"access_token":%q,"expires_in":3600,"token_type":"Bearer"}`, token)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, tokenJSON)
+	})
+	srv := &http.Server{Handler: mux}
+	go srv.Serve(listener) //nolint:errcheck // background server, error not actionable
+	tokenURI := "http://" + listener.Addr().String() + "/token"
+
+	// Generate RSA key — required for the service_account JWT signing flow
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		srv.Close()
+		return "", nil, fmt.Errorf("failed to generate RSA key: %w", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+
+	// Detect project for the ADC JSON (cosmetic — tools read it but don't validate it)
+	project := "enumeraga"
+	if out, err := exec.Command("gcloud", "config", "get-value", "project").Output(); err == nil {
+		if p := strings.TrimSpace(string(out)); p != "" && p != "(unset)" {
+			project = p
+		}
+	}
+
+	type saCredential struct {
+		Type         string `json:"type"`
+		ProjectID    string `json:"project_id"`
+		PrivateKeyID string `json:"private_key_id"`
+		PrivateKey   string `json:"private_key"`
+		ClientEmail  string `json:"client_email"`
+		ClientID     string `json:"client_id"`
+		AuthURI      string `json:"auth_uri"`
+		TokenURI     string `json:"token_uri"`
+	}
+	data, err := json.Marshal(saCredential{
+		Type:         "service_account",
+		ProjectID:    project,
+		PrivateKeyID: "enumeraga",
+		PrivateKey:   string(keyPEM),
+		ClientEmail:  fmt.Sprintf("enumeraga@%s.iam.gserviceaccount.com", project),
+		ClientID:     "1",
+		AuthURI:      "https://accounts.google.com/o/oauth2/auth",
+		TokenURI:     tokenURI,
+	})
+	if err != nil {
+		srv.Close()
+		return "", nil, fmt.Errorf("failed to marshal ADC JSON: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "enumeraga-adc-*.json")
+	if err != nil {
+		srv.Close()
+		return "", nil, fmt.Errorf("failed to create ADC temp file: %w", err)
+	}
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		srv.Close()
+		return "", nil, fmt.Errorf("failed to write ADC temp file: %w", err)
+	}
+	tmpFile.Close()
+
+	if err := os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpFile.Name()); err != nil {
+		os.Remove(tmpFile.Name())
+		srv.Close()
+		return "", nil, fmt.Errorf("failed to set GOOGLE_APPLICATION_CREDENTIALS: %w", err)
+	}
+
+	cleanup := func() {
+		srv.Close()
+		os.Remove(tmpFile.Name())
+	}
+	return tmpFile.Name(), cleanup, nil
 }
 
 // printCloudUsage prints only the cloud-relevant flags, not infra flags

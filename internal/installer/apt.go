@@ -4,9 +4,34 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/0x5ubt13/enumeraga/internal/utils/output"
 )
+
+// gcpIAMBruteInstallDir returns the directory to clone gcp-iam-brute into.
+// Falls back to ~/.local/share when not running as root.
+func gcpIAMBruteInstallDir() string {
+	if os.Getuid() == 0 {
+		return "/usr/share/gcp-iam-brute"
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".local", "share", "gcp-iam-brute")
+	}
+	return "/usr/share/gcp-iam-brute"
+}
+
+// gcpIAMBruteWrapperPath returns the path for the gcp-iam-brute wrapper script.
+// Falls back to ~/.local/bin when not running as root.
+func gcpIAMBruteWrapperPath() string {
+	if os.Getuid() == 0 {
+		return "/usr/local/bin/gcp-iam-brute"
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".local", "bin", "gcp-iam-brute")
+	}
+	return "/usr/local/bin/gcp-iam-brute"
+}
 
 // AptGetUpdateCmd runs the apt-get update command
 func AptGetUpdateCmd() {
@@ -204,32 +229,51 @@ func installEnum4linuxNg() error {
 }
 
 // InstallGCPIAMBrute installs gcp-iam-brute and its role definitions.
-// Called on demand when the wrapper binary is not found at /usr/local/bin/gcp-iam-brute.
+// Uses ~/.local paths when not running as root.
+// If the install directory already exists, only the wrapper is (re)created to avoid
+// hanging on pip/network operations for an already-present installation.
 func InstallGCPIAMBrute() error {
 	output.PrintCustomBiColourMsg("yellow", "cyan", "[!] Installing '", "gcp-iam-brute", "' ...")
 
-	// Clone the tool
-	if err := gitCloneCmd("gcp-iam-brute", "https://github.com/hac01/gcp-iam-brute"); err != nil {
-		return fmt.Errorf("git clone gcp-iam-brute: %w", err)
+	installDir := gcpIAMBruteInstallDir()
+	wrapperPath := gcpIAMBruteWrapperPath()
+
+	// Ensure wrapper parent dir exists
+	if err := os.MkdirAll(filepath.Dir(wrapperPath), 0755); err != nil { //nolint:gosec // trusted path
+		return fmt.Errorf("create wrapper parent dir: %w", err)
 	}
 
-	// Install Python dependencies using pip3 explicitly
-	pip3 := exec.Command("pip3", "install", "-r", "/usr/share/gcp-iam-brute/requirements.txt", "--break-system-packages")
-	pip3.Stderr = os.Stderr
-	if err := pip3.Run(); err != nil {
-		return fmt.Errorf("pip3 install gcp-iam-brute requirements: %w", err)
+	dirExists := true
+	if _, err := os.Stat(installDir); os.IsNotExist(err) {
+		dirExists = false
 	}
 
-	// Download iam-dataset roles/ via GitHub API
-	if err := downloadIAMDatasetRoles("/usr/share/gcp-iam-brute/roles/"); err != nil {
-		return fmt.Errorf("download iam-dataset roles: %w", err)
+	if !dirExists {
+		// Full install: clone, pip deps, IAM dataset
+		gitClone := exec.Command("git", "clone", "https://github.com/hac01/gcp-iam-brute", installDir)
+		gitClone.Stderr = os.Stderr
+		if err := gitClone.Run(); err != nil {
+			output.PrintCustomBiColourMsg("red", "cyan", "[-] Error: ", fmt.Sprintf("Error running git clone: %v\n", err))
+			return fmt.Errorf("git clone gcp-iam-brute: %w", err)
+		}
+
+		pip3 := exec.Command("pip3", "install", "-r", filepath.Join(installDir, "requirements.txt"), "--break-system-packages")
+		pip3.Stdout = os.Stdout
+		pip3.Stderr = os.Stderr
+		if err := pip3.Run(); err != nil {
+			return fmt.Errorf("pip3 install gcp-iam-brute requirements: %w", err)
+		}
+
+		if err := downloadIAMDatasetRoles(filepath.Join(installDir, "roles") + "/"); err != nil {
+			return fmt.Errorf("download iam-dataset roles: %w", err)
+		}
 	}
 
-	// Create wrapper script so the tool can be invoked from any working directory.
+	// (Re)create wrapper — fast, no network, safe to always run
 	// gcp-iam-brute hard-codes roles_directory = "roles" as a relative path,
-	// so the script cd's to the install directory before calling main.py.
-	wrapper := "#!/bin/sh\ncd /usr/share/gcp-iam-brute && exec python3 main.py \"$@\"\n"
-	if err := os.WriteFile("/usr/local/bin/gcp-iam-brute", []byte(wrapper), 0755); err != nil { //nolint:gosec // fixed trusted path
+	// so the wrapper cd's to the install directory before calling main.py.
+	wrapper := fmt.Sprintf("#!/bin/sh\ncd %s && exec python3 main.py \"$@\"\n", installDir)
+	if err := os.WriteFile(wrapperPath, []byte(wrapper), 0755); err != nil { //nolint:gosec // trusted path
 		return fmt.Errorf("create gcp-iam-brute wrapper: %w", err)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -704,6 +705,29 @@ func resolveGCPIAMBruteEmail(cfg *config.CloudConfig) (string, error) {
 			}
 		}
 	}
+	// Try the Google tokeninfo endpoint using any raw access token from the environment.
+	// This works for stolen ya29.xxx tokens that are not registered with gcloud.
+	for _, envKey := range []string{"GOOGLE_OAUTH_ACCESS_TOKEN", "CLOUDSDK_AUTH_ACCESS_TOKEN"} {
+		token := strings.TrimSpace(os.Getenv(envKey))
+		if token == "" {
+			continue
+		}
+		resp, httpErr := http.Get("https://oauth2.googleapis.com/tokeninfo?access_token=" + token) //nolint:noctx,gosec // public endpoint, token is alphanumeric
+		if httpErr != nil || resp.StatusCode != 200 {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			continue
+		}
+		var info struct {
+			Email string `json:"email"`
+		}
+		decErr := json.NewDecoder(resp.Body).Decode(&info)
+		resp.Body.Close()
+		if decErr == nil && info.Email != "" {
+			return info.Email, nil
+		}
+	}
 	out, err := exec.Command("gcloud", "config", "get-value", "account").Output()
 	if err == nil {
 		email := strings.TrimSpace(string(out))
@@ -714,9 +738,44 @@ func resolveGCPIAMBruteEmail(cfg *config.CloudConfig) (string, error) {
 	return "", fmt.Errorf("could not determine service account email; use --iam-brute-email to set it explicitly")
 }
 
-// resolveGCPIAMBruteToken obtains a GCP access token via gcloud.
-// gcpAuthPreflight has already activated the correct account before this is called.
+// shellQuote wraps s in single quotes, escaping any embedded single quotes.
+// Use this when interpolating file paths into shell command strings.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+// ResolveGCPProject returns the active GCP project ID.
+// Priority: explicit cfg.GCPProject → well-known env vars → gcloud config get-value project.
+// Returns ("", nil) when no project can be determined so callers can decide whether to skip.
+func ResolveGCPProject(cfg *config.CloudConfig) (string, error) {
+	if cfg.GCPProject != "" {
+		return cfg.GCPProject, nil
+	}
+	for _, envKey := range []string{"GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT"} {
+		if v := strings.TrimSpace(os.Getenv(envKey)); v != "" {
+			return v, nil
+		}
+	}
+	out, err := exec.Command("gcloud", "config", "get-value", "project").Output()
+	if err != nil {
+		return "", fmt.Errorf("gcloud config get-value project failed: %w", err)
+	}
+	project := strings.TrimSpace(string(out))
+	if project == "" || project == "(unset)" {
+		return "", nil
+	}
+	return project, nil
+}
+
+// resolveGCPIAMBruteToken obtains a GCP access token.
+// Checks environment variables first (set by --gcp-token or the Docker wrapper) so that
+// stolen ya29.xxx tokens work without being registered with gcloud.
 func resolveGCPIAMBruteToken(_ *config.CloudConfig) (string, error) {
+	for _, envKey := range []string{"GOOGLE_OAUTH_ACCESS_TOKEN", "CLOUDSDK_AUTH_ACCESS_TOKEN"} {
+		if token := strings.TrimSpace(os.Getenv(envKey)); token != "" {
+			return token, nil
+		}
+	}
 	out, err := exec.Command("gcloud", "auth", "print-access-token").Output()
 	if err != nil {
 		return "", fmt.Errorf("gcloud auth print-access-token failed: %w", err)
@@ -783,9 +842,18 @@ func prepScoutsuite(cfg *config.CloudConfig, filePath string) (string, error) {
 			return "", err
 		}
 	}
+	// ScoutSuite depends on pkg_resources (setuptools), which is absent in Python 3.12+
+	// virtual environments. Inject it silently — pipx inject is idempotent.
+	_ = exec.Command("pipx", "inject", "scoutsuite", "setuptools").Run()
 	cmd := fmt.Sprintf("scout %s --no-browser --report-dir %s", cfg.Provider, filePath)
-	if cfg.Provider == "gcp" && cfg.CredsFile != "" {
-		cmd += fmt.Sprintf(" --service-account %s", cfg.CredsFile)
+	if cfg.Provider == "gcp" {
+		if cfg.CredsFile != "" {
+			cmd += fmt.Sprintf(" --service-account %s", shellQuote(cfg.CredsFile))
+		} else {
+			// ScoutSuite requires exactly one of -u/--user-account or -s/--service-account.
+			// Without a key file, use user-account mode which picks up ADC.
+			cmd += " -u"
+		}
 	}
 	return cmd, nil
 }
@@ -799,7 +867,7 @@ func prepProwler(cfg *config.CloudConfig, filePath string) (string, error) {
 	}
 	cmd := fmt.Sprintf("prowler %s -o %s", cfg.Provider, filePath)
 	if cfg.Provider == "gcp" && cfg.CredsFile != "" {
-		cmd += fmt.Sprintf(" --credentials-file %s", cfg.CredsFile)
+		cmd += fmt.Sprintf(" --credentials-file %s", shellQuote(cfg.CredsFile))
 	}
 	return cmd, nil
 }
@@ -858,26 +926,67 @@ func prepGcpScanner(cfg *config.CloudConfig, filePath string) (string, error) {
 		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " gcp_scanner ", "must be run with the", " gcp ", "flag. Skipping it...")
 		return "", nil
 	}
-	if !utils.CheckToolExists("gcp_scanner") {
+
+	// Newer PyPI releases install the entry-point as "gcp-scanner" (hyphen);
+	// older ones used "gcp_scanner" (underscore). Accept either.
+	binary := ""
+	switch {
+	case utils.CheckToolExists("gcp-scanner"):
+		binary = "gcp-scanner"
+	case utils.CheckToolExists("gcp_scanner"):
+		binary = "gcp_scanner"
+	default:
 		if err := InstallWithPipxOSAgnostic("gcp-scanner"); err != nil {
-			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing gcp_scanner via pipx")
+			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing gcp-scanner via pipx")
 			return "", err
 		}
+		if utils.CheckToolExists("gcp-scanner") {
+			binary = "gcp-scanner"
+		} else {
+			binary = "gcp_scanner"
+		}
 	}
-	// Uses GOOGLE_APPLICATION_CREDENTIALS env var (set by validateCredsFile) or ADC automatically.
-	cmd := fmt.Sprintf("gcp_scanner -o %s -g", filePath)
+
+	// gcp-scanner requires exactly one auth flag: -k (SA key), -at (access token),
+	// -g (gcloud profile path), -m (metadata server), or -rt (refresh token).
+	cmd := fmt.Sprintf("%s -o %s", binary, filePath)
 	if cfg.GCPProject != "" {
 		cmd += fmt.Sprintf(" -p %s", cfg.GCPProject)
 	}
-	if cfg.CredsFile != "" {
-		cmd += fmt.Sprintf(" -sa %s", cfg.CredsFile)
+	switch {
+	case cfg.CredsFile != "":
+		// SA JSON key file
+		cmd += fmt.Sprintf(" -k %s", shellQuote(cfg.CredsFile))
+	case os.Getenv("CLOUDSDK_AUTH_ACCESS_TOKEN") != "" || os.Getenv("GOOGLE_OAUTH_ACCESS_TOKEN") != "":
+		// gcp-scanner -at expects a FILE PATH, not the raw token string.
+		// Write the token to a temp file and pass that.
+		token := os.Getenv("CLOUDSDK_AUTH_ACCESS_TOKEN")
+		if token == "" {
+			token = os.Getenv("GOOGLE_OAUTH_ACCESS_TOKEN")
+		}
+		// gcp-scanner expects {"access_token": "..."} JSON, not a plain token string.
+		tokenFile := os.TempDir() + "/enumeraga-gcp-at.json"
+		tokenJSON := fmt.Sprintf(`{"access_token":%q}`, strings.TrimSpace(token))
+		if err := os.WriteFile(tokenFile, []byte(tokenJSON), 0600); err != nil {
+			utils.ErrorMsg(fmt.Errorf("gcp-scanner: failed to write token file: %w", err))
+		} else {
+			cmd += fmt.Sprintf(" -at %s", tokenFile)
+		}
+	default:
+		// Fall back to gcloud profile if available
+		if home, err := os.UserHomeDir(); err == nil {
+			gcloudDir := home + "/.config/gcloud"
+			if _, err := os.Stat(gcloudDir); err == nil {
+				cmd += fmt.Sprintf(" -g %s", gcloudDir)
+			}
+		}
 	}
 	return cmd, nil
 }
 
 func prepNuclei(cfg *config.CloudConfig) (string, error) {
 	if !cfg.NucleiEnabled {
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei", "disabled. Skipping cloud template scan...")
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] ", "Nuclei", " disabled. Skipping cloud template scan...")
 		return "", nil
 	}
 	if cfg.NucleiTargetURL == "" {
@@ -901,8 +1010,18 @@ func prepGcpIAMBrute(cfg *config.CloudConfig) (string, error) {
 		return "", nil
 	}
 	if cfg.GCPProject == "" {
-		utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", "requires --project to be set. Skipping...")
-		return "", nil
+		project, err := ResolveGCPProject(cfg)
+		if err != nil {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute",
+				fmt.Sprintf("could not auto-detect GCP project: %v. Skipping...", err))
+			return "", nil
+		}
+		if project == "" {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute",
+				"requires --project to be set and none could be auto-detected. Skipping...")
+			return "", nil
+		}
+		cfg.GCPProject = project
 	}
 	if !utils.CheckToolExists("gcp_iam_brute") {
 		if err := installer.InstallGCPIAMBrute(); err != nil {
@@ -1073,11 +1192,19 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		return
 	}
 
-	// Use MultiWriter to copy stdout to both console and file simultaneously
-	multiWriter := io.MultiWriter(os.Stdout, file)
+	// gcp-iam-brute emits thousands of lines of verbose progress; send it to file only.
+	var stdoutDst io.Writer
+	var stderrDst io.Writer
+	if tool == "gcp-iam-brute" {
+		stdoutDst = file
+		stderrDst = file
+	} else {
+		stdoutDst = io.MultiWriter(os.Stdout, file)
+		stderrDst = os.Stderr
+	}
 
 	go func() {
-		_, err := io.Copy(multiWriter, stdout)
+		_, err := io.Copy(stdoutDst, stdout)
 		if err != nil {
 			if *OptVVerbose {
 				utils.ErrorMsg(fmt.Sprintf("Error copying stdout for tool %s: %v", tool, err))
@@ -1086,7 +1213,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	}()
 
 	go func() {
-		_, err := io.Copy(os.Stderr, stderr)
+		_, err := io.Copy(stderrDst, stderr)
 		if err != nil {
 			if *OptVVerbose {
 				utils.ErrorMsg(fmt.Sprintf("Error copying stderr: %v", err))
@@ -1195,6 +1322,11 @@ func runScoutSuite(provider string, cfg *config.CloudConfig) types.ScanResult {
 	case "gcp":
 		if cfg.GCPProject != "" {
 			args = append(args, "--project", cfg.GCPProject)
+		}
+		if cfg.CredsFile != "" {
+			args = append(args, "--service-account", cfg.CredsFile)
+		} else {
+			args = append(args, "-u")
 		}
 	}
 

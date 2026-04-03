@@ -22,6 +22,15 @@ func Run(cfg *config.CloudConfig, OptVVerbose *bool) {
 	// can rely on project/account context already being established.
 	switch cfg.Provider {
 	case "gcp":
+		// Auto-detect project ID once so all tools in this block can use it.
+		if cfg.GCPProject == "" {
+			if project, err := commands.ResolveGCPProject(cfg); err == nil && project != "" {
+				cfg.GCPProject = project
+				utils.PrintCustomBiColourMsg("green", "cyan", "[+] Auto-detected GCP project: ", project)
+			} else if err != nil {
+				utils.ErrorMsg(fmt.Errorf("could not auto-detect GCP project: %w; tools requiring --project may be skipped", err))
+			}
+		}
 		// 1. Raw inventory first — answers "what can these creds access?" before deeper scans
 		runTool("gcp_scanner", cfg, fmt.Sprintf("%sgcp_scanner/", providerDir), OptVVerbose)
 		runTool("gcp_iam_brute", cfg, fmt.Sprintf("%sgcp_iam_brute/", providerDir), OptVVerbose)
