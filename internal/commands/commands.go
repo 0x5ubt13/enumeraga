@@ -816,6 +816,8 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 		commandToRun, err = prepNuclei(cfg)
 	case "gcp_iam_brute":
 		commandToRun, err = prepGcpIAMBrute(cfg)
+	case "aws_enumerator":
+		commandToRun, err = prepAWSEnumerator(cfg, filePath)
 	default:
 		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
 	}
@@ -998,6 +1000,31 @@ func prepNuclei(cfg *config.CloudConfig) (string, error) {
 		return "", nil
 	}
 	return fmt.Sprintf("nuclei -u %s -t cloud/%s/ -silent -no-interactivity -no-color", cfg.NucleiTargetURL, cfg.Provider), nil
+}
+
+func prepAWSEnumerator(cfg *config.CloudConfig, filePath string) (string, error) {
+	if cfg.Provider != "aws" {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " aws-enumerator ", "only supports", " AWS ", ". Skipping it...")
+		return "", nil
+	}
+	if !cfg.AWSEnumeratorEnabled {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] aws-enumerator", "disabled. Skipping...")
+		return "", nil
+	}
+	if !utils.CheckToolExists("aws-enumerator") {
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] aws-enumerator ", "not found. Installing via go install...")
+		cmd := exec.Command("go", "install", "-v", "github.com/confused-binary/aws-enumerator@latest")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return "", fmt.Errorf("error installing aws-enumerator: %v", err)
+		}
+	}
+	cmd := fmt.Sprintf("aws-enumerator enumerate --all-services --output-dir %s", filePath)
+	if cfg.AWSProfile != "" {
+		cmd += fmt.Sprintf(" --profile %s", cfg.AWSProfile)
+	}
+	return cmd, nil
 }
 
 func prepGcpIAMBrute(cfg *config.CloudConfig) (string, error) {

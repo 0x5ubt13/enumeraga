@@ -49,11 +49,12 @@ var cloudfoxAssets = map[string]string{
 	"windows-amd64": "cloudfox-windows-amd64.zip",
 }
 
+
 // GetDownloadURL returns the download URL for the tool matching the host platform.
 func GetDownloadURL(tool string, latest Release) (string, error) {
+	platformKey := fmt.Sprintf("%s-%s", HostOS.OS, HostOS.Arch)
 	switch tool {
 	case "cloudfox":
-		platformKey := fmt.Sprintf("%s-%s", HostOS.OS, HostOS.Arch)
 		expectedAsset, exists := cloudfoxAssets[platformKey]
 		if !exists {
 			return "", fmt.Errorf("unsupported platform: %s", platformKey)
@@ -63,9 +64,6 @@ func GetDownloadURL(tool string, latest Release) (string, error) {
 				return asset.BrowserDownloadURL, nil
 			}
 		}
-		// Any other tool that needs downloading from GitHub can be added below:
-		// case "":
-		//     return asset.BrowserDownloadURL, nil
 	}
 
 	output.PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> No suitable asset found. Host OS: ", HostOS.OS, " | Host Arch: ", HostOS.Arch, " | Assets: ", fmt.Sprintf("%v", latest.Assets))
@@ -118,7 +116,7 @@ func FetchAndDownloadLatestVersionFromGitHub(tool string) (string, string, error
 	case "cloudfox":
 		repo = "BishopFox/cloudfox"
 		toolFullPath = filepath.Join(toolTmpDir, tool+".zip")
-	}
+}
 
 	assetResp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)) //nolint:gosec // URL is constructed from a hardcoded trusted constant
 	if err != nil {
@@ -273,7 +271,7 @@ func expectedBinaryName(tool string) (string, error) {
 			return "cloudfox.exe", nil
 		}
 		return "cloudfox", nil
-	default:
+default:
 		return "", fmt.Errorf("unsupported tool to install binary for: %s", tool)
 	}
 }

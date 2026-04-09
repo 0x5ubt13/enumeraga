@@ -6,16 +6,17 @@ type CloudConfig struct {
 	CredsFile string // path to credentials file, empty if not supplied
 
 	// Tool settings
-	PMMapperEnabled    bool
-	ScoutSuiteEnabled  bool
-	ProwlerEnabled     bool
-	CloudFoxEnabled    bool
-	GCPScannerEnabled  bool
-	Monkey365Enabled   bool
-	NucleiEnabled      bool
-	NucleiTargetURL    string // optional target URL for nuclei cloud template scans; leave empty to skip
-	GCPIAMBruteEnabled bool
-	GCPIAMBruteEmail   string // overrides auto-detected service account email
+	PMMapperEnabled        bool
+	ScoutSuiteEnabled      bool
+	ProwlerEnabled         bool
+	CloudFoxEnabled        bool
+	GCPScannerEnabled      bool
+	Monkey365Enabled       bool
+	NucleiEnabled          bool
+	NucleiTargetURL        string // optional target URL for nuclei cloud template scans; leave empty to skip
+	GCPIAMBruteEnabled     bool
+	GCPIAMBruteEmail       string // overrides auto-detected service account email
+	AWSEnumeratorEnabled   bool
 
 	// Output settings
 	OutputPath   string
@@ -38,14 +39,15 @@ type CloudConfig struct {
 
 func NewCloudConfig() *CloudConfig {
 	return &CloudConfig{
-		PMMapperEnabled:    true,
-		ScoutSuiteEnabled:  true,
-		ProwlerEnabled:     true,
-		CloudFoxEnabled:    true,
-		GCPScannerEnabled:  true,
-		Monkey365Enabled:   true,
-		NucleiEnabled:      true,
-		GCPIAMBruteEnabled: true,
+		PMMapperEnabled:      true,
+		ScoutSuiteEnabled:    true,
+		ProwlerEnabled:       true,
+		CloudFoxEnabled:      true,
+		GCPScannerEnabled:    true,
+		Monkey365Enabled:     true,
+		NucleiEnabled:        true,
+		GCPIAMBruteEnabled:   true,
+		AWSEnumeratorEnabled: true,
 		ReportFormat:       "xlsx",
 		Concurrent:         true,
 		InstallMissing:     true,

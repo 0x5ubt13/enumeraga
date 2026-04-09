@@ -5,7 +5,7 @@
 # Must be built from the repository root directory:
 #   docker build -f internal/cloud/Dockerfile -t gagarter/enumeraga_cloud .
 #
-FROM golang:1.23-bookworm AS builder
+FROM golang:1.26.2-bookworm AS builder
 LABEL authors="0x5ubt13"
 
 WORKDIR /build
@@ -29,6 +29,9 @@ RUN go build -ldflags="-s -w \
     -X github.com/0x5ubt13/enumeraga/internal/utils.BuildDate=${BUILD_DATE}" \
     -o enumeraga main.go
 
+# Install aws-enumerator (Go tool — built here, copied to final image)
+RUN go install -v github.com/confused-binary/aws-enumerator@latest
+
 # Final image - debian:bookworm-slim is ~30MB compressed vs ubuntu:latest ~77MB
 FROM debian:bookworm-slim
 LABEL authors="0x5ubt13"
@@ -37,6 +40,7 @@ LABEL description="Enumeraga Cloud Scanner - Multi-cloud security enumeration"
 # Install necessary dependencies
 # wget removed - curl handles all downloads including the PowerShell deb
 # gnupg2 removed - it's a meta-package; gpg (below) is the actual binary
+# added vim for quick edition inside the container when using an interactive shell
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     file \
@@ -49,6 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pipx \
     git \
     unzip \
+    vim \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Cloud CLI
@@ -130,6 +135,7 @@ WORKDIR /app
 
 # Copy built binary and entrypoint - --chmod avoids a separate RUN chmod layer
 COPY --chmod=755 --from=builder /build/enumeraga /app/enumeraga
+COPY --chmod=755 --from=builder /root/go/bin/aws-enumerator /usr/local/bin/aws-enumerator
 COPY --chmod=755 internal/cloud/entrypoint.sh /app/entrypoint.sh
 
 # Volume for output persistence

@@ -54,8 +54,12 @@ func Run(cfg *config.CloudConfig, OptVVerbose *bool) {
 		runTool("nuclei", cfg, fmt.Sprintf("%snuclei/", providerDir), OptVVerbose)
 	default:
 		// AWS and other providers
+		// 1. Broad service enumeration first — discovers what services/resources exist
+		runTool("aws_enumerator", cfg, fmt.Sprintf("%saws_enumerator/", providerDir), OptVVerbose)
+		// 2. Compliance and misconfiguration checks
 		runTool("scoutsuite", cfg, fmt.Sprintf("%sscoutsuite/", providerDir), OptVVerbose)
 		runTool("prowler", cfg, fmt.Sprintf("%sprowler/", providerDir), OptVVerbose)
+		// 3. Deeper enumeration
 		runTool("cloudfox", cfg, fmt.Sprintf("%scloud_fox/", providerDir), OptVVerbose)
 		runTool("nuclei", cfg, fmt.Sprintf("%snuclei/", providerDir), OptVVerbose)
 	}
