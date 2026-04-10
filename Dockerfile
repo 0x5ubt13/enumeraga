@@ -1,7 +1,7 @@
 # Stage 1: Go builder - compiles enumeraga only
 # ProjectDiscovery tools are downloaded as pre-built binaries in the final stage
 # to avoid CGO/libpcap build dependency issues in CI
-FROM golang:1.24-bookworm AS builder
+FROM golang:1.26-bookworm AS builder
 LABEL authors="0x5ubt13"
 
 WORKDIR /build

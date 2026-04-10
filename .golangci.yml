@@ -70,7 +70,7 @@ linters:
           - gosec
         path: _test\.go
       - path: internal/utils/
-        text: (global variable|G101)
+        text: (global variable|G101|G118)
       - linters:
           - gosec
         path: internal/(commands|portsIterator|scans)/

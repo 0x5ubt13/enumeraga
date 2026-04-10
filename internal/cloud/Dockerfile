@@ -135,7 +135,7 @@ WORKDIR /app
 
 # Copy built binary and entrypoint - --chmod avoids a separate RUN chmod layer
 COPY --chmod=755 --from=builder /build/enumeraga /app/enumeraga
-COPY --chmod=755 --from=builder /root/go/bin/aws-enumerator /usr/local/bin/aws-enumerator
+COPY --chmod=755 --from=builder /go/bin/aws-enumerator /usr/local/bin/aws-enumerator
 COPY --chmod=755 internal/cloud/entrypoint.sh /app/entrypoint.sh
 
 # Volume for output persistence

@@ -294,7 +294,7 @@ func injectTokenADC() (string, func(), error) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, tokenJSON)
 	})
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go srv.Serve(listener) //nolint:errcheck // background server, error not actionable
 	tokenURI := "http://" + listener.Addr().String() + "/token"
 
@@ -327,7 +327,7 @@ func injectTokenADC() (string, func(), error) {
 		AuthURI      string `json:"auth_uri"`
 		TokenURI     string `json:"token_uri"`
 	}
-	data, err := json.Marshal(saCredential{
+	data, err := json.Marshal(saCredential{ //nolint:gosec // G117: synthetic mock credential for GCP ADC test server, not a real secret
 		Type:         "service_account",
 		ProjectID:    project,
 		PrivateKeyID: "enumeraga",
@@ -349,14 +349,14 @@ func injectTokenADC() (string, func(), error) {
 	}
 	if _, err := tmpFile.Write(data); err != nil {
 		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		os.Remove(tmpFile.Name()) //nolint:gosec // G703: path from os.CreateTemp, not user input
 		srv.Close()
 		return "", nil, fmt.Errorf("failed to write ADC temp file: %w", err)
 	}
 	tmpFile.Close()
 
 	if err := os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpFile.Name()); err != nil {
-		os.Remove(tmpFile.Name())
+		os.Remove(tmpFile.Name()) //nolint:gosec // G703: path from os.CreateTemp, not user input
 		srv.Close()
 		return "", nil, fmt.Errorf("failed to set GOOGLE_APPLICATION_CREDENTIALS: %w", err)
 	}

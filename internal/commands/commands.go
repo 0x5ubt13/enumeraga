@@ -969,7 +969,7 @@ func prepGcpScanner(cfg *config.CloudConfig, filePath string) (string, error) {
 		// gcp-scanner expects {"access_token": "..."} JSON, not a plain token string.
 		tokenFile := os.TempDir() + "/enumeraga-gcp-at.json"
 		tokenJSON := fmt.Sprintf(`{"access_token":%q}`, strings.TrimSpace(token))
-		if err := os.WriteFile(tokenFile, []byte(tokenJSON), 0600); err != nil {
+		if err := os.WriteFile(tokenFile, []byte(tokenJSON), 0600); err != nil { //nolint:gosec // G703: tokenFile is a hardcoded path under os.TempDir(), not user input
 			utils.ErrorMsg(fmt.Errorf("gcp-scanner: failed to write token file: %w", err))
 		} else {
 			cmd += fmt.Sprintf(" -at %s", tokenFile)
