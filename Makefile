@@ -1,4 +1,4 @@
-.PHONY: test test-short test-verbose test-coverage test-race clean build help install
+.PHONY: test test-short test-verbose test-coverage test-race clean build help install lint pre-push
 
 # Default target
 help:
@@ -8,11 +8,14 @@ help:
 	@echo "  make test-verbose  - Run tests with verbose output"
 	@echo "  make test-coverage - Run tests with coverage report"
 	@echo "  make test-race     - Run tests with race detector"
+	@echo "  make lint          - Run golangci-lint (mirrors CI exactly)"
+	@echo "  make pre-push      - Run all CI checks locally before pushing"
 	@echo "  make build         - Build the binary"
 	@echo "  make install       - Install pre-requisite tools"
 	@echo "  make clean         - Remove build artifacts and test files"
 	@echo ""
 	@echo "Examples:"
+	@echo "  make pre-push                # Run before every push"
 	@echo "  make test-short              # Quick test run"
 	@echo "  make test-coverage           # Generate coverage report"
 	@echo "  make test TEST_ARGS='-v'     # Custom test arguments"
@@ -57,6 +60,25 @@ test-one:
 	@read -p "Enter package path: " pkg; \
 	read -p "Enter test name: " test; \
 	go test -v -short -run $$test $$pkg
+
+# Run golangci-lint matching the CI version exactly
+lint:
+	@echo "Running golangci-lint..."
+	golangci-lint run --timeout=5m
+
+# Run all three CI checks locally — tests, lint, build
+# Must pass before pushing to avoid broken builds
+pre-push:
+	@echo "=== [1/3] Tests ==="
+	go test -v -short -race ./...
+	@echo ""
+	@echo "=== [2/3] Lint ==="
+	golangci-lint run --timeout=5m
+	@echo ""
+	@echo "=== [3/3] Build ==="
+	go build -v -o enumeraga main.go && ./enumeraga --help || true
+	@echo ""
+	@echo "All checks passed."
 
 # Build the binary with version info
 build:

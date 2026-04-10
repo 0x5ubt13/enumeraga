@@ -321,7 +321,7 @@ func injectTokenADC() (string, func(), error) {
 		Type         string `json:"type"`
 		ProjectID    string `json:"project_id"`
 		PrivateKeyID string `json:"private_key_id"`
-		PrivateKey   string `json:"private_key"`
+		PrivateKey   string `json:"private_key"` //nolint:gosec // G117: synthetic mock credential for GCP ADC test server, not a real secret
 		ClientEmail  string `json:"client_email"`
 		ClientID     string `json:"client_id"`
 		AuthURI      string `json:"auth_uri"`
@@ -363,7 +363,7 @@ func injectTokenADC() (string, func(), error) {
 
 	cleanup := func() {
 		srv.Close()
-		os.Remove(tmpFile.Name())
+		os.Remove(tmpFile.Name()) //nolint:gosec // G703: path from os.CreateTemp, not user input
 	}
 	return tmpFile.Name(), cleanup, nil
 }
