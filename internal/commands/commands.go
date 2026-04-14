@@ -868,8 +868,34 @@ func prepProwler(cfg *config.CloudConfig, filePath string) (string, error) {
 		}
 	}
 	cmd := fmt.Sprintf("prowler %s -o %s", cfg.Provider, filePath)
-	if cfg.Provider == "gcp" && cfg.CredsFile != "" {
-		cmd += fmt.Sprintf(" --credentials-file %s", shellQuote(cfg.CredsFile))
+	if cfg.Provider == "gcp" {
+		if cfg.CredsFile != "" {
+			cmd += fmt.Sprintf(" --credentials-file %s", shellQuote(cfg.CredsFile))
+		} else {
+			// Prowler uses google-auth's ADC chain. Help it find credentials when the user
+			// has mounted their gcloud config directory without an explicit key file.
+			// Priority: GOOGLE_APPLICATION_CREDENTIALS already set → ADC file from gcloud
+			// config dir → gcloud-issued user credentials (legacy ADC location).
+			if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
+				home, _ := os.UserHomeDir()
+				for _, candidate := range []string{
+					filepath.Join(home, ".config", "gcloud", "application_default_credentials.json"),
+					"/root/.config/gcloud/application_default_credentials.json",
+				} {
+					if _, statErr := os.Stat(candidate); statErr == nil {
+						_ = os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", candidate)
+						utils.PrintCustomBiColourMsg("green", "cyan", "[+] prowler: using ADC file at ", candidate)
+						break
+					}
+				}
+			}
+			if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
+				utils.PrintCustomBiColourMsg("yellow", "cyan",
+					"[!] prowler: no GCP credentials found. ",
+					"Mount ~/.config/gcloud and run 'gcloud auth application-default login', ",
+					"or pass --creds <service-account.json>")
+			}
+		}
 	}
 	return cmd, nil
 }
@@ -951,7 +977,8 @@ func prepGcpScanner(cfg *config.CloudConfig, filePath string) (string, error) {
 
 	// gcp-scanner requires exactly one auth flag: -k (SA key), -at (access token),
 	// -g (gcloud profile path), -m (metadata server), or -rt (refresh token).
-	cmd := fmt.Sprintf("%s -o %s", binary, filePath)
+	// Cap at 30 minutes — large projects can otherwise run indefinitely.
+	cmd := fmt.Sprintf("%s -o %s -timeout 1800", binary, filePath)
 	if cfg.GCPProject != "" {
 		cmd += fmt.Sprintf(" -p %s", cfg.GCPProject)
 	}
@@ -1040,12 +1067,12 @@ func prepGcpIAMBrute(cfg *config.CloudConfig) (string, error) {
 		project, err := ResolveGCPProject(cfg)
 		if err != nil {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute",
-				fmt.Sprintf("could not auto-detect GCP project: %v. Skipping...", err))
+				fmt.Sprintf(" could not auto-detect GCP project: %v. Skipping...", err))
 			return "", nil
 		}
 		if project == "" {
 			utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute",
-				"requires --project to be set and none could be auto-detected. Skipping...")
+				" requires --project to be set and none could be auto-detected. Skipping...")
 			return "", nil
 		}
 		cfg.GCPProject = project
@@ -1166,6 +1193,55 @@ func runMonkey365(cfg *config.CloudConfig, filePath string) error {
 	return nil
 }
 
+// dirTotalSize returns the combined size in bytes of all files under path.
+func dirTotalSize(path string) int64 {
+	var total int64
+	_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+// stallWatchdog kills cmd if the directory watched by watchDir has not grown
+// for stallTimeout. Call the returned cancel func when the command finishes
+// normally to stop the goroutine.
+func stallWatchdog(cmd *exec.Cmd, watchDir string, stallTimeout time.Duration) context.CancelFunc {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		interval := 30 * time.Second
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		lastSize := dirTotalSize(watchDir)
+		var staleFor time.Duration
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				current := dirTotalSize(watchDir)
+				if current == lastSize {
+					staleFor += interval
+					if staleFor >= stallTimeout {
+						utils.PrintCustomBiColourMsg("yellow", "cyan",
+							"[!] Output stalled for ", stallTimeout.String(), " — killing hung process")
+						if cmd.Process != nil {
+							_ = cmd.Process.Kill()
+						}
+						return
+					}
+				} else {
+					lastSize = current
+					staleFor = 0
+				}
+			}
+		}
+	}()
+	return cancel
+}
+
 // runCloudTool is a new version of runTool for cloud - Announce cloud tool and run it
 func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	// Check if shutdown is in progress before starting
@@ -1177,7 +1253,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
 
-	utils.PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> About to run ", tool, " against ", cmdArgs[0], " using the following command: ", strings.Join(args, " "))
+	utils.PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> Running: ", strings.Join(args, " "))
 	announceCloudTool(tool)
 
 	// Use CommandContext to allow cancellation via global context
@@ -1218,6 +1294,11 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		utils.ErrorMsg(fmt.Sprintf("Error starting command %s: %v", tool, err))
 		return
 	}
+
+	// Kill the process if its output directory stops growing for 3 minutes — catches
+	// tools that hang on a blocked API call after finishing the bulk of their work.
+	stopWatchdog := stallWatchdog(cmd, filepath.Dir(filePath), 3*time.Minute)
+	defer stopWatchdog()
 
 	// gcp-iam-brute emits thousands of lines of verbose progress; send it to file only.
 	var stdoutDst io.Writer
