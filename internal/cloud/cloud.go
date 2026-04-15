@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -69,6 +70,31 @@ func validateCredsFile(provider, credsFile string) error {
 		return fmt.Errorf("failed to set GOOGLE_APPLICATION_CREDENTIALS: %w", err)
 	}
 	return nil
+}
+
+// gcpADCPreflight checks that Application Default Credentials are available when no explicit
+// service account key or raw token has been provided. Scout, prowler, and cloudfox all rely
+// on google-auth's ADC chain and will fail mid-scan without it.
+func gcpADCPreflight() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/root"
+	}
+	candidates := []string{
+		filepath.Join(home, ".config", "gcloud", "application_default_credentials.json"),
+		"/root/.config/gcloud/application_default_credentials.json",
+	}
+	for _, f := range candidates {
+		if _, err := os.Stat(f); err == nil {
+			utils.PrintCustomBiColourMsg("green", "cyan", "[+] GCP ADC found: ", f)
+			return nil
+		}
+	}
+	return fmt.Errorf(
+		"no Application Default Credentials found.\n" +
+			"       Run on your host:  gcloud auth application-default login\n" +
+			"       then re-run enumeraga. Alternatively pass a service account key with --creds <file.json>",
+	)
 }
 
 // gcpAuthPreflight authenticates with a GCP service account before running enumeration tools.
@@ -203,6 +229,17 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 		if err := gcpAuthPreflight(credsFile, providerDir); err != nil {
 			utils.ErrorMsg(err)
 			return fmt.Errorf("GCP authentication failed: %w", err)
+		}
+	}
+
+	// Check 5c: GCP ADC pre-flight (no service account key provided).
+	// Scout, prowler, and cloudfox all use google-auth's ADC chain, which requires
+	// application_default_credentials.json. Warn early rather than letting each
+	// tool fail individually mid-scan.
+	if provider == "gcp" && credsFile == "" && *optGCPToken == "" {
+		if err := gcpADCPreflight(); err != nil {
+			utils.ErrorMsg(err)
+			return fmt.Errorf("GCP ADC check failed: %w", err)
 		}
 	}
 

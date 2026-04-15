@@ -48,7 +48,7 @@ func WPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
 	}
 
 	// Detected, prepare to run wpscan (with connection timeouts)
-	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "WordPress detected. Running", "WPScan", "...")
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] ", "WordPress detected. Running ", "WPScan", "...")
 	wpScanArgs := []string{"wpscan", "--url", targetUrl, "-e", "p,u", "--request-timeout", "30", "--connect-timeout", "30", "--max-threads", "5"}
 	wpScanPath := fmt.Sprintf("%swpscan_%s.out", caseDir, port)
 	CallRunTool(wpScanArgs, wpScanPath, OptVVerbose)
@@ -70,7 +70,7 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, 
 		return
 	}
 
-	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!]", "Tomcat detected. Running", "Gobuster", "...")
+	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] ", "Tomcat detected. Running ", "Gobuster", "...")
 
 	// Run Gobuster
 	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "-u", fmt.Sprintf("%s:%s", target, port), "-w", utils.DirListMedium, "--timeout", getTimeoutSeconds() + "s"}
@@ -386,7 +386,7 @@ func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir 
 	}
 
 	if !confirmedVuln {
-		utils.PrintCustomBiColourMsg("red", "cyan", "[-] No matches", "<- Metasploit module for EternalBlue")
+		utils.PrintCustomBiColourMsg("red", "cyan", "[-] No matches ", "<- Metasploit module for EternalBlue")
 		return
 	}
 
@@ -776,15 +776,24 @@ func resolveGCPIAMBruteToken(_ *config.CloudConfig) (string, error) {
 			return token, nil
 		}
 	}
-	out, err := exec.Command("gcloud", "auth", "print-access-token").Output()
-	if err != nil {
-		return "", fmt.Errorf("gcloud auth print-access-token failed: %w", err)
+	// Try the regular gcloud auth session first, then fall back to ADC.
+	// gcloud auth print-access-token requires gcloud auth login;
+	// gcloud auth application-default print-access-token works with ADC only
+	// (created by gcloud auth application-default login).
+	for _, args := range [][]string{
+		{"auth", "print-access-token"},
+		{"auth", "application-default", "print-access-token"},
+	} {
+		out, err := exec.Command("gcloud", args...).Output()
+		if err != nil {
+			continue
+		}
+		if token := strings.TrimSpace(string(out)); token != "" {
+			return token, nil
+		}
 	}
-	token := strings.TrimSpace(string(out))
-	if token == "" {
-		return "", fmt.Errorf("gcloud auth print-access-token returned an empty token")
-	}
-	return token, nil
+	return "", fmt.Errorf("could not obtain a GCP access token via gcloud auth or ADC; " +
+		"run 'gcloud auth login' or 'gcloud auth application-default login' and retry")
 }
 
 // PrepCloudTool preps the program to run a cloud tool
@@ -840,13 +849,23 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 func prepScoutsuite(cfg *config.CloudConfig, filePath string) (string, error) {
 	if !utils.CheckToolExists("scout") {
 		if err := InstallWithPipxOSAgnostic("scoutsuite"); err != nil {
-			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing scout via pipx")
+			utils.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Error installing scout via pipx")
 			return "", err
 		}
 	}
-	// ScoutSuite depends on pkg_resources (setuptools), which is absent in Python 3.12+
-	// virtual environments. Inject it silently — pipx inject is idempotent.
-	_ = exec.Command("pipx", "inject", "scoutsuite", "setuptools").Run()
+	// ScoutSuite needs pkg_resources (part of setuptools), absent in Python 3.12+ venvs.
+	// Prefer the venv pip directly — pipx inject can silently skip a broken existing install.
+	// Fall back to pipx inject if the venv pip path is not found (e.g. non-pipx install).
+	// Use the venv's Python with -m pip — more portable than relying on a pip binary
+	// existing in the venv bin dir. pipx inject is unreliable: it reports success even
+	// when setuptools ends up absent from site-packages.
+	if home, homeErr := os.UserHomeDir(); homeErr == nil {
+		venvPython := filepath.Join(home, ".local", "pipx", "venvs", "scoutsuite", "bin", "python")
+		if _, statErr := os.Stat(venvPython); statErr == nil {
+			// setuptools 80+ no longer ships pkg_resources — pin below that.
+		_ = exec.Command(venvPython, "-m", "pip", "install", "--quiet", "--force-reinstall", "--ignore-installed", "setuptools<80").Run()
+		}
+	}
 	cmd := fmt.Sprintf("scout %s --no-browser --report-dir %s", cfg.Provider, filePath)
 	if cfg.Provider == "gcp" {
 		if cfg.CredsFile != "" {
@@ -863,7 +882,7 @@ func prepScoutsuite(cfg *config.CloudConfig, filePath string) (string, error) {
 func prepProwler(cfg *config.CloudConfig, filePath string) (string, error) {
 	if !utils.CheckToolExists("prowler") {
 		if err := InstallWithPipxOSAgnostic("prowler"); err != nil {
-			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing prowler via pipx")
+			utils.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Error installing prowler via pipx")
 			return "", err
 		}
 	}
@@ -965,7 +984,7 @@ func prepGcpScanner(cfg *config.CloudConfig, filePath string) (string, error) {
 		binary = "gcp_scanner"
 	default:
 		if err := InstallWithPipxOSAgnostic("gcp-scanner"); err != nil {
-			utils.PrintCustomBiColourMsg("red", "cyan", "[-]", "Error installing gcp-scanner via pipx")
+			utils.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Error installing gcp-scanner via pipx")
 			return "", err
 		}
 		if utils.CheckToolExists("gcp-scanner") {
@@ -977,8 +996,7 @@ func prepGcpScanner(cfg *config.CloudConfig, filePath string) (string, error) {
 
 	// gcp-scanner requires exactly one auth flag: -k (SA key), -at (access token),
 	// -g (gcloud profile path), -m (metadata server), or -rt (refresh token).
-	// Cap at 30 minutes — large projects can otherwise run indefinitely.
-	cmd := fmt.Sprintf("%s -o %s -timeout 1800", binary, filePath)
+	cmd := fmt.Sprintf("%s -o %s", binary, filePath)
 	if cfg.GCPProject != "" {
 		cmd += fmt.Sprintf(" -p %s", cfg.GCPProject)
 	}
@@ -1019,11 +1037,11 @@ func prepNuclei(cfg *config.CloudConfig) (string, error) {
 		return "", nil
 	}
 	if cfg.NucleiTargetURL == "" {
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei", "skipped: no target URL provided (set NucleiTargetURL in config to enable cloud template scans)")
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei ", "skipped: no target URL provided (set NucleiTargetURL in config to enable cloud template scans)")
 		return "", nil
 	}
 	if !utils.CheckToolExists("nuclei") {
-		utils.PrintCustomBiColourMsg("red", "yellow", "[-] nuclei", "not found. Install it via: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest")
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] nuclei ", "not found. Install it via: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest")
 		return "", nil
 	}
 	return fmt.Sprintf("nuclei -u %s -t cloud/%s/ -silent -no-interactivity -no-color", cfg.NucleiTargetURL, cfg.Provider), nil
@@ -1035,7 +1053,7 @@ func prepAWSEnumerator(cfg *config.CloudConfig, filePath string) (string, error)
 		return "", nil
 	}
 	if !cfg.AWSEnumeratorEnabled {
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] aws-enumerator", "disabled. Skipping...")
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] aws-enumerator ", "disabled. Skipping...")
 		return "", nil
 	}
 	if !utils.CheckToolExists("aws-enumerator") {
@@ -1060,7 +1078,7 @@ func prepGcpIAMBrute(cfg *config.CloudConfig) (string, error) {
 		return "", nil
 	}
 	if !cfg.GCPIAMBruteEnabled {
-		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] gcp_iam_brute", "disabled. Skipping...")
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] gcp_iam_brute ", "disabled. Skipping...")
 		return "", nil
 	}
 	if cfg.GCPProject == "" {
@@ -1084,12 +1102,12 @@ func prepGcpIAMBrute(cfg *config.CloudConfig) (string, error) {
 	}
 	email, err := resolveGCPIAMBruteEmail(cfg)
 	if err != nil {
-		utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf("could not determine service account email: %v. Skipping...", err))
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf(" could not determine service account email: %v. Skipping...", err))
 		return "", nil
 	}
 	token, err := resolveGCPIAMBruteToken(cfg)
 	if err != nil {
-		utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf("could not obtain access token: %v. Skipping...", err))
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] gcp_iam_brute", fmt.Sprintf(" could not obtain access token: %v. Skipping...", err))
 		return "", nil
 	}
 	// Access tokens are alphanumeric (ya29.*) — no spaces, safe to interpolate into the command.
@@ -1206,11 +1224,19 @@ func dirTotalSize(path string) int64 {
 }
 
 // stallWatchdog kills cmd if the directory watched by watchDir has not grown
-// for stallTimeout. Call the returned cancel func when the command finishes
-// normally to stop the goroutine.
-func stallWatchdog(cmd *exec.Cmd, watchDir string, stallTimeout time.Duration) context.CancelFunc {
+// for stallTimeout after an initial warmup period. The warmup allows slow-starting
+// tools (e.g. prowler) to authenticate and reach their first write before the stale
+// check begins. Call the returned cancel func when the command finishes normally.
+func stallWatchdog(cmd *exec.Cmd, watchDir string, warmup, stallTimeout time.Duration) context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
+		// Wait for the warmup period before starting stale checks.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(warmup):
+		}
+
 		interval := 30 * time.Second
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -1295,9 +1321,14 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		return
 	}
 
-	// Kill the process if its output directory stops growing for 3 minutes — catches
-	// tools that hang on a blocked API call after finishing the bulk of their work.
-	stopWatchdog := stallWatchdog(cmd, filepath.Dir(filePath), 3*time.Minute)
+	// Kill the process if its output directory stops growing — catches tools that hang
+	// on a blocked API call. Prowler needs a longer warmup (3 min) before its first
+	// write; other tools get 1 minute. All tools are killed after 3 minutes of stale output.
+	warmup := 1 * time.Minute
+	if tool == "prowler" {
+		warmup = 3 * time.Minute
+	}
+	stopWatchdog := stallWatchdog(cmd, filepath.Dir(filePath), warmup, 3*time.Minute)
 	defer stopWatchdog()
 
 	// gcp-iam-brute emits thousands of lines of verbose progress; send it to file only.

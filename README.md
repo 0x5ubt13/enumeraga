@@ -270,6 +270,10 @@ docker run -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud azure \
   --tenant <tenant-id> --client-id <app-id> --client-secret <secret>
 
 # Run against GCP using Application Default Credentials
+# IMPORTANT: you must run this on your host first, or the scan will fail at the auth pre-flight:
+#   gcloud auth application-default login
+# This writes ~/.config/gcloud/application_default_credentials.json, which is what ScoutSuite,
+# Prowler, and CloudFox all require. gcloud auth login alone is NOT sufficient.
 docker run -v ~/.config/gcloud:/root/.config/gcloud -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud gcp
 
 # Run against GCP with a service account key file
@@ -290,7 +294,8 @@ docker run -v ./sa-key.json:/creds/sa-key.json -v ./output:/tmp/enumeraga_output
 - Mount an output directory to persist scan results: `-v ./output:/tmp/enumeraga_output`
 - Supports AWS, Azure, GCP, OCI, AliCloud, and DigitalOcean
 - **Azure:** pass `--tenant`, `--client-id`, and `--client-secret` for service principal auth — required for [monkey365](https://github.com/silverhack/monkey365) to enumerate M365, Entra ID, Exchange Online, and SharePoint alongside Azure resources
-- **GCP:** pass `--creds /path/to/sa-key.json` to authenticate with a service account key file; without it, [gcp_scanner](https://github.com/google/gcp_scanner) and other tools fall back to Application Default Credentials
+- **GCP — ADC (mounted gcloud config):** before running, execute `gcloud auth application-default login` on your host. This writes `~/.config/gcloud/application_default_credentials.json`, which ScoutSuite, Prowler, and CloudFox all require. `gcloud auth login` alone is **not** sufficient — the scan will abort at the auth pre-flight if the ADC file is missing.
+- **GCP — service account key:** pass `--creds /path/to/sa-key.json`; no ADC file needed.
 - **GCP:** [gcp-iam-brute](https://github.com/hac01/gcp-iam-brute) runs automatically after `gcp_scanner` to actively test IAM permissions via the `testIamPermissions` API; use `--no-iam-brute` to disable it or `--iam-brute-email` to override the detected service account email
 
 ## Flow chart

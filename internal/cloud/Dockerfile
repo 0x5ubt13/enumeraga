@@ -127,6 +127,14 @@ RUN pipx install "prowler>=5.0.0" \
     && pipx install gcp-scanner \
     && pipx install oci-cli || true
 
+# Python 3.12+ venvs omit setuptools (which provides pkg_resources). ScoutSuite imports
+# pkg_resources at startup and fails with exit 102 without it. Use the venv pip directly —
+# more reliable than pipx inject, which can silently skip if setuptools is already present
+# in a broken state. Also install system-wide as a fallback for any non-pipx scout binary.
+# setuptools 80+ no longer ships pkg_resources — pin below that.
+RUN /root/.local/pipx/venvs/scoutsuite/bin/python -m pip install --force-reinstall --ignore-installed "setuptools<80" \
+    && pip3 install --break-system-packages setuptools
+
 # Newer gcp-scanner PyPI releases install as "gcp-scanner" (hyphen); older ones as "gcp_scanner".
 # Symlink both names so enumeraga finds the binary regardless of which version is installed.
 # Use the known pipx bin path directly rather than relying on command -v, which requires PATH to
