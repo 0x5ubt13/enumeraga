@@ -936,7 +936,12 @@ func prepCloudfox(cfg *config.CloudConfig, filePath string) (string, error) {
 		if cfg.AWSProfile != "" {
 			cmd += fmt.Sprintf(" --profile %s", cfg.AWSProfile)
 		}
+		if cfg.PMapperDir != "" {
+			cmd += fmt.Sprintf(" --pmapper-data-basepath %s", cfg.PMapperDir)
+		}
 		return cmd, nil
+
+
 	case "gcp":
 		// GOOGLE_APPLICATION_CREDENTIALS env var is set by validateCredsFile upstream.
 		cmd := fmt.Sprintf("%s gcp all-checks --outdir %s", binary, filePath)
@@ -957,7 +962,8 @@ func prepPmapper(cfg *config.CloudConfig, filePath string) (string, error) {
 		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " PMapper ", "only supports", " AWS ", ". Skipping it...")
 		return "", nil
 	}
-	return fmt.Sprintf("source /opt/conda/etc/profile.d/conda.sh && conda init bash && conda activate pmapper && export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath), nil
+	cfg.PMapperDir = filePath
+	return fmt.Sprintf("export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath), nil
 }
 
 func prepKubenumerate(cfg *config.CloudConfig, filePath string) (string, error) {

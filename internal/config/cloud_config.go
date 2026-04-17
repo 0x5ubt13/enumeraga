@@ -6,7 +6,8 @@ type CloudConfig struct {
 	CredsFile string // path to credentials file, empty if not supplied
 
 	// Tool settings
-	PMMapperEnabled        bool
+	PMapperEnabled         bool
+	PMapperDir             string // needed to tell cloudfox where is it
 	ScoutSuiteEnabled      bool
 	ProwlerEnabled         bool
 	CloudFoxEnabled        bool
@@ -39,17 +40,17 @@ type CloudConfig struct {
 
 func NewCloudConfig() *CloudConfig {
 	return &CloudConfig{
-		PMMapperEnabled:      true,
-		ScoutSuiteEnabled:    true,
-		ProwlerEnabled:       true,
-		CloudFoxEnabled:      true,
-		GCPScannerEnabled:    true,
-		Monkey365Enabled:     true,
-		NucleiEnabled:        true,
-		GCPIAMBruteEnabled:   true,
-		AWSEnumeratorEnabled: true,
-		ReportFormat:       "xlsx",
-		Concurrent:         true,
-		InstallMissing:     true,
+		PMapperEnabled:         true,
+		ScoutSuiteEnabled:      true,
+		ProwlerEnabled:         true,
+		CloudFoxEnabled:        true,
+		GCPScannerEnabled:      true,
+		Monkey365Enabled:       true,
+		NucleiEnabled:          true,
+		GCPIAMBruteEnabled:     true,
+		AWSEnumeratorEnabled:   true,
+		ReportFormat:         "xlsx",
+		Concurrent:             true,
+		InstallMissing:         true,
 	}
 }

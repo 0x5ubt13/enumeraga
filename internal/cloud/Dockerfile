@@ -135,6 +135,10 @@ RUN pipx install "prowler>=5.0.0" \
 RUN /root/.local/pipx/venvs/scoutsuite/bin/python -m pip install --force-reinstall --ignore-installed "setuptools<80" \
     && pip3 install --break-system-packages setuptools
 
+# Install PMapper (mosesrenegade fork) for AWS IAM privilege escalation graph analysis
+# https://github.com/mosesrenegade/PMapper
+RUN pipx install "git+https://github.com/mosesrenegade/PMapper.git"
+
 # Newer gcp-scanner PyPI releases install as "gcp-scanner" (hyphen); older ones as "gcp_scanner".
 # Symlink both names so enumeraga finds the binary regardless of which version is installed.
 # Use the known pipx bin path directly rather than relying on command -v, which requires PATH to
