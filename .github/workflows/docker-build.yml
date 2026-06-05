@@ -25,6 +25,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        # Required for cross-building the linux/arm64 image on amd64 runners
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -69,7 +73,11 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64
+          # Multi-arch so Apple Silicon / arm64 hosts can pull natively.
+          # If an arm64 tool download in the Dockerfile lacks an arm64 build and
+          # breaks this job, drop linux/arm64 here and rely on the wrapper's
+          # ENUMERAGA_PLATFORM=linux/amd64 emulation fallback instead.
+          platforms: linux/amd64,linux/arm64
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             GIT_COMMIT=${{ steps.version.outputs.commit }}
@@ -130,6 +138,13 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # amd64-only on purpose. arm64 hosts run this image via the wrapper's
+          # ENUMERAGA_PLATFORM=linux/amd64 emulation default. Before enabling
+          # linux/arm64 here, the cloud Dockerfile needs work — at minimum the
+          # AWS CLI install hardcodes awscli-exe-linux-x86_64.zip and must switch
+          # on `uname -m` (aarch64 -> awscli-exe-linux-aarch64.zip), and the
+          # bundled tools (monkey365/PowerShell, ScoutSuite, Prowler, gcp_scanner)
+          # need their arm64 support verified.
           platforms: linux/amd64
           build-args: |
             VERSION=${{ steps.version.outputs.version }}

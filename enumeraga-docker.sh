@@ -6,6 +6,11 @@ set -euo pipefail
 INFRA_IMAGE="${ENUMERAGA_INFRA_IMAGE:-gagarter/enumeraga_infra}"
 CLOUD_IMAGE="${ENUMERAGA_CLOUD_IMAGE:-gagarter/enumeraga_cloud}"
 OUTPUT_DIR="${ENUMERAGA_OUTPUT_DIR:-${PWD}/output}"
+# Force the image platform. Defaults to linux/amd64 so the published amd64-only
+# images run under emulation (Rosetta/QEMU) on Apple Silicon and other arm64
+# hosts. Set ENUMERAGA_PLATFORM="" to let Docker pick the native platform once a
+# matching multi-arch manifest is available.
+ENUMERAGA_PLATFORM="${ENUMERAGA_PLATFORM-linux/amd64}"
 
 die()   { echo "Error: $*" >&2; exit 1; }
 
@@ -50,6 +55,10 @@ Environment variables:
   ENUMERAGA_INFRA_IMAGE    Override infra image (default: gagarter/enumeraga_infra)
   ENUMERAGA_CLOUD_IMAGE    Override cloud image (default: gagarter/enumeraga_cloud)
   ENUMERAGA_OUTPUT_DIR     Override host output dir (default: ./output)
+  ENUMERAGA_PLATFORM       Image platform passed to 'docker run --platform'
+                           (default: linux/amd64). On Apple Silicon / arm64 this
+                           runs the amd64 images under emulation. Set to "" to
+                           use the host's native platform.
 
 Examples:
   $(basename "$0") infra -t 192.168.1.1
@@ -63,13 +72,16 @@ EOF
     exit 0
 }
 
-# Determine whether to allocate a TTY
+# Base docker run flags: TTY allocation plus an optional --platform override.
 docker_base_flags() {
+    local flags="--rm"
     if [[ -t 0 && -t 1 ]]; then
-        echo "-it --rm"
-    else
-        echo "--rm"
+        flags="-it --rm"
     fi
+    if [[ -n "$ENUMERAGA_PLATFORM" ]]; then
+        flags="$flags --platform $ENUMERAGA_PLATFORM"
+    fi
+    echo "$flags"
 }
 
 run_infra() {
