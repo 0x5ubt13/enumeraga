@@ -121,11 +121,13 @@ RUN pwsh -NonInteractive -Command "Install-Module -Name monkey365 -Scope AllUser
 # Set PATH for pipx-installed tools early so pipx binaries are visible in subsequent RUN steps
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Install all Python-based cloud security tools in a single layer
+# Install mandatory Python-based cloud security tools
 RUN pipx install "prowler>=5.0.0" \
     && pipx install scoutsuite \
-    && pipx install gcp-scanner \
-    && pipx install oci-cli || true
+    && pipx install gcp-scanner
+
+# Install OCI CLI — soft-fail as it is less critical and occasionally flaky
+RUN pipx install oci-cli || true
 
 # Python 3.12+ venvs omit setuptools (which provides pkg_resources). ScoutSuite imports
 # pkg_resources at startup and fails with exit 102 without it. Use the venv pip directly —

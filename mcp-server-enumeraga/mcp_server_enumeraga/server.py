@@ -21,6 +21,13 @@ from starlette.responses import Response
 INFRA_IMAGE = "gagarter/enumeraga_infra:latest"
 CLOUD_IMAGE = "gagarter/enumeraga_cloud:latest"
 
+# When this server runs inside a container (SSE/compose mode), bind-mount sources
+# passed to sibling `docker run` calls are resolved by the host daemon, not by this
+# container's filesystem. ENUMERAGA_HOST_OUTPUT_DIR supplies the host path that backs
+# the output directory; compose mounts that same host path at the same path inside this
+# container (an identity mount) so reads and writes line up on both sides.
+HOST_OUTPUT_DIR = os.environ.get("ENUMERAGA_HOST_OUTPUT_DIR")
+
 
 # Define available tools
 TOOLS: list[Tool] = [
@@ -139,15 +146,30 @@ TOOLS: list[Tool] = [
 ]
 
 
+def resolve_output_source(args: dict[str, Any]) -> str:
+    """Return the bind-mount source for the output directory.
+
+    In container mode (ENUMERAGA_HOST_OUTPUT_DIR set and no explicit output_dir
+    requested) the host path is used directly so the sibling container's daemon can
+    resolve it. Otherwise the requested/default directory is created and used.
+    """
+    requested = args.get("output_dir")
+    if HOST_OUTPUT_DIR and not requested:
+        Path(HOST_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+        return HOST_OUTPUT_DIR
+    output_dir = Path(requested or "./enumeraga_output").absolute()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return str(output_dir)
+
+
 def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
     """Build Docker command for infrastructure scan."""
-    output_dir = Path(args.get("output_dir", "./enumeraga_output")).absolute()
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     cmd = [
-        "docker", "run", "--rm", "--privileged",
+        "docker", "run", "--rm",
+        # These capabilities replace --privileged for nmap raw-socket SYN scans
+        "--cap-add=NET_RAW", "--cap-add=NET_ADMIN",
         "--network", "host",  # Required for nmap to work properly
-        "-v", f"{output_dir}:/tmp/enumeraga_output",
+        "-v", f"{resolve_output_source(args)}:/tmp/enumeraga_output",
         INFRA_IMAGE,
         "-t", args["target"],
     ]
@@ -166,12 +188,9 @@ def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
 
 def build_docker_cloud_command(args: dict[str, Any]) -> list[str]:
     """Build Docker command for cloud scan."""
-    output_dir = Path(args.get("output_dir", "./enumeraga_output")).absolute()
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     # Determine credential paths based on provider
     provider = args["provider"]
-    volume_mounts = ["-v", f"{output_dir}:/tmp/enumeraga_output"]
+    volume_mounts = ["-v", f"{resolve_output_source(args)}:/tmp/enumeraga_output"]
 
     if provider == "aws":
         aws_dir = Path.home() / ".aws"
@@ -187,6 +206,21 @@ def build_docker_cloud_command(args: dict[str, Any]) -> list[str]:
         gcloud_dir = Path.home() / ".config" / "gcloud"
         if gcloud_dir.exists():
             volume_mounts.extend(["-v", f"{gcloud_dir}:/root/.config/gcloud:ro"])
+
+    elif provider == "oci":
+        oci_dir = Path.home() / ".oci"
+        if oci_dir.exists():
+            volume_mounts.extend(["-v", f"{oci_dir}:/root/.oci:ro"])
+
+    elif provider == "aliyun":
+        aliyun_dir = Path.home() / ".aliyun"
+        if aliyun_dir.exists():
+            volume_mounts.extend(["-v", f"{aliyun_dir}:/root/.aliyun:ro"])
+
+    elif provider == "do":
+        doctl_dir = Path.home() / ".config" / "doctl"
+        if doctl_dir.exists():
+            volume_mounts.extend(["-v", f"{doctl_dir}:/root/.config/doctl:ro"])
 
     cmd = ["docker", "run", "--rm"] + volume_mounts + [CLOUD_IMAGE, provider]
 
@@ -289,9 +323,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
                 cmd.insert(2, "-d")
 
             # Inform user about the scan
-            # Inform user about the scan
             target = arguments["target"]
-            output_dir = Path(arguments.get("output_dir", "./enumeraga_output")).absolute()
+            output_dir = resolve_output_source(arguments)
 
             info_msg = f"Starting infrastructure scan of {target}\n"
             info_msg += f"Output directory: {output_dir}\n"
@@ -325,7 +358,7 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
                 cmd.insert(2, "-d")
 
             provider = arguments["provider"]
-            output_dir = Path(arguments.get("output_dir", "./enumeraga_output")).absolute()
+            output_dir = resolve_output_source(arguments)
 
             info_msg = f"Starting {provider.upper()} cloud security assessment\n"
             info_msg += f"Output directory: {output_dir}\n"
@@ -469,9 +502,6 @@ async def run_server():
     # Handle tool calls
     @server.call_tool()
     async def call_tool(name: str, arguments: Any) -> list[TextContent]:
-        # When running in Docker, we need to adjust default output path
-        if not arguments.get("output_dir"):
-            arguments["output_dir"] = "/tmp/enumeraga_output"
         return await handle_tool_call(name, arguments)
     
     # Check execution mode

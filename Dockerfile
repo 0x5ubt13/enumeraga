@@ -1,7 +1,7 @@
 # Stage 1: Go builder - compiles enumeraga only
 # ProjectDiscovery tools are downloaded as pre-built binaries in the final stage
 # to avoid CGO/libpcap build dependency issues in CI
-FROM golang:1.26-bookworm AS builder
+FROM golang:1.26.2-bookworm AS builder
 LABEL authors="0x5ubt13"
 
 WORKDIR /build
@@ -102,18 +102,25 @@ RUN ln -sf /usr/share/responder/tools/RunFinger.py /usr/local/bin/responder-RunF
 COPY --chmod=755 --from=builder /build/enumeraga /opt/enumeraga/enumeraga
 
 # Download ProjectDiscovery pre-built binaries - avoids CGO/libpcap build issues
-# Release zip naming: tag=v{VER}, filename={tool}_{VER}_linux_amd64.zip
-RUN GH_AUTH="${GITHUB_TOKEN:+-H \"Authorization: Bearer $GITHUB_TOKEN\"}" \
+# Release zip naming: tag=v{VER}, filename={tool}_{VER}_linux_{arch}.zip
+# Architecture-aware: detects build platform and downloads correct binaries for amd64 or arm64
+RUN ARCH=$(uname -m); \
+    case "$ARCH" in \
+        x86_64)  PD_ARCH="amd64" ;; \
+        aarch64) PD_ARCH="arm64" ;; \
+        *)        PD_ARCH="amd64" ;; \
+    esac; \
+    GH_AUTH="${GITHUB_TOKEN:+-H \"Authorization: Bearer $GITHUB_TOKEN\"}" \
     && SF_VER=$(curl -s $GH_AUTH https://api.github.com/repos/projectdiscovery/subfinder/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
-    && curl -sL "https://github.com/projectdiscovery/subfinder/releases/download/v${SF_VER}/subfinder_${SF_VER}_linux_amd64.zip" -o /tmp/subfinder.zip \
+    && curl -sL "https://github.com/projectdiscovery/subfinder/releases/download/v${SF_VER}/subfinder_${SF_VER}_linux_${PD_ARCH}.zip" -o /tmp/subfinder.zip \
     && unzip -q /tmp/subfinder.zip subfinder -d /usr/local/bin/ \
     && rm /tmp/subfinder.zip \
     && HTTPX_VER=$(curl -s $GH_AUTH https://api.github.com/repos/projectdiscovery/httpx/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
-    && curl -sL "https://github.com/projectdiscovery/httpx/releases/download/v${HTTPX_VER}/httpx_${HTTPX_VER}_linux_amd64.zip" -o /tmp/httpx.zip \
+    && curl -sL "https://github.com/projectdiscovery/httpx/releases/download/v${HTTPX_VER}/httpx_${HTTPX_VER}_linux_${PD_ARCH}.zip" -o /tmp/httpx.zip \
     && unzip -q /tmp/httpx.zip httpx -d /usr/local/bin/ \
     && rm /tmp/httpx.zip \
     && NUCLEI_VER=$(curl -s $GH_AUTH https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
-    && curl -sL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VER}/nuclei_${NUCLEI_VER}_linux_amd64.zip" -o /tmp/nuclei.zip \
+    && curl -sL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VER}/nuclei_${NUCLEI_VER}_linux_${PD_ARCH}.zip" -o /tmp/nuclei.zip \
     && unzip -q /tmp/nuclei.zip nuclei -d /usr/local/bin/ \
     && rm /tmp/nuclei.zip \
     && chmod +x /usr/local/bin/subfinder /usr/local/bin/httpx /usr/local/bin/nuclei

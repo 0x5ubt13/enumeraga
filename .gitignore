@@ -24,6 +24,7 @@ go.work
 # IDE directories to avoid having them rewritten in every commit
 .idea/*
 .vscode/*
+.*
 docker_build_test.sh
 docker_infra_build_test.sh
 
