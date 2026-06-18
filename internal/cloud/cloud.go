@@ -26,6 +26,10 @@ import (
 // since it never needs to be accessed from outside the cloud package.
 var optCreds = getopt.StringLong("creds", 'c', "", "Path to credentials file (e.g. GCP service account JSON)")
 
+// optAWSProfile selects a named profile from ~/.aws/credentials for all AWS tools.
+// When unset, the AWS_PROFILE environment variable is used as a fallback (see Run).
+var optAWSProfile = getopt.StringLong("profile", 0, "", "AWS profile name from ~/.aws/credentials (AWS only)")
+
 // Azure service principal flags — used by monkey365 and future Azure tools.
 var optAzureTenantID     = getopt.StringLong("tenant", 0, "", "Azure Tenant ID (for service principal auth)")
 var optAzureClientID     = getopt.StringLong("client-id", 0, "", "Azure Client ID / App ID (for service principal auth)")
@@ -273,10 +277,29 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 		}
 	}
 
+	// Resolve the AWS profile: an explicit --profile flag wins, otherwise fall back to
+	// the AWS_PROFILE environment variable. When set, export it so the AWS SDK default
+	// chain and env-aware tools (ScoutSuite, Prowler, CloudFox) all pick the same profile,
+	// and thread it through cfg so tools that take an explicit flag (CloudFox,
+	// aws-enumerator) are pointed at it too.
+	awsProfile := strings.TrimSpace(*optAWSProfile)
+	if awsProfile == "" {
+		awsProfile = strings.TrimSpace(os.Getenv("AWS_PROFILE"))
+	}
+	if provider == "aws" && awsProfile != "" {
+		if err := os.Setenv("AWS_PROFILE", awsProfile); err != nil {
+			utils.ErrorMsg(fmt.Errorf("failed to set AWS_PROFILE: %w", err))
+		}
+		if !*OptQuiet {
+			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Using AWS profile: ", awsProfile)
+		}
+	}
+
 	// Scan start: changing into cloudScanner's Run function
 	cfg := config.NewCloudConfig()
 	cfg.Provider = provider
 	cfg.CredsFile = credsFile
+	cfg.AWSProfile = awsProfile
 	cfg.AzureTenantID = *optAzureTenantID
 	cfg.AzureClientID = *optAzureClientID
 	cfg.AzureClientSecret = *optAzureClientSecret
@@ -417,6 +440,7 @@ func printCloudUsage() {
 	fmt.Println("  do, digitalocean     DigitalOcean")
 	fmt.Println("\nOptions:")
 	fmt.Println("  -c, --creds FILE         Path to credentials file (e.g. GCP service account JSON)")
+	fmt.Println("      --profile NAME       AWS profile from ~/.aws/credentials (AWS only; falls back to $AWS_PROFILE)")
 	fmt.Println("      --tenant ID          Azure Tenant ID (service principal auth, used by monkey365)")
 	fmt.Println("      --client-id ID       Azure Client/App ID (service principal auth, used by monkey365)")
 	fmt.Println("      --client-secret SEC  Azure Client Secret (service principal auth, used by monkey365)")

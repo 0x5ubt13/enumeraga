@@ -826,7 +826,7 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 	case "gcp_iam_brute":
 		commandToRun, err = prepGcpIAMBrute(cfg)
 	case "aws_enumerator":
-		commandToRun, err = prepAWSEnumerator(cfg, filePath)
+		commandToRun, err = prepAWSEnumerator(cfg)
 	default:
 		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
 	}
@@ -963,7 +963,15 @@ func prepPmapper(cfg *config.CloudConfig, filePath string) (string, error) {
 		return "", nil
 	}
 	cfg.PMapperDir = filePath
-	return fmt.Sprintf("export PRINCIPALMAPPER_DATA_DIR=%s && pmapper graph create", filePath), nil
+	// pmapper reads its data directory from the PRINCIPALMAPPER_DATA_DIR environment
+	// variable. Cloud tool commands are executed directly rather than through a shell, so
+	// an "export VAR=... && pmapper ..." string would be run as a literal binary named
+	// "export" and fail. Set the variable in the environment instead — the pmapper child
+	// inherits it, and so does cloudfox (which also reads cfg.PMapperDir).
+	if err := os.Setenv("PRINCIPALMAPPER_DATA_DIR", filePath); err != nil {
+		return "", fmt.Errorf("failed to set PRINCIPALMAPPER_DATA_DIR: %w", err)
+	}
+	return "pmapper graph create", nil
 }
 
 func prepKubenumerate(cfg *config.CloudConfig, filePath string) (string, error) {
@@ -1053,7 +1061,7 @@ func prepNuclei(cfg *config.CloudConfig) (string, error) {
 	return fmt.Sprintf("nuclei -u %s -t cloud/%s/ -silent -no-interactivity -no-color", cfg.NucleiTargetURL, cfg.Provider), nil
 }
 
-func prepAWSEnumerator(cfg *config.CloudConfig, filePath string) (string, error) {
+func prepAWSEnumerator(cfg *config.CloudConfig) (string, error) {
 	if cfg.Provider != "aws" {
 		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " aws-enumerator ", "only supports", " AWS ", ". Skipping it...")
 		return "", nil
@@ -1071,9 +1079,13 @@ func prepAWSEnumerator(cfg *config.CloudConfig, filePath string) (string, error)
 			return "", fmt.Errorf("error installing aws-enumerator: %v", err)
 		}
 	}
-	cmd := fmt.Sprintf("aws-enumerator enumerate --all-services --output-dir %s", filePath)
+	// aws-enumerator uses an `enum` subcommand with Go-style single-dash flags
+	// (e.g. enum -services all -profile <name>). It writes results to an
+	// `enum-results_<account>_<user>` directory in the working directory — there is no
+	// output-dir flag — so the tool's stdout is captured into filePath by the caller.
+	cmd := "aws-enumerator enum -services all"
 	if cfg.AWSProfile != "" {
-		cmd += fmt.Sprintf(" --profile %s", cfg.AWSProfile)
+		cmd += fmt.Sprintf(" -profile %s", cfg.AWSProfile)
 	}
 	return cmd, nil
 }

@@ -92,6 +92,14 @@ TOOLS: list[Tool] = [
                     "enum": ["aws", "azure", "gcp", "oci", "aliyun", "do"],
                     "description": "Cloud service provider to scan",
                 },
+                "profile": {
+                    "type": "string",
+                    "description": (
+                        "AWS named profile from ~/.aws/credentials to scan with (AWS only). "
+                        "Passed to the container as AWS_PROFILE so every AWS tool uses it. "
+                        "Omit to use the default credential resolution."
+                    ),
+                },
                 "output_dir": {
                     "type": "string",
                     "description": "Custom output directory on host (default: ./enumeraga_output)",
@@ -196,6 +204,11 @@ def build_docker_cloud_command(args: dict[str, Any]) -> list[str]:
         aws_dir = Path.home() / ".aws"
         if aws_dir.exists():
             volume_mounts.extend(["-v", f"{aws_dir}:/root/.aws:ro"])
+        # Pass the requested profile through to the container as AWS_PROFILE so the AWS
+        # SDK and every AWS tool (ScoutSuite, Prowler, CloudFox, aws-enumerator) use it.
+        profile = args.get("profile")
+        if profile:
+            volume_mounts.extend(["-e", f"AWS_PROFILE={profile}"])
 
     elif provider == "azure":
         azure_dir = Path.home() / ".azure"
