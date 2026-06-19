@@ -33,3 +33,5 @@ docker_infra_build_test.sh
 !README.md
 !VERSIONING.md
 .DS_Store
+internal/cloud/latest
+internal/cloud/latestest
