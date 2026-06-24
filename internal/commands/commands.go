@@ -808,6 +808,11 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 
 	switch tool {
 	case "scoutsuite":
+		// Azure uses service principal auth via a temporary --file-auth file, so it
+		// runs through a dedicated, secret-safe runner rather than the generic path.
+		if cfg.Provider == "azure" {
+			return runScoutsuiteAzure(cfg, filePath, OptVVerbose)
+		}
 		commandToRun, err = prepScoutsuite(cfg, filePath)
 	case "prowler":
 		commandToRun, err = prepProwler(cfg, filePath)
@@ -846,11 +851,13 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 	return nil
 }
 
-func prepScoutsuite(cfg *config.CloudConfig, filePath string) (string, error) {
+// ensureScout makes sure the `scout` binary is present and that ScoutSuite's
+// pkg_resources dependency (part of setuptools) is available in its pipx venv.
+func ensureScout() error {
 	if !utils.CheckToolExists("scout") {
 		if err := InstallWithPipxOSAgnostic("scoutsuite"); err != nil {
 			utils.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Error installing scout via pipx")
-			return "", err
+			return err
 		}
 	}
 	// ScoutSuite needs pkg_resources (part of setuptools), absent in Python 3.12+ venvs.
@@ -863,8 +870,15 @@ func prepScoutsuite(cfg *config.CloudConfig, filePath string) (string, error) {
 		venvPython := filepath.Join(home, ".local", "pipx", "venvs", "scoutsuite", "bin", "python")
 		if _, statErr := os.Stat(venvPython); statErr == nil {
 			// setuptools 80+ no longer ships pkg_resources — pin below that.
-		_ = exec.Command(venvPython, "-m", "pip", "install", "--quiet", "--force-reinstall", "--ignore-installed", "setuptools<80").Run()
+			_ = exec.Command(venvPython, "-m", "pip", "install", "--quiet", "--force-reinstall", "--ignore-installed", "setuptools<80").Run()
 		}
+	}
+	return nil
+}
+
+func prepScoutsuite(cfg *config.CloudConfig, filePath string) (string, error) {
+	if err := ensureScout(); err != nil {
+		return "", err
 	}
 	cmd := fmt.Sprintf("scout %s --no-browser --report-dir %s", cfg.Provider, filePath)
 	if cfg.Provider == "gcp" {
@@ -879,6 +893,64 @@ func prepScoutsuite(cfg *config.CloudConfig, filePath string) (string, error) {
 	return cmd, nil
 }
 
+// runScoutsuiteAzure runs ScoutSuite against Azure using service principal
+// credentials. The credentials are written to a temporary, owner-only auth file
+// passed via --file-auth, rather than on the command line, so the client secret
+// never appears in the process list or the run logs. The file is removed as soon
+// as the scan finishes.
+func runScoutsuiteAzure(cfg *config.CloudConfig, filePath string, OptVVerbose *bool) error {
+	if err := ensureScout(); err != nil {
+		return err
+	}
+
+	if cfg.AzureTenantID == "" || cfg.AzureClientID == "" || cfg.AzureClientSecret == "" {
+		utils.PrintCustomBiColourMsg("yellow", "cyan",
+			"[!] ScoutSuite: Azure scans need a service principal. ",
+			"Pass --tenant, --client-id and --client-secret. Skipping ScoutSuite.")
+		return nil
+	}
+
+	authFields := map[string]string{
+		"clientId":     cfg.AzureClientID,
+		"clientSecret": cfg.AzureClientSecret,
+		"tenantId":     cfg.AzureTenantID,
+	}
+	if cfg.AzureSubscription != "" {
+		authFields["subscriptionId"] = cfg.AzureSubscription
+	}
+	authBytes, err := json.Marshal(authFields)
+	if err != nil {
+		return fmt.Errorf("scoutsuite: failed to encode Azure auth file: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "scout-azure-*.json")
+	if err != nil {
+		return fmt.Errorf("scoutsuite: failed to create Azure auth file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	if err := tmpFile.Chmod(0o600); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("scoutsuite: failed to secure Azure auth file: %w", err)
+	}
+	if _, err := tmpFile.Write(authBytes); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("scoutsuite: failed to write Azure auth file: %w", err)
+	}
+	tmpFile.Close()
+
+	cmd := fmt.Sprintf("scout azure --file-auth %s --no-browser --report-dir %s", tmpFile.Name(), filePath)
+	if cfg.AzureSubscription != "" {
+		cmd += fmt.Sprintf(" --subscriptions %s", cfg.AzureSubscription)
+	}
+
+	toolOutput := fmt.Sprintf("%soutput.out", filePath)
+	if _, mkErr := utils.CustomMkdir(filePath); mkErr != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error creating custom dir %s: %v", filePath, mkErr))
+	}
+	runCloudTool(strings.Split(cmd, " "), toolOutput, OptVVerbose)
+	return nil
+}
+
 func prepProwler(cfg *config.CloudConfig, filePath string) (string, error) {
 	if !utils.CheckToolExists("prowler") {
 		if err := InstallWithPipxOSAgnostic("prowler"); err != nil {
@@ -887,7 +959,31 @@ func prepProwler(cfg *config.CloudConfig, filePath string) (string, error) {
 		}
 	}
 	cmd := fmt.Sprintf("prowler %s -o %s", cfg.Provider, filePath)
-	if cfg.Provider == "gcp" {
+	if cfg.Provider == "azure" {
+		if cfg.AzureTenantID == "" || cfg.AzureClientID == "" || cfg.AzureClientSecret == "" {
+			utils.PrintCustomBiColourMsg("yellow", "cyan",
+				"[!] Prowler: Azure scans need a service principal. ",
+				"Pass --tenant, --client-id and --client-secret. Skipping Prowler.")
+			return "", nil
+		}
+		// Prowler reads service principal credentials from these environment variables
+		// when --sp-env-auth is set; the child process inherits them from os.Environ().
+		// Passing them via the environment keeps the secret off the command line and out
+		// of the run logs.
+		for k, v := range map[string]string{
+			"AZURE_TENANT_ID":     cfg.AzureTenantID,
+			"AZURE_CLIENT_ID":     cfg.AzureClientID,
+			"AZURE_CLIENT_SECRET": cfg.AzureClientSecret,
+		} {
+			if err := os.Setenv(k, v); err != nil {
+				return "", fmt.Errorf("prowler: failed to set %s: %w", k, err)
+			}
+		}
+		cmd += " --sp-env-auth"
+		if cfg.AzureSubscription != "" {
+			cmd += fmt.Sprintf(" --subscription-id %s", cfg.AzureSubscription)
+		}
+	} else if cfg.Provider == "gcp" {
 		if cfg.CredsFile != "" {
 			cmd += fmt.Sprintf(" --credentials-file %s", shellQuote(cfg.CredsFile))
 		} else {
@@ -1137,6 +1233,16 @@ func prepGcpIAMBrute(cfg *config.CloudConfig) (string, error) {
 // instead we write a .ps1 that imports the module and calls Invoke-Monkey365 with
 // the appropriate parameters, then run it non-interactively via pwsh.
 func runMonkey365(cfg *config.CloudConfig, filePath string) error {
+	// monkey365 cannot use mounted Azure CLI credentials; without a service principal
+	// it falls back to interactive browser authentication, which cannot complete in a
+	// headless container. Skip it cleanly when the service principal is not supplied.
+	if cfg.AzureClientID == "" || cfg.AzureClientSecret == "" || cfg.AzureTenantID == "" {
+		utils.PrintCustomBiColourMsg("yellow", "cyan",
+			"[!] monkey365: Azure scans need a service principal. ",
+			"Pass --tenant, --client-id and --client-secret. Skipping monkey365.")
+		return nil
+	}
+
 	// Build the Invoke-Monkey365 parameter block dynamically.
 	// ClientSecret must be converted to a SecureString inline.
 	var psLines []string

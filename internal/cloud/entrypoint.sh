@@ -23,7 +23,24 @@ fi
 # Run enumeraga cloud with all provided arguments
 # Arguments are passed directly: aws, azure, gcp, etc. plus any flags
 echo "[*] Starting Enumeraga Cloud Scanner..."
-echo "[*] Provider/Args: $@"
+
+# Echo the arguments with the Azure client secret redacted so it never lands in
+# the container logs (service principal auth passes the secret as a CLI argument).
+safe_args=""
+redact_next=0
+for arg in "$@"; do
+    if [ "$redact_next" = "1" ]; then
+        safe_args="$safe_args ***REDACTED***"
+        redact_next=0
+        continue
+    fi
+    case "$arg" in
+        --client-secret)   safe_args="$safe_args $arg"; redact_next=1 ;;
+        --client-secret=*) safe_args="$safe_args --client-secret=***REDACTED***" ;;
+        *)                 safe_args="$safe_args $arg" ;;
+    esac
+done
+echo "[*] Provider/Args:$safe_args"
 echo ""
 
 ./enumeraga cloud "$@"

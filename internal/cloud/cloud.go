@@ -30,7 +30,16 @@ var optCreds = getopt.StringLong("creds", 'c', "", "Path to credentials file (e.
 // When unset, the AWS_PROFILE environment variable is used as a fallback (see Run).
 var optAWSProfile = getopt.StringLong("profile", 0, "", "AWS profile name from ~/.aws/credentials (AWS only)")
 
-// Azure service principal flags — used by monkey365 and future Azure tools.
+// firstNonEmpty returns the first of its arguments that is not empty after
+// trimming surrounding whitespace.
+func firstNonEmpty(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return strings.TrimSpace(a)
+	}
+	return strings.TrimSpace(b)
+}
+
+// Azure service principal flags — used by monkey365, ScoutSuite and Prowler.
 var optAzureTenantID     = getopt.StringLong("tenant", 0, "", "Azure Tenant ID (for service principal auth)")
 var optAzureClientID     = getopt.StringLong("client-id", 0, "", "Azure Client ID / App ID (for service principal auth)")
 var optAzureClientSecret = getopt.StringLong("client-secret", 0, "", "Azure Client Secret (for service principal auth)")
@@ -300,9 +309,15 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	cfg.Provider = provider
 	cfg.CredsFile = credsFile
 	cfg.AWSProfile = awsProfile
-	cfg.AzureTenantID = *optAzureTenantID
-	cfg.AzureClientID = *optAzureClientID
-	cfg.AzureClientSecret = *optAzureClientSecret
+	// Azure service principal: command-line flags take priority, falling back to the
+	// standard Azure SDK environment variables. The env fallback lets the secret be
+	// supplied without placing it on the command line (e.g. the MCP server forwards it
+	// to the container via -e AZURE_CLIENT_SECRET).
+	cfg.AzureTenantID = firstNonEmpty(*optAzureTenantID, os.Getenv("AZURE_TENANT_ID"))
+	cfg.AzureClientID = firstNonEmpty(*optAzureClientID, os.Getenv("AZURE_CLIENT_ID"))
+	cfg.AzureClientSecret = firstNonEmpty(*optAzureClientSecret, os.Getenv("AZURE_CLIENT_SECRET"))
+	// Optional: scope the Azure scan to a single subscription (read from the env).
+	cfg.AzureSubscription = strings.TrimSpace(os.Getenv("AZURE_SUBSCRIPTION_ID"))
 	cfg.GCPIAMBruteEnabled = !*optNoIAMBrute
 	cfg.GCPIAMBruteEmail = *optGCPIAMBruteEmail
 	cfg.GCPProject = *optGCPProject
@@ -441,9 +456,9 @@ func printCloudUsage() {
 	fmt.Println("\nOptions:")
 	fmt.Println("  -c, --creds FILE         Path to credentials file (e.g. GCP service account JSON)")
 	fmt.Println("      --profile NAME       AWS profile from ~/.aws/credentials (AWS only; falls back to $AWS_PROFILE)")
-	fmt.Println("      --tenant ID          Azure Tenant ID (service principal auth, used by monkey365)")
-	fmt.Println("      --client-id ID       Azure Client/App ID (service principal auth, used by monkey365)")
-	fmt.Println("      --client-secret SEC  Azure Client Secret (service principal auth, used by monkey365)")
+	fmt.Println("      --tenant ID          Azure Tenant ID (service principal auth for monkey365, ScoutSuite and Prowler)")
+	fmt.Println("      --client-id ID       Azure Client/App ID (service principal auth for monkey365, ScoutSuite and Prowler)")
+	fmt.Println("      --client-secret SEC  Azure Client Secret (service principal auth for monkey365, ScoutSuite and Prowler)")
 	fmt.Println("      --iam-brute-email EMAIL  Override service account email for gcp-iam-brute (GCP only)")
 	fmt.Println("      --no-iam-brute           Disable gcp-iam-brute permission enumeration (GCP only)")
 	fmt.Println("  -h, --help               Display this help and exit")
