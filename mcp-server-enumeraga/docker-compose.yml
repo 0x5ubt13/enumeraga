@@ -20,3 +20,30 @@ services:
     restart: unless-stopped
     # Use host networking mode if possible, otherwise rely on mapped ports
     # network_mode: host
+
+  # Scheduled warm-pull sidecar: keeps the locally-cached scan images in step with
+  # the freshest :latest builds the GitHub pipeline pushes to Docker Hub. The MCP
+  # server spawns sibling scan containers from the local cache, so without this the
+  # cache only updates when someone manually pulls. Runs whenever Docker is up, so it
+  # needs no host cron/systemd (neither is reliably available under WSL). A pull when
+  # the digest is unchanged is just a cheap manifest check, so a short interval is fine.
+  enumeraga-image-refresher:
+    image: docker:cli
+    container_name: enumeraga-image-refresher
+    restart: unless-stopped
+    volumes:
+      # Talk to the host Docker daemon to refresh the shared image cache.
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Seconds between refresh cycles. Default: hourly.
+      - REFRESH_INTERVAL=${ENUMERAGA_REFRESH_INTERVAL:-3600}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "[refresher] $$(date -u '+%Y-%m-%dT%H:%M:%SZ') pulling latest scan images";
+          docker pull gagarter/enumeraga_infra:latest || echo "[refresher] infra pull failed (kept cached image)";
+          docker pull gagarter/enumeraga_cloud:latest || echo "[refresher] cloud pull failed (kept cached image)";
+          echo "[refresher] sleeping $${REFRESH_INTERVAL}s";
+          sleep "$${REFRESH_INTERVAL}";
+        done
