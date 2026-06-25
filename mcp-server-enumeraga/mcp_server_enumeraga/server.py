@@ -30,6 +30,14 @@ CLOUD_IMAGE = "gagarter/enumeraga_cloud:latest"
 # container (an identity mount) so reads and writes line up on both sides.
 HOST_OUTPUT_DIR = os.environ.get("ENUMERAGA_HOST_OUTPUT_DIR")
 
+# Host path to the user's Azure CLI config (~/.azure) for unattended `az login`
+# scans. Same identity-mount rationale as HOST_OUTPUT_DIR: in compose mode this
+# server runs in a container, so the bind source handed to the sibling scan
+# container must be a real host path. Compose identity-mounts the host ~/.azure at
+# this same path inside this container so the existence check and the sibling mount
+# both resolve. Falls back to ~/.azure directly when running on the host (stdio mode).
+HOST_AZURE_DIR = os.environ.get("ENUMERAGA_HOST_AZURE_DIR")
+
 
 # Define available tools
 TOOLS: list[Tool] = [
@@ -49,7 +57,14 @@ TOOLS: list[Tool] = [
                 },
                 "output_dir": {
                     "type": "string",
-                    "description": "Custom output directory on host (default: ./enumeraga_output)",
+                    "description": (
+                        "Optional sub-folder name for this scan's results (e.g. an engagement "
+                        "name like 'acme-prod'). Results are always written under the server's "
+                        "configured host results directory; this value only names a sub-folder "
+                        "within it. Do NOT pass an absolute path or a path with '..' — it is "
+                        "reduced to a safe sub-folder. Omit to write straight into the results "
+                        "directory root."
+                    ),
                 },
                 "brute": {
                     "type": "boolean",
@@ -139,13 +154,24 @@ TOOLS: list[Tool] = [
                 "subscription": {
                     "type": "string",
                     "description": (
-                        "Optional Azure Subscription ID to scope the scan to (Azure only). "
-                        "Omit to scan all subscriptions the service principal can access."
+                        "Azure Subscription ID to scope the scan to (Azure only). STRONGLY "
+                        "RECOMMENDED: set this to the single subscription that is in scope for "
+                        "the engagement. If omitted, Prowler scans EVERY subscription the "
+                        "signed-in user can list, which is likely out of scope. If the user has "
+                        "not named a subscription, take the active one from 'az account show' "
+                        "and confirm it is in scope before scanning, rather than leaving this blank."
                     ),
                 },
                 "output_dir": {
                     "type": "string",
-                    "description": "Custom output directory on host (default: ./enumeraga_output)",
+                    "description": (
+                        "Optional sub-folder name for this scan's results (e.g. an engagement "
+                        "name like 'acme-prod'). Results are always written under the server's "
+                        "configured host results directory; this value only names a sub-folder "
+                        "within it. Do NOT pass an absolute path or a path with '..' — it is "
+                        "reduced to a safe sub-folder. Omit to write straight into the results "
+                        "directory root."
+                    ),
                 },
                 "quiet": {
                     "type": "boolean",
@@ -197,20 +223,101 @@ TOOLS: list[Tool] = [
 ]
 
 
+def _chown_host_tree(path: Path) -> None:
+    """Best-effort chown of a created output dir (and the results base) to the host user.
+
+    The server container runs as root, so directories it creates under the identity-mounted
+    results tree are root-owned on the host. Chowning the base too means the operator can
+    `mv` a whole results sub-folder out (removing the source needs write on its parent).
+    Silently ignored when no host UID is configured or chown is not permitted.
+    """
+    uid = os.environ.get("ENUMERAGA_HOST_UID")
+    if not uid:
+        return
+    try:
+        uid_i = int(uid)
+        gid_i = int(os.environ.get("ENUMERAGA_HOST_GID", uid))
+        for p in {Path(HOST_OUTPUT_DIR), path}:
+            os.chown(p, uid_i, gid_i)
+    except (OSError, ValueError):
+        pass
+
+
+def _confine_to_host_output(requested: str) -> str:
+    """Confine a requested output_dir to a subfolder of HOST_OUTPUT_DIR.
+
+    In container mode the bind source handed to the sibling scan container is resolved
+    by the *host* daemon, so it must live inside the identity-mounted HOST_OUTPUT_DIR
+    tree — otherwise the output is written to an arbitrary host path (e.g. /app/...)
+    and appears lost. Any requested path is reduced to safe relative components
+    (anchors, '.', '..' and a redundant leading 'enumeraga_output' segment dropped) and
+    joined under HOST_OUTPUT_DIR, so a per-engagement subfolder name is preserved while
+    the output stays where the operator can find it.
+    """
+    base = Path(HOST_OUTPUT_DIR)
+    parts = [
+        p for p in Path(requested).parts
+        if p not in ("/", "\\", ".", "..") and p != "enumeraga_output"
+    ]
+    target = base.joinpath(*parts) if parts else base
+    # Defence in depth: never let a crafted path escape the mounted base.
+    if base != target and base not in target.parents:
+        target = base
+    target.mkdir(parents=True, exist_ok=True)
+    _chown_host_tree(target)
+    return str(target)
+
+
 def resolve_output_source(args: dict[str, Any]) -> str:
     """Return the bind-mount source for the output directory.
 
-    In container mode (ENUMERAGA_HOST_OUTPUT_DIR set and no explicit output_dir
-    requested) the host path is used directly so the sibling container's daemon can
-    resolve it. Otherwise the requested/default directory is created and used.
+    In container mode (ENUMERAGA_HOST_OUTPUT_DIR set) the bind source must live inside
+    the identity-mounted host tree so the sibling container's daemon can resolve it: a
+    requested output_dir becomes a confined subfolder of it, otherwise the base is used
+    directly. On the host (stdio mode) the requested/default directory is used as-is.
     """
     requested = args.get("output_dir")
-    if HOST_OUTPUT_DIR and not requested:
-        Path(HOST_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    if HOST_OUTPUT_DIR:
+        if requested:
+            return _confine_to_host_output(requested)
+        base = Path(HOST_OUTPUT_DIR)
+        base.mkdir(parents=True, exist_ok=True)
+        _chown_host_tree(base)
         return HOST_OUTPUT_DIR
     output_dir = Path(requested or "./enumeraga_output").absolute()
     output_dir.mkdir(parents=True, exist_ok=True)
     return str(output_dir)
+
+
+def host_owner_env() -> list[str]:
+    """`-e` args that tell the scan container to chown its output back to the host user.
+
+    The scan container runs as root, so without this the output lands on the host owned by
+    root and cannot be moved out of the results directory without sudo. ENUMERAGA_HOST_UID
+    (and optional ENUMERAGA_HOST_GID) are supplied to this server via compose; we forward
+    them so the container's entrypoint restores ownership on exit.
+    """
+    uid = os.environ.get("ENUMERAGA_HOST_UID")
+    if not uid:
+        return []
+    env_args = ["-e", f"ENUMERAGA_HOST_UID={uid}"]
+    gid = os.environ.get("ENUMERAGA_HOST_GID")
+    if gid:
+        env_args += ["-e", f"ENUMERAGA_HOST_GID={gid}"]
+    return env_args
+
+
+def scan_key(kind: str, args: dict[str, Any]) -> str:
+    """Identity of a scan, used as a docker label so duplicate runs can be detected.
+
+    A retry storm (the client call times out, the agent re-invokes the tool while the
+    first scan is still running) would otherwise spawn racing containers writing the same
+    output and re-hammering the target/cloud API. Two scans share a key when they would
+    do the same work: same target for infra, same provider+subscription for cloud.
+    """
+    if kind == "infra":
+        return f"infra:{args.get('target', '')}"
+    return f"cloud:{args.get('provider', '')}:{args.get('subscription') or 'all'}"
 
 
 def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
@@ -221,6 +328,8 @@ def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
         "--cap-add=NET_RAW", "--cap-add=NET_ADMIN",
         "--network", "host",  # Required for nmap to work properly
         "-v", f"{resolve_output_source(args)}:/tmp/enumeraga_output",
+        *host_owner_env(),
+        "--label", f"enumeraga.key={scan_key('infra', args)}",
         INFRA_IMAGE,
         "-t", args["target"],
     ]
@@ -260,7 +369,10 @@ def build_docker_cloud_command(args: dict[str, Any]) -> tuple[list[str], dict[st
             volume_mounts.extend(["-e", f"AWS_PROFILE={profile}"])
 
     elif provider == "azure":
-        azure_dir = Path.home() / ".azure"
+        # Prefer the host-path Azure config when running in compose mode (so the
+        # sibling container's daemon can resolve the bind source); fall back to the
+        # local ~/.azure on the host.
+        azure_dir = Path(HOST_AZURE_DIR) if HOST_AZURE_DIR else (Path.home() / ".azure")
         if azure_dir.exists():
             # Mounted read-write (not :ro): by default Azure scans run unattended as the
             # signed-in user from `az login`, and the Azure CLI refreshes its access token
@@ -307,7 +419,8 @@ def build_docker_cloud_command(args: dict[str, Any]) -> tuple[list[str], dict[st
         if doctl_dir.exists():
             volume_mounts.extend(["-v", f"{doctl_dir}:/root/.config/doctl:ro"])
 
-    cmd = ["docker", "run", "--rm"] + volume_mounts + [CLOUD_IMAGE, provider]
+    label = ["--label", f"enumeraga.key={scan_key('cloud', args)}"]
+    cmd = ["docker", "run", "--rm"] + volume_mounts + host_owner_env() + label + [CLOUD_IMAGE, provider]
 
     if args.get("quiet"):
         cmd.append("-q")
@@ -366,6 +479,24 @@ async def run_command(
         raise RuntimeError(f"Failed to execute command: {e}")
 
 
+async def running_scan_name(key: str) -> str | None:
+    """Name of an already-running enumeraga scan container with this key, or None.
+
+    Used to refuse duplicate concurrent scans (see scan_key). Best-effort: if the docker
+    query fails for any reason we return None and let the scan proceed rather than block.
+    """
+    try:
+        out = await run_command(
+            ["docker", "ps", "--filter", f"label=enumeraga.key={key}",
+             "--format", "{{.Names}}"],
+            timeout=10,
+        )
+    except Exception:
+        return None
+    names = [n for n in out.splitlines() if n.strip()]
+    return names[0] if names else None
+
+
 async def pull_docker_image(image: str) -> str:
     """Pull Docker image."""
     cmd = ["docker", "pull", image]
@@ -410,8 +541,17 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
     print(f"Executing tool: {name} with args: {arguments}", file=sys.stderr)
     try:
         if name == "enumeraga_infra_scan":
+            # Refuse to start a duplicate while an identical scan is already running.
+            existing = await running_scan_name(scan_key("infra", arguments))
+            if existing:
+                return [TextContent(type="text", text=(
+                    f"An infrastructure scan of {arguments.get('target')} is already running "
+                    f"(container {existing}). Not starting a duplicate. Wait for it to finish, "
+                    f"check progress with `docker logs {existing}`, or stop it with "
+                    f"`docker stop {existing}` if it is stuck. Do not retry this tool meanwhile."
+                ))]
             cmd = build_docker_infra_command(arguments)
-            
+
             # Handle detached mode
             detached = arguments.get("detach", False)
             if detached:
@@ -445,6 +585,16 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
             ]
 
         elif name == "enumeraga_cloud_scan":
+            # Refuse to start a duplicate while an identical scan is already running.
+            existing = await running_scan_name(scan_key("cloud", arguments))
+            if existing:
+                return [TextContent(type="text", text=(
+                    f"A {arguments.get('provider')} cloud scan for this scope is already "
+                    f"running (container {existing}). Not starting a duplicate — this prevents "
+                    f"racing scans on the same output and repeated cloud API calls. Wait for it "
+                    f"to finish, check progress with `docker logs {existing}`, or stop it with "
+                    f"`docker stop {existing}` if it is stuck. Do not retry this tool meanwhile."
+                ))]
             cmd, extra_env = build_docker_cloud_command(arguments)
 
             # Handle detached mode

@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
+# The container runs as root, so output written to the mounted volume lands on the host
+# owned by root — which the operator then cannot move without sudo. When the host UID/GID
+# are supplied, restore ownership of the mounted output tree on exit (success or failure),
+# so results can be moved straight out of the shared results directory.
+_restore_output_owner() {
+    if [ -n "${ENUMERAGA_HOST_UID:-}" ] && [ -d "/tmp/enumeraga_output" ]; then
+        chown -R "${ENUMERAGA_HOST_UID}:${ENUMERAGA_HOST_GID:-$ENUMERAGA_HOST_UID}" /tmp/enumeraga_output 2>/dev/null || true
+    fi
+}
+trap _restore_output_owner EXIT
+
 # Enumeraga Cloud Scanner Entrypoint
 # Usage: docker run gagarter/enumeraga_cloud aws [additional flags]
 #        docker run gagarter/enumeraga_cloud azure -o /tmp/enumeraga_output

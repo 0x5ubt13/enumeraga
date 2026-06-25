@@ -7,6 +7,16 @@ services:
     environment:
       - MCP_MODE=sse
       - ENUMERAGA_HOST_OUTPUT_DIR=${ENUMERAGA_HOST_OUTPUT_DIR:-/tmp/enumeraga_scan_results}
+      # Host path to the user's Azure CLI config, so unattended Azure scans reuse a
+      # prior `az login` without a service principal. Defaults to the invoking user's
+      # ~/.azure; override ENUMERAGA_HOST_AZURE_DIR if az config lives elsewhere.
+      - ENUMERAGA_HOST_AZURE_DIR=${ENUMERAGA_HOST_AZURE_DIR:-${HOME}/.azure}
+      # Host user the scan containers should chown their output to, so results are
+      # owned by you (not root) and can be moved out of the results directory without
+      # sudo. Defaults to 1000:1000; for a different host user run compose with
+      # ENUMERAGA_HOST_UID=$(id -u) ENUMERAGA_HOST_GID=$(id -g).
+      - ENUMERAGA_HOST_UID=${ENUMERAGA_HOST_UID:-1000}
+      - ENUMERAGA_HOST_GID=${ENUMERAGA_HOST_GID:-1000}
     volumes:
       # CRITICAL: Mount Docker socket so the MCP server can spawn sibling containers
       - /var/run/docker.sock:/var/run/docker.sock
@@ -14,6 +24,10 @@ services:
       # container so that bind-mount sources handed to sibling `docker run` calls resolve
       # identically on the host daemon and inside this container.
       - ${ENUMERAGA_HOST_OUTPUT_DIR:-/tmp/enumeraga_scan_results}:${ENUMERAGA_HOST_OUTPUT_DIR:-/tmp/enumeraga_scan_results}
+      # Identity mount for the Azure CLI config (same rationale). Read-write so the az
+      # CLI can refresh its access token mid-scan. Remove this line if you only ever use
+      # service-principal auth for Azure.
+      - ${ENUMERAGA_HOST_AZURE_DIR:-${HOME}/.azure}:${ENUMERAGA_HOST_AZURE_DIR:-${HOME}/.azure}
     ports:
       # Expose port so existing n8n container can reach it via host network
       - "9000:9000"

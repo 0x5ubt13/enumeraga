@@ -880,7 +880,9 @@ func prepScoutsuite(cfg *config.CloudConfig, filePath string) (string, error) {
 	if err := ensureScout(); err != nil {
 		return "", err
 	}
-	cmd := fmt.Sprintf("scout %s --no-browser --report-dir %s", cfg.Provider, filePath)
+	// --force overwrites any report from a previous run; without it ScoutSuite prompts
+	// "overwrite? (y/n)" and, with no stdin in an unattended scan, dies on EOF (exit 109).
+	cmd := fmt.Sprintf("scout %s --force --no-browser --report-dir %s", cfg.Provider, filePath)
 	if cfg.Provider == "gcp" {
 		if cfg.CredsFile != "" {
 			cmd += fmt.Sprintf(" --service-account %s", shellQuote(cfg.CredsFile))
@@ -910,7 +912,7 @@ func runScoutsuiteAzure(cfg *config.CloudConfig, filePath string, OptVVerbose *b
 		utils.PrintCustomBiColourMsg("cyan", "cyan",
 			"[*] ScoutSuite: no service principal supplied, ",
 			"authenticating with the Azure CLI session (az login).")
-		cmd := fmt.Sprintf("scout azure --cli --no-browser --report-dir %s", filePath)
+		cmd := fmt.Sprintf("scout azure --cli --force --no-browser --report-dir %s", filePath)
 		if cfg.AzureSubscription != "" {
 			cmd += fmt.Sprintf(" --subscriptions %s", cfg.AzureSubscription)
 		}
@@ -950,7 +952,7 @@ func runScoutsuiteAzure(cfg *config.CloudConfig, filePath string, OptVVerbose *b
 	}
 	tmpFile.Close()
 
-	cmd := fmt.Sprintf("scout azure --file-auth %s --no-browser --report-dir %s", tmpFile.Name(), filePath)
+	cmd := fmt.Sprintf("scout azure --file-auth %s --force --no-browser --report-dir %s", tmpFile.Name(), filePath)
 	if cfg.AzureSubscription != "" {
 		cmd += fmt.Sprintf(" --subscriptions %s", cfg.AzureSubscription)
 	}
@@ -981,7 +983,10 @@ func prepProwler(cfg *config.CloudConfig, filePath string) (string, error) {
 				"authenticating with the Azure CLI session (az login).")
 			cmd += " --az-cli-auth"
 			if cfg.AzureSubscription != "" {
-				cmd += fmt.Sprintf(" --subscription-id %s", cfg.AzureSubscription)
+				// Prowler's flag is --subscription-ids (plural). The singular form is
+			// silently ignored, leaving Prowler in its default mode of scanning every
+			// subscription it can list — out of scope. Scope it to the one requested.
+			cmd += fmt.Sprintf(" --subscription-ids %s", cfg.AzureSubscription)
 			}
 			return cmd, nil
 		}
@@ -1000,7 +1005,10 @@ func prepProwler(cfg *config.CloudConfig, filePath string) (string, error) {
 		}
 		cmd += " --sp-env-auth"
 		if cfg.AzureSubscription != "" {
-			cmd += fmt.Sprintf(" --subscription-id %s", cfg.AzureSubscription)
+			// Prowler's flag is --subscription-ids (plural). The singular form is
+			// silently ignored, leaving Prowler in its default mode of scanning every
+			// subscription it can list — out of scope. Scope it to the one requested.
+			cmd += fmt.Sprintf(" --subscription-ids %s", cfg.AzureSubscription)
 		}
 	} else if cfg.Provider == "gcp" {
 		if cfg.CredsFile != "" {

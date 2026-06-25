@@ -32,6 +32,8 @@ docker_infra_build_test.sh
 *.md
 !README.md
 !VERSIONING.md
+!AGENTS.md
+!mcp_server_enumeraga/PROMPTS.md
 .DS_Store
 internal/cloud/latest
 internal/cloud/latestest

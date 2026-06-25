@@ -1,6 +1,6 @@
 # Enumeraga MCP Server (Docker-Based)
 
-Model Context Protocol (MCP) server for Enumeraga that uses **Docker containers** for complete isolation and portability. No need to install Enumeraga or its dependencies locally - just Docker!
+Model Context Protocol (MCP) server for Enumeraga. Every scan runs inside a **Docker container**, so none of Enumeraga's ~20 scan tools are installed on the host — only Docker, plus a small Python process for the server itself when run in stdio mode. See [Deployment](#deployment) for the two ways to run it.
 
 ## Architecture
 
@@ -20,22 +20,75 @@ The MCP server orchestrates Docker containers that have all tools pre-installed,
 
 ## Prerequisites
 
-- **Python 3.10+**
-- **Docker** installed and running
+- **Docker** installed and running — used for every scan, in both deployment modes
+- **The scan images** built or pulled: `gagarter/enumeraga_infra` and `gagarter/enumeraga_cloud`
+- **Python 3.10+** — only for **stdio** mode (the server process runs on the host)
 - Internet connection (to pull Docker images)
 
-## Installation
+## Two Dockerfiles — don't confuse them
+
+| File | Builds | Required? |
+|------|--------|-----------|
+| `Dockerfile` (repo root) | `gagarter/enumeraga_infra` scan image | **Yes** — the server runs scans by launching this |
+| `internal/cloud/Dockerfile` | `gagarter/enumeraga_cloud` scan image | **Yes** — same, for cloud scans |
+| `mcp-server-enumeraga/Dockerfile` + `docker-compose.yml` | The MCP **server** as an HTTP/SSE container | **Optional** — only for HTTP deployment (mode B below) |
+
+The MCP server *orchestrates* scan containers; it never scans on the host. So the scan images are always needed. The server's own image is needed only if you deploy the server itself as a container.
+
+## Deployment
+
+Pick one of two modes.
+
+### Mode A — stdio (recommended for a local CLI/desktop agent)
+
+The MCP client (Claude Desktop, omp, Gemini CLI, …) launches the server as a stdio subprocess on the host. Because the process **inherits the client's working directory**, scan results land under the directory you summoned the agent in (`<cwd>/enumeraga_output/`, or `<cwd>/<output_dir>` if you pass one).
 
 ```bash
 cd mcp-server-enumeraga
+./setup.sh        # creates ./venv and installs the server + deps
 
-# Create virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install the MCP server
-pip install -e .
+# Build the scan images once (or `enumeraga_pull_images` later):
+docker build -t gagarter/enumeraga_infra:latest .                    # from repo root
+docker build -f internal/cloud/Dockerfile -t gagarter/enumeraga_cloud:latest .
 ```
+
+Then point your client at the venv's Python (so `mcp` is importable). **Do not set a `cwd`** in the config — that is what lets the server inherit the client's directory:
+
+```json
+{
+  "mcpServers": {
+    "enumeraga": {
+      "command": "/abs/path/to/mcp-server-enumeraga/venv/bin/python",
+      "args": ["/abs/path/to/mcp-server-enumeraga/mcp_server_enumeraga/server.py"]
+    }
+  }
+}
+```
+
+Config file locations are listed under [Configuration](#configuration) below.
+
+### Mode B — HTTP / SSE (for a shared or remote server, e.g. n8n)
+
+The server runs as a long-lived container exposing `http://<host>:9000/mcp/`. It has no concept of any client's working directory, so output goes to a fixed, **identity-mounted** host directory instead.
+
+```bash
+cd mcp-server-enumeraga
+# Optional overrides (defaults shown):
+export ENUMERAGA_HOST_OUTPUT_DIR=/tmp/enumeraga_scan_results   # where results are written
+export ENUMERAGA_HOST_AZURE_DIR="$HOME/.azure"                 # az-login reuse for Azure
+docker compose up -d --build
+```
+
+Clients then use an HTTP entry instead of a command:
+
+```json
+{ "mcpServers": { "enumeraga": { "type": "http", "url": "http://localhost:9000/mcp/" } } }
+```
+
+Notes for mode B:
+- `docker-compose.yml` identity-mounts `ENUMERAGA_HOST_OUTPUT_DIR` and `ENUMERAGA_HOST_AZURE_DIR` into the server container at the same paths, so the sibling scan containers (spawned via the mounted Docker socket) can resolve them on the host daemon.
+- A request's `output_dir` becomes a **sub-folder of** `ENUMERAGA_HOST_OUTPUT_DIR` (absolute paths and `..` are stripped), so output never escapes the mounted tree.
+- An `enumeraga-image-refresher` sidecar periodically `docker pull`s the `:latest` scan images. Stop it (`docker compose stop enumeraga-image-refresher`) while testing a locally built image, or it will overwrite your build.
 
 ## Configuration
 
@@ -147,9 +200,16 @@ Run cloud security assessment using Docker container.
 
 **Parameters:**
 - `provider` (required, enum): `aws`, `azure`, `gcp`, `oci`, `aliyun`, `do`
-- `output_dir` (optional, string): Output directory (default: ./enumeraga_output)
+- `output_dir` (optional, string): sub-folder name for this scan's results
+- `subscription` (optional, string): **Azure** — scope the scan to one subscription ID
+- `tenant`, `client_id`, `client_secret` (optional, strings): **Azure** — service principal auth
 - `quiet` (optional, boolean): Suppress verbose output
 - `verbose` (optional, boolean): Very verbose debugging output
+
+**Azure authentication:**
+- **Default — your own user:** run `az login` on the host first, then call with just `provider: "azure"`. ScoutSuite and Prowler reuse that session (`--cli` / `--az-cli-auth`) and run unattended. monkey365 is skipped (it has no Azure-CLI mode).
+- **Service principal (optional):** pass `tenant` + `client_id` + `client_secret` to use an SP instead — this additionally enables monkey365's M365 / Entra ID inventory.
+- **Scope:** always set `subscription` to the in-scope subscription. Without it, Prowler scans **every** subscription the identity can list.
 
 **Example:**
 ```python
@@ -169,9 +229,9 @@ docker run --rm \
 ```
 
 **Cloud Credentials:**
-The server automatically mounts credential directories:
+The server automatically mounts credential directories into the scan container:
 - AWS: `~/.aws` → `/root/.aws` (read-only)
-- Azure: `~/.azure` → `/root/.azure` (read-only)
+- Azure: `~/.azure` → `/root/.azure` (**read-write** — the Azure CLI refreshes its token mid-scan)
 - GCP: `~/.config/gcloud` → `/root/.config/gcloud` (read-only)
 
 ### 3. enumeraga_pull_images
@@ -214,6 +274,8 @@ Image Status:
 ```
 
 ## Usage Examples
+
+For ready-to-use, copy-paste prompts that drive these tools from an LLM agent (Azure/AWS/GCP cloud scans, infrastructure scans, readiness check), see [PROMPTS.md](PROMPTS.md).
 
 ### First Time Setup
 
