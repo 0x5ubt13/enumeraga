@@ -148,9 +148,12 @@ Give `enumeraga cloud` a CSP, and depending on which, a couple more parameters f
     
     Options:
       -c, --creds FILE         Path to credentials file (e.g. GCP service     account JSON)
-          --tenant ID          Azure Tenant ID (service principal auth, used     by monkey365)
-          --client-id ID       Azure Client/App ID (service principal auth,     used by monkey365)
-          --client-secret SEC  Azure Client Secret (service principal auth,     used by monkey365)
+          --tenant ID          Azure Tenant ID (optional; service principal auth)
+          --client-id ID       Azure Client/App ID (optional; service principal auth)
+          --client-secret SEC  Azure Client Secret (optional; service principal auth)
+                               Omit all three to scan unattended as your signed-in
+                               user via 'az login' (ScoutSuite + Prowler). Supply
+                               all three to also run monkey365 (M365 + Entra ID).
           --iam-brute-email EMAIL  Override service account email for     gcp-iam-brute (GCP only)
           --no-iam-brute           Disable gcp-iam-brute permission     enumeration (GCP only)
       -h, --help               Display this help and exit

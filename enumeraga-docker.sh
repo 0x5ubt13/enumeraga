@@ -43,9 +43,12 @@ CLOUD mode:
                              injected as CLOUDSDK_AUTH_ACCESS_TOKEN and
                              GOOGLE_OAUTH_ACCESS_TOKEN — use this instead of -c
                              when you only have a stolen/captured token
-    --tenant <id>            Azure Tenant ID
-    --client-id <id>         Azure Client ID
-    --client-secret <secret> Azure Client Secret
+    --tenant <id>            Azure Tenant ID (optional; service principal auth)
+    --client-id <id>         Azure Client ID (optional; service principal auth)
+    --client-secret <secret> Azure Client Secret (optional; service principal auth)
+                             Omit all three to scan unattended as your own user via
+                             a prior 'az login' (ScoutSuite + Prowler). monkey365
+                             runs only when a service principal is supplied.
     --no-iam-brute           Disable gcp-iam-brute (GCP)
     -o <dir>                 Output dir inside container (default: /tmp/enumeraga_output)
     -q                       Quiet
@@ -67,6 +70,7 @@ Examples:
   $(basename "$0") cloud gcp
   $(basename "$0") cloud gcp -c ~/sa-key.json
   $(basename "$0") cloud gcp --gcp-token ~/stolen_token.txt
+  az login && $(basename "$0") cloud azure          # unattended, as your user
   $(basename "$0") cloud azure --tenant abc123 --client-id xyz --client-secret s3cr3t
 EOF
     exit 0
@@ -167,8 +171,12 @@ run_cloud() {
             ;;
         azure)
             if [[ -d "${HOME}/.azure" ]]; then
-                volumes+=("-v" "${HOME}/.azure:/root/.azure:ro")
-                echo "[*] Mounting Azure credentials: ~/.azure"
+                # Mounted read-write (not :ro): the Azure CLI refreshes its access
+                # token mid-session and writes the new one back to the cache, which
+                # ScoutSuite (--cli) and Prowler (--az-cli-auth) rely on for
+                # unattended user auth. A read-only mount breaks that refresh.
+                volumes+=("-v" "${HOME}/.azure:/root/.azure")
+                echo "[*] Mounting Azure credentials: ~/.azure (run 'az login' first)"
             fi
             ;;
         gcp)

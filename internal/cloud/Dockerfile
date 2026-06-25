@@ -68,6 +68,13 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     && ./aws/install \
     && rm -rf awscliv2.zip aws
 
+# Install Azure CLI — lets ScoutSuite (--cli) and Prowler (--az-cli-auth) reuse a
+# user's `az login` session, so Azure scans can run unattended as the signed-in
+# user without a service principal. The official deb installer sets up the
+# Microsoft apt repo and selects the correct architecture.
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install cloudfox from pre-built ZIP archive (architecture-aware).
 # BishopFox ships cloudfox-linux-amd64.zip / cloudfox-linux-arm64.zip — not bare binaries.
 # Soft-fail: if GitHub rate-limits the build, prepCloudfox() will download it at runtime instead.

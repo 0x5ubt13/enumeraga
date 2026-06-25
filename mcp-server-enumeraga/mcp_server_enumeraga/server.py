@@ -86,11 +86,14 @@ TOOLS: list[Tool] = [
             "using Docker container. Uses tools like ScoutSuite, Prowler, CloudFox, and PMapper to identify "
             "misconfigurations. Requires cloud credentials to be mounted into container. "
             "AWS/GCP/OCI/Alibaba/DigitalOcean read mounted credentials automatically. "
-            "AZURE is different: it authenticates with a service principal, so you MUST provide "
-            "'tenant', 'client_id' and 'client_secret' for any Azure scan — the main Azure tools "
-            "(monkey365, ScoutSuite, Prowler) are skipped without them. The service principal needs "
-            "the Reader and Security Reader roles. The client_secret is forwarded to the container "
-            "via an environment variable and never appears on the command line or in logs."
+            "AZURE runs unattended as the user's signed-in Azure CLI session by default: if the "
+            "user has run 'az login', scan with just provider='azure' — do NOT ask for 'tenant', "
+            "'client_id' or 'client_secret'. Those three are an OPTIONAL service principal; supply "
+            "them only if the user explicitly provides them or asks to use one (it additionally "
+            "enables monkey365's M365/Entra ID inventory and needs the Reader and Security Reader "
+            "roles). Without a service principal only monkey365 is skipped; ScoutSuite and Prowler "
+            "still run as the az-login user. The client_secret, when given, is forwarded via an "
+            "environment variable and never appears on the command line or in logs."
         ),
         inputSchema={
             "type": "object",
@@ -111,23 +114,26 @@ TOOLS: list[Tool] = [
                 "tenant": {
                     "type": "string",
                     "description": (
-                        "Azure Tenant (Directory) ID for service principal auth (Azure only, required for Azure). "
-                        "A GUID."
+                        "Azure Tenant (Directory) ID for OPTIONAL service principal auth (Azure only). "
+                        "A GUID. Omit to scan as the signed-in 'az login' user — do not ask for it."
                     ),
                 },
                 "client_id": {
                     "type": "string",
                     "description": (
-                        "Azure service principal Client/Application ID (Azure only, required for Azure). "
-                        "A GUID."
+                        "Azure service principal Client/Application ID for OPTIONAL service principal "
+                        "auth (Azure only). A GUID. Omit to scan as the signed-in 'az login' user — "
+                        "do not ask for it."
                     ),
                 },
                 "client_secret": {
                     "type": "string",
                     "description": (
-                        "Azure service principal client secret (Azure only, required for Azure). "
-                        "Forwarded to the container via the AZURE_CLIENT_SECRET environment variable, "
-                        "so it never appears on the command line, in the host process list, or in logs."
+                        "Azure service principal client secret for OPTIONAL service principal auth "
+                        "(Azure only). Omit to scan as the signed-in 'az login' user — do not ask the "
+                        "user for it unless they choose service principal auth. When given, it is "
+                        "forwarded via the AZURE_CLIENT_SECRET environment variable, so it never "
+                        "appears on the command line, in the host process list, or in logs."
                     ),
                 },
                 "subscription": {
@@ -256,12 +262,17 @@ def build_docker_cloud_command(args: dict[str, Any]) -> tuple[list[str], dict[st
     elif provider == "azure":
         azure_dir = Path.home() / ".azure"
         if azure_dir.exists():
-            volume_mounts.extend(["-v", f"{azure_dir}:/root/.azure:ro"])
-        # Azure authenticates with a service principal. The tenant and client IDs are not
+            # Mounted read-write (not :ro): by default Azure scans run unattended as the
+            # signed-in user from `az login`, and the Azure CLI refreshes its access token
+            # mid-session, writing the new one back to this cache. A read-only mount would
+            # break that refresh. ScoutSuite (--cli) and Prowler (--az-cli-auth) use it.
+            volume_mounts.extend(["-v", f"{azure_dir}:/root/.azure"])
+        # A service principal is optional. When supplied, the tenant and client IDs are not
         # secret and are passed as -e VAR=value. The client secret is passed by NAME only
         # (-e AZURE_CLIENT_SECRET) and its value is injected into the `docker` process
         # environment via extra_env, so it never appears in the command line, the host
-        # process list, or the command string echoed back to the caller.
+        # process list, or the command string echoed back to the caller. Without it, only
+        # monkey365 is skipped; ScoutSuite and Prowler still run as the az-login user.
         tenant = args.get("tenant")
         client_id = args.get("client_id")
         client_secret = args.get("client_secret")

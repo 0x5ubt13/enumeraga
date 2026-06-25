@@ -903,10 +903,22 @@ func runScoutsuiteAzure(cfg *config.CloudConfig, filePath string, OptVVerbose *b
 		return err
 	}
 
-	if cfg.AzureTenantID == "" || cfg.AzureClientID == "" || cfg.AzureClientSecret == "" {
-		utils.PrintCustomBiColourMsg("yellow", "cyan",
-			"[!] ScoutSuite: Azure scans need a service principal. ",
-			"Pass --tenant, --client-id and --client-secret. Skipping ScoutSuite.")
+	// Without a full service principal, fall back to the signed-in Azure CLI
+	// session (`az login`). This runs unattended as the current user — no secret,
+	// no interactive prompt — provided ~/.azure is mounted into the container.
+	if cfg.AzureClientID == "" || cfg.AzureClientSecret == "" || cfg.AzureTenantID == "" {
+		utils.PrintCustomBiColourMsg("cyan", "cyan",
+			"[*] ScoutSuite: no service principal supplied, ",
+			"authenticating with the Azure CLI session (az login).")
+		cmd := fmt.Sprintf("scout azure --cli --no-browser --report-dir %s", filePath)
+		if cfg.AzureSubscription != "" {
+			cmd += fmt.Sprintf(" --subscriptions %s", cfg.AzureSubscription)
+		}
+		toolOutput := fmt.Sprintf("%soutput.out", filePath)
+		if _, mkErr := utils.CustomMkdir(filePath); mkErr != nil {
+			utils.ErrorMsg(fmt.Sprintf("Error creating custom dir %s: %v", filePath, mkErr))
+		}
+		runCloudTool(strings.Split(cmd, " "), toolOutput, OptVVerbose)
 		return nil
 	}
 
@@ -961,10 +973,17 @@ func prepProwler(cfg *config.CloudConfig, filePath string) (string, error) {
 	cmd := fmt.Sprintf("prowler %s -o %s", cfg.Provider, filePath)
 	if cfg.Provider == "azure" {
 		if cfg.AzureTenantID == "" || cfg.AzureClientID == "" || cfg.AzureClientSecret == "" {
-			utils.PrintCustomBiColourMsg("yellow", "cyan",
-				"[!] Prowler: Azure scans need a service principal. ",
-				"Pass --tenant, --client-id and --client-secret. Skipping Prowler.")
-			return "", nil
+			// No service principal: reuse the signed-in Azure CLI session (`az login`).
+			// This runs unattended as the current user, no secret required, provided
+			// ~/.azure is mounted into the container.
+			utils.PrintCustomBiColourMsg("cyan", "cyan",
+				"[*] Prowler: no service principal supplied, ",
+				"authenticating with the Azure CLI session (az login).")
+			cmd += " --az-cli-auth"
+			if cfg.AzureSubscription != "" {
+				cmd += fmt.Sprintf(" --subscription-id %s", cfg.AzureSubscription)
+			}
+			return cmd, nil
 		}
 		// Prowler reads service principal credentials from these environment variables
 		// when --sp-env-auth is set; the child process inherits them from os.Environ().
@@ -1233,13 +1252,15 @@ func prepGcpIAMBrute(cfg *config.CloudConfig) (string, error) {
 // instead we write a .ps1 that imports the module and calls Invoke-Monkey365 with
 // the appropriate parameters, then run it non-interactively via pwsh.
 func runMonkey365(cfg *config.CloudConfig, filePath string) error {
-	// monkey365 cannot use mounted Azure CLI credentials; without a service principal
-	// it falls back to interactive browser authentication, which cannot complete in a
-	// headless container. Skip it cleanly when the service principal is not supplied.
+	// monkey365 cannot reuse the mounted Azure CLI session; its only unattended auth
+	// is a service principal (device code and interactive flows need a human, which a
+	// headless scan cannot provide). So it is service-principal-only by design — when
+	// none is supplied we skip it quietly and rely on ScoutSuite and Prowler, which do
+	// run unattended against the signed-in user via `az login`.
 	if cfg.AzureClientID == "" || cfg.AzureClientSecret == "" || cfg.AzureTenantID == "" {
-		utils.PrintCustomBiColourMsg("yellow", "cyan",
-			"[!] monkey365: Azure scans need a service principal. ",
-			"Pass --tenant, --client-id and --client-secret. Skipping monkey365.")
+		utils.PrintCustomBiColourMsg("cyan", "cyan",
+			"[*] monkey365: skipped (service-principal-only). ",
+			"Pass --tenant, --client-id and --client-secret to include it.")
 		return nil
 	}
 
