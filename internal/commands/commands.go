@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/config"
@@ -1376,11 +1377,25 @@ func dirTotalSize(path string) int64 {
 	return total
 }
 
-// stallWatchdog kills cmd if the directory watched by watchDir has not grown
-// for stallTimeout after an initial warmup period. The warmup allows slow-starting
-// tools (e.g. prowler) to authenticate and reach their first write before the stale
-// check begins. Call the returned cancel func when the command finishes normally.
-func stallWatchdog(cmd *exec.Cmd, watchDir string, warmup, stallTimeout time.Duration) context.CancelFunc {
+// activityWriter records the time of the most recent write, so a long-running tool that
+// streams progress to stdout/stderr is recognised as alive by stallWatchdog even before it
+// has written any output files. It otherwise behaves as a transparent passthrough.
+type activityWriter struct {
+	dst  io.Writer
+	last *atomic.Int64
+}
+
+func (w activityWriter) Write(p []byte) (int, error) {
+	w.last.Store(time.Now().UnixNano())
+	return w.dst.Write(p)
+}
+
+// stallWatchdog kills cmd when it shows no sign of life — neither growth in the watched
+// output directory nor any output on stdout/stderr — for stallTimeout, after an initial
+// warmup. Watching output as well as files matters for tools such as prowler and ScoutSuite
+// that run for many minutes and only write their report at the end: they would otherwise be
+// killed mid-run despite being perfectly alive. Call the returned cancel func on normal exit.
+func stallWatchdog(cmd *exec.Cmd, watchDir string, lastActivity *atomic.Int64, warmup, stallTimeout time.Duration) context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		// Wait for the warmup period before starting stale checks.
@@ -1394,6 +1409,7 @@ func stallWatchdog(cmd *exec.Cmd, watchDir string, warmup, stallTimeout time.Dur
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		lastSize := dirTotalSize(watchDir)
+		lastAct := lastActivity.Load()
 		var staleFor time.Duration
 		for {
 			select {
@@ -1401,24 +1417,46 @@ func stallWatchdog(cmd *exec.Cmd, watchDir string, warmup, stallTimeout time.Dur
 				return
 			case <-ticker.C:
 				current := dirTotalSize(watchDir)
-				if current == lastSize {
-					staleFor += interval
-					if staleFor >= stallTimeout {
-						utils.PrintCustomBiColourMsg("yellow", "cyan",
-							"[!] Output stalled for ", stallTimeout.String(), " — killing hung process")
-						if cmd.Process != nil {
-							_ = cmd.Process.Kill()
-						}
-						return
-					}
-				} else {
+				act := lastActivity.Load()
+				// Any file growth or any process output counts as progress.
+				if current != lastSize || act != lastAct {
 					lastSize = current
+					lastAct = act
 					staleFor = 0
+					continue
+				}
+				staleFor += interval
+				if staleFor >= stallTimeout {
+					utils.PrintCustomBiColourMsg("yellow", "cyan",
+						"[!] No output or progress for ", stallTimeout.String(), " — killing hung process")
+					if cmd.Process != nil {
+						_ = cmd.Process.Kill()
+					}
+					return
 				}
 			}
 		}
 	}()
 	return cancel
+}
+
+// stallTiming returns the warmup and stall-timeout for a tool. Slow tools that run many
+// checks before writing anything (prowler, ScoutSuite) get a generous stall timeout so a
+// long-but-healthy scan is not killed. Both are overridable at runtime via the env vars
+// ENUMERAGA_STALL_WARMUP and ENUMERAGA_STALL_TIMEOUT (Go duration strings, e.g. "20m").
+func stallTiming(tool string) (warmup, stallTimeout time.Duration) {
+	warmup, stallTimeout = 1*time.Minute, 3*time.Minute
+	switch tool {
+	case "prowler", "scout":
+		warmup, stallTimeout = 3*time.Minute, 20*time.Minute
+	}
+	if v, err := time.ParseDuration(os.Getenv("ENUMERAGA_STALL_WARMUP")); err == nil && v > 0 {
+		warmup = v
+	}
+	if v, err := time.ParseDuration(os.Getenv("ENUMERAGA_STALL_TIMEOUT")); err == nil && v > 0 {
+		stallTimeout = v
+	}
+	return warmup, stallTimeout
 }
 
 // runCloudTool is a new version of runTool for cloud - Announce cloud tool and run it
@@ -1474,25 +1512,25 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		return
 	}
 
-	// Kill the process if its output directory stops growing — catches tools that hang
-	// on a blocked API call. Prowler needs a longer warmup (3 min) before its first
-	// write; other tools get 1 minute. All tools are killed after 3 minutes of stale output.
-	warmup := 1 * time.Minute
-	if tool == "prowler" {
-		warmup = 3 * time.Minute
-	}
-	stopWatchdog := stallWatchdog(cmd, filepath.Dir(filePath), warmup, 3*time.Minute)
+	// Kill the process only if it shows no sign of life — no output and no file growth —
+	// for the stall timeout, to catch tools hung on a blocked API call. lastActivity is
+	// updated by the output writers below; prowler/ScoutSuite get a generous timeout (see
+	// stallTiming) because they run for many minutes before writing their report.
+	var lastActivity atomic.Int64
+	lastActivity.Store(time.Now().UnixNano())
+	warmup, stallTimeout := stallTiming(tool)
+	stopWatchdog := stallWatchdog(cmd, filepath.Dir(filePath), &lastActivity, warmup, stallTimeout)
 	defer stopWatchdog()
 
 	// gcp-iam-brute emits thousands of lines of verbose progress; send it to file only.
 	var stdoutDst io.Writer
 	var stderrDst io.Writer
 	if tool == "gcp-iam-brute" {
-		stdoutDst = file
-		stderrDst = file
+		stdoutDst = activityWriter{file, &lastActivity}
+		stderrDst = activityWriter{file, &lastActivity}
 	} else {
-		stdoutDst = io.MultiWriter(os.Stdout, file)
-		stderrDst = os.Stderr
+		stdoutDst = activityWriter{io.MultiWriter(os.Stdout, file), &lastActivity}
+		stderrDst = activityWriter{os.Stderr, &lastActivity}
 	}
 
 	go func() {

@@ -17,6 +17,12 @@ services:
       # ENUMERAGA_HOST_UID=$(id -u) ENUMERAGA_HOST_GID=$(id -g).
       - ENUMERAGA_HOST_UID=${ENUMERAGA_HOST_UID:-1000}
       - ENUMERAGA_HOST_GID=${ENUMERAGA_HOST_GID:-1000}
+      # Stall-watchdog tuning, forwarded to each scan container. A scan is killed only
+      # after this long with no output and no new files (catches genuinely hung tools).
+      # Defaults inside the image are generous for slow tools (prowler/ScoutSuite get 20m);
+      # raise these for very large estates. Go duration strings, e.g. "30m".
+      - ENUMERAGA_STALL_WARMUP=${ENUMERAGA_STALL_WARMUP:-}
+      - ENUMERAGA_STALL_TIMEOUT=${ENUMERAGA_STALL_TIMEOUT:-}
     volumes:
       # CRITICAL: Mount Docker socket so the MCP server can spawn sibling containers
       - /var/run/docker.sock:/var/run/docker.sock

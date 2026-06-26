@@ -19,6 +19,8 @@ The tools:
 
 **Scans are long — never retry.** A cloud or infra scan can run for many minutes, longer than the MCP client's response timeout. A timeout does **not** mean the scan failed — the container keeps running. Do **not** re-invoke the scan tool: a second call would be a duplicate. Either pass `detach: true` to start it in the background and poll with `docker logs <id>`, or wait. The server refuses a duplicate while an identical scan is running and tells you the container name; if you see that, wait or check its logs — do not keep calling.
 
+**A running container is alive, not stalled.** While a scan container is still listed by `docker ps`, treat it as running even if its logs are quiet for several minutes — prowler runs ~187 checks largely silently before writing its report. Do not `docker stop`/`kill` it, do not declare the scan dead or failed, and do not re-run the tool. Conclude it has finished only when the container is gone from `docker ps` (it is `--rm`). The scan image's own watchdog already kills genuinely hung tools, so leave that judgement to it.
+
 **Azure scope safety:** always pass `subscription` to `enumeraga_cloud_scan` for Azure, set to the single in-scope subscription. If omitted, Prowler scans *every* subscription the signed-in user can list — which is almost certainly out of scope and a breach of the engagement boundary. If the user has not named one, take the active subscription from `az account show`, confirm it is in scope, then pass it.
 
 If a tool call cannot connect, the `enumeraga-mcp` container is probably not running. Start it from `mcp-server-enumeraga/` with `docker compose up -d` (it binds port 9000), then retry.

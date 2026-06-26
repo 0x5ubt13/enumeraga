@@ -33,7 +33,8 @@ docker_infra_build_test.sh
 !README.md
 !VERSIONING.md
 !AGENTS.md
-!mcp_server_enumeraga/PROMPTS.md
+!*PROMPTS.md
 .DS_Store
 internal/cloud/latest
 internal/cloud/latestest
+enumeraga_output*

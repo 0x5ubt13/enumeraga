@@ -307,6 +307,22 @@ def host_owner_env() -> list[str]:
     return env_args
 
 
+# Tuning knobs forwarded verbatim to the scan container when set on this server, so they
+# can be adjusted (e.g. via compose) without rebuilding the scan image. The stall-watchdog
+# limits let slow tools such as prowler run longer before being treated as hung.
+_PASSTHROUGH_ENV = ("ENUMERAGA_STALL_WARMUP", "ENUMERAGA_STALL_TIMEOUT")
+
+
+def forwarded_env() -> list[str]:
+    """`-e` args forwarding the passthrough tuning vars that are set on this server."""
+    env_args: list[str] = []
+    for var in _PASSTHROUGH_ENV:
+        val = os.environ.get(var)
+        if val:
+            env_args += ["-e", f"{var}={val}"]
+    return env_args
+
+
 def scan_key(kind: str, args: dict[str, Any]) -> str:
     """Identity of a scan, used as a docker label so duplicate runs can be detected.
 
@@ -329,6 +345,7 @@ def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
         "--network", "host",  # Required for nmap to work properly
         "-v", f"{resolve_output_source(args)}:/tmp/enumeraga_output",
         *host_owner_env(),
+        *forwarded_env(),
         "--label", f"enumeraga.key={scan_key('infra', args)}",
         INFRA_IMAGE,
         "-t", args["target"],
@@ -420,7 +437,7 @@ def build_docker_cloud_command(args: dict[str, Any]) -> tuple[list[str], dict[st
             volume_mounts.extend(["-v", f"{doctl_dir}:/root/.config/doctl:ro"])
 
     label = ["--label", f"enumeraga.key={scan_key('cloud', args)}"]
-    cmd = ["docker", "run", "--rm"] + volume_mounts + host_owner_env() + label + [CLOUD_IMAGE, provider]
+    cmd = ["docker", "run", "--rm"] + volume_mounts + host_owner_env() + forwarded_env() + label + [CLOUD_IMAGE, provider]
 
     if args.get("quiet"):
         cmd.append("-q")
