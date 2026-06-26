@@ -70,9 +70,12 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
 
 # Install Azure CLI — lets ScoutSuite (--cli) and Prowler (--az-cli-auth) reuse a
 # user's `az login` session, so Azure scans can run unattended as the signed-in
-# user without a service principal. The official deb installer sets up the
-# Microsoft apt repo and selects the correct architecture.
-RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
+# user without a service principal. Installed from Microsoft's GPG-signed apt repo
+# (not `curl | bash`) so the package is verified rather than executing an unsigned
+# script fetched at build time. The cloud image is amd64-only (see docker-build.yml).
+RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ bookworm main" > /etc/apt/sources.list.d/azure-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends azure-cli \
     && rm -rf /var/lib/apt/lists/*
 
 # Install cloudfox from pre-built ZIP archive (architecture-aware).

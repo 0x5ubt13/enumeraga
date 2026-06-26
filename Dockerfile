@@ -77,12 +77,15 @@ RUN mkdir -p /usr/share/seclists/Discovery/Web-Content \
 
 # crackmapexec is being phased out in kali-rolling (renamed to netexec/nxc upstream)
 # Install both so the crackmapexec binary path still resolves
-RUN apt-get update && apt-get install -y --no-install-recommends crackmapexec netexec || \
-    apt-get install -y --no-install-recommends netexec || true \
+RUN apt-get update \
+    && (apt-get install -y --no-install-recommends crackmapexec netexec \
+        || apt-get install -y --no-install-recommends netexec \
+        || true) \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install ODAT if available (may not be on all architectures)
-RUN apt-get update && apt-get install -y odat || true \
+RUN apt-get update \
+    && (apt-get install -y --no-install-recommends odat || true) \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install rwho client from Debian repos since it's not in Kali
@@ -110,16 +113,15 @@ RUN ARCH=$(uname -m); \
         aarch64) PD_ARCH="arm64" ;; \
         *)        PD_ARCH="amd64" ;; \
     esac; \
-    GH_AUTH="${GITHUB_TOKEN:+-H \"Authorization: Bearer $GITHUB_TOKEN\"}" \
-    && SF_VER=$(curl -s $GH_AUTH https://api.github.com/repos/projectdiscovery/subfinder/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
+    SF_VER=$(curl -s ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} https://api.github.com/repos/projectdiscovery/subfinder/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
     && curl -sL "https://github.com/projectdiscovery/subfinder/releases/download/v${SF_VER}/subfinder_${SF_VER}_linux_${PD_ARCH}.zip" -o /tmp/subfinder.zip \
     && unzip -q /tmp/subfinder.zip subfinder -d /usr/local/bin/ \
     && rm /tmp/subfinder.zip \
-    && HTTPX_VER=$(curl -s $GH_AUTH https://api.github.com/repos/projectdiscovery/httpx/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
+    && HTTPX_VER=$(curl -s ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} https://api.github.com/repos/projectdiscovery/httpx/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
     && curl -sL "https://github.com/projectdiscovery/httpx/releases/download/v${HTTPX_VER}/httpx_${HTTPX_VER}_linux_${PD_ARCH}.zip" -o /tmp/httpx.zip \
     && unzip -q /tmp/httpx.zip httpx -d /usr/local/bin/ \
     && rm /tmp/httpx.zip \
-    && NUCLEI_VER=$(curl -s $GH_AUTH https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
+    && NUCLEI_VER=$(curl -s ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
     && curl -sL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VER}/nuclei_${NUCLEI_VER}_linux_${PD_ARCH}.zip" -o /tmp/nuclei.zip \
     && unzip -q /tmp/nuclei.zip nuclei -d /usr/local/bin/ \
     && rm /tmp/nuclei.zip \

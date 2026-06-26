@@ -34,6 +34,7 @@ docker_infra_build_test.sh
 !VERSIONING.md
 !AGENTS.md
 !*PROMPTS.md
+!SECURITY.md
 .DS_Store
 internal/cloud/latest
 internal/cloud/latestest

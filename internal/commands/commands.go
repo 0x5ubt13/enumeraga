@@ -677,13 +677,10 @@ func InstallWithPipxOSAgnostic(tool string) error {
 		}
 	}
 
-	command := fmt.Sprintf("pipx install %s", tool)
-	var cmd *exec.Cmd
-	if utils.HostOS.OS == "windows" {
-		cmd = exec.Command("powershell", "-Command", command)
-	} else {
-		cmd = exec.Command("/bin/sh", "-c", command)
-	}
+	// Invoke pipx directly via argv (no shell), so the tool name is always a single
+	// argument and can never be interpreted as shell or PowerShell syntax — even though
+	// every current caller passes a hard-coded literal, this keeps the exported helper safe.
+	cmd := exec.Command("pipx", "install", tool)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -1256,6 +1253,13 @@ func prepGcpIAMBrute(cfg *config.CloudConfig) (string, error) {
 	return fmt.Sprintf("gcp-iam-brute --access-token %s --project-id %s --service-account-email %s", token, cfg.GCPProject, email), nil
 }
 
+// psQuote escapes a value for safe inclusion inside a PowerShell single-quoted string
+// literal by doubling any single quote. Without this, a value containing a quote could
+// break out of the literal and inject PowerShell into the generated monkey365 script.
+func psQuote(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
 // runMonkey365 generates a temporary PowerShell script and executes it with pwsh.
 // monkey365 is a PowerShell module so it cannot be invoked as a plain CLI command;
 // instead we write a .ps1 that imports the module and calls Invoke-Monkey365 with
@@ -1281,16 +1285,16 @@ func runMonkey365(cfg *config.CloudConfig, filePath string) error {
 	psLines = append(psLines, `    Instance = 'Azure'`)
 	psLines = append(psLines, `    Collect  = 'All'`)
 	psLines = append(psLines, `    ExportTo = @("JSON","HTML")`)
-	psLines = append(psLines, fmt.Sprintf(`    OutDir   = '%s'`, filePath))
+	psLines = append(psLines, fmt.Sprintf(`    OutDir   = '%s'`, psQuote(filePath)))
 
 	if cfg.AzureTenantID != "" {
-		psLines = append(psLines, fmt.Sprintf(`    TenantID = '%s'`, cfg.AzureTenantID))
+		psLines = append(psLines, fmt.Sprintf(`    TenantID = '%s'`, psQuote(cfg.AzureTenantID)))
 	}
 	if cfg.AzureSubscription != "" {
-		psLines = append(psLines, fmt.Sprintf(`    Subscriptions = '%s'`, cfg.AzureSubscription))
+		psLines = append(psLines, fmt.Sprintf(`    Subscriptions = '%s'`, psQuote(cfg.AzureSubscription)))
 	}
 	if cfg.AzureClientID != "" {
-		psLines = append(psLines, fmt.Sprintf(`    ClientId = '%s'`, cfg.AzureClientID))
+		psLines = append(psLines, fmt.Sprintf(`    ClientId = '%s'`, psQuote(cfg.AzureClientID)))
 	}
 	if cfg.AzureClientSecret != "" {
 		// Avoid embedding the secret as a plain string in the script —

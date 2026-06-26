@@ -10,6 +10,15 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
+// safeMsfRHost reports whether target is safe to interpolate into an msfconsole -x RC
+// script. The -x value is a ';'-separated sequence of Metasploit commands, so a target
+// containing ';', whitespace, or shell/quote metacharacters (for example an unvalidated
+// line read from a targets file) could inject extra RC commands. Literal IPs and hostnames
+// contain none of these; anything that does is rejected rather than executed.
+func safeMsfRHost(target string) bool {
+	return target != "" && !strings.ContainsAny(target, " \t\r\n;&|$`'\"\\")
+}
+
 // DNS enumerates Domain Name System (53/TCP)
 func DNS() {
 	dir := utils.ProtocolDetected("DNS", utils.BaseDir)
@@ -21,6 +30,10 @@ func Finger() {
 	dir := utils.ProtocolDetected("Finger", utils.BaseDir)
 	commands.CallIndividualPortScanner(utils.Target, "79", dir+"finger_scan", checks.OptVVerbose)
 
+	if !safeMsfRHost(utils.Target) {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Skipping msfconsole for Finger: unsafe target value ", utils.Target)
+		return
+	}
 	msfArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/finger/finger_users;set rhost %s;run;exit", utils.Target)}
 	commands.CallRunTool(msfArgs, common.BuildOutputPath(dir, "msfconsole"), checks.OptVVerbose)
 }
@@ -129,6 +142,10 @@ func IPMI() {
 	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "623", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
 
 	// Metasploit
+	if !safeMsfRHost(utils.Target) {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Skipping msfconsole for IPMI: unsafe target value ", utils.Target)
+		return
+	}
 	msfArgs := []string{"msfconsole", "-q", "-x", fmt.Sprintf("use auxiliary/scanner/ipmi/ipmi_dumphashes; set rhosts %s; set output_john_file %sipmi_hashes.john; run; exit", utils.Target, dir)}
 	msfPath := fmt.Sprintf("%smsf_scanner.out", dir)
 	commands.CallRunTool(msfArgs, msfPath, checks.OptVVerbose)

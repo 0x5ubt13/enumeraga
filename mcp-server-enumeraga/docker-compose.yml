@@ -35,8 +35,11 @@ services:
       # service-principal auth for Azure.
       - ${ENUMERAGA_HOST_AZURE_DIR:-${HOME}/.azure}:${ENUMERAGA_HOST_AZURE_DIR:-${HOME}/.azure}
     ports:
-      # Expose port so existing n8n container can reach it via host network
-      - "9000:9000"
+      # Bind to loopback only. This server has no authentication and mounts the Docker
+      # socket, so reaching it is equivalent to host root — it must not be exposed beyond
+      # localhost. To share it with another host, put an authenticating reverse proxy in
+      # front rather than widening this binding.
+      - "127.0.0.1:9000:9000"
     restart: unless-stopped
     # Use host networking mode if possible, otherwise rely on mapped ports
     # network_mode: host

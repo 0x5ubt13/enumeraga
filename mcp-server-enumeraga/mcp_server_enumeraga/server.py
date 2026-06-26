@@ -243,50 +243,45 @@ def _chown_host_tree(path: Path) -> None:
         pass
 
 
-def _confine_to_host_output(requested: str) -> str:
-    """Confine a requested output_dir to a subfolder of HOST_OUTPUT_DIR.
+def _confine_under(base: Path, requested: str) -> Path:
+    """Resolve a requested output_dir to a safe sub-path under base.
 
-    In container mode the bind source handed to the sibling scan container is resolved
-    by the *host* daemon, so it must live inside the identity-mounted HOST_OUTPUT_DIR
-    tree — otherwise the output is written to an arbitrary host path (e.g. /app/...)
-    and appears lost. Any requested path is reduced to safe relative components
-    (anchors, '.', '..' and a redundant leading 'enumeraga_output' segment dropped) and
-    joined under HOST_OUTPUT_DIR, so a per-engagement subfolder name is preserved while
-    the output stays where the operator can find it.
+    The result becomes a docker `-v` bind source, so an unconfined value would let a caller
+    mount an arbitrary host path into the scan container (e.g. output_dir="/etc"). Each path
+    component is reduced to a safe relative segment: anchors, '.', '..' and a redundant
+    leading 'enumeraga_output' are dropped, and ':' and '\\' are stripped (':' is the docker
+    -v field separator and could otherwise reshape src:dest:opts). A final check guarantees
+    the result never escapes base.
     """
-    base = Path(HOST_OUTPUT_DIR)
-    parts = [
-        p for p in Path(requested).parts
-        if p not in ("/", "\\", ".", "..") and p != "enumeraga_output"
-    ]
+    parts: list[str] = []
+    for p in Path(requested).parts:
+        if p in ("/", "\\", ".", "..") or p == "enumeraga_output":
+            continue
+        p = p.replace(":", "").replace("\\", "")
+        if p:
+            parts.append(p)
     target = base.joinpath(*parts) if parts else base
-    # Defence in depth: never let a crafted path escape the mounted base.
+    # Defence in depth: never let a crafted path escape the base.
     if base != target and base not in target.parents:
         target = base
-    target.mkdir(parents=True, exist_ok=True)
-    _chown_host_tree(target)
-    return str(target)
+    return target
 
 
 def resolve_output_source(args: dict[str, Any]) -> str:
-    """Return the bind-mount source for the output directory.
+    """Return the bind-mount source for the output directory, always confined to a base.
 
-    In container mode (ENUMERAGA_HOST_OUTPUT_DIR set) the bind source must live inside
-    the identity-mounted host tree so the sibling container's daemon can resolve it: a
-    requested output_dir becomes a confined subfolder of it, otherwise the base is used
-    directly. On the host (stdio mode) the requested/default directory is used as-is.
+    Container mode (ENUMERAGA_HOST_OUTPUT_DIR set): the base is the identity-mounted host
+    results dir, so the sibling container's daemon can resolve the bind source. Host/stdio
+    mode: the base is <cwd>/enumeraga_output. In both modes a requested output_dir is only
+    ever a confined sub-folder of the base — it can never select an arbitrary host path.
     """
     requested = args.get("output_dir")
+    base = Path(HOST_OUTPUT_DIR) if HOST_OUTPUT_DIR else (Path.cwd() / "enumeraga_output")
+    target = _confine_under(base, requested) if requested else base
+    target.mkdir(parents=True, exist_ok=True)
     if HOST_OUTPUT_DIR:
-        if requested:
-            return _confine_to_host_output(requested)
-        base = Path(HOST_OUTPUT_DIR)
-        base.mkdir(parents=True, exist_ok=True)
-        _chown_host_tree(base)
-        return HOST_OUTPUT_DIR
-    output_dir = Path(requested or "./enumeraga_output").absolute()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return str(output_dir)
+        _chown_host_tree(target)
+    return str(target)
 
 
 def host_owner_env() -> list[str]:
@@ -768,7 +763,9 @@ def create_app(server: Server) -> Starlette:
             yield
 
     return Starlette(
-        debug=True,
+        # Never enable debug here: it renders tracebacks (with in-scope locals such as the
+        # forwarded client secret) into HTTP responses, which would leak to any caller.
+        debug=False,
         routes=[
             Route("/sse", endpoint=handle_sse),
             Route("/messages", endpoint=handle_post, methods=["POST"]),
