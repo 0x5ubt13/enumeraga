@@ -31,6 +31,15 @@ func getTimeoutSeconds() string {
 	return strconv.Itoa(utils.ToolTimeout * 60)
 }
 
+// toolContext derives a per-tool context carrying a wall-clock deadline of
+// ToolTimeout minutes from the given parent. Because it is derived from the
+// global context, cancelling the parent (e.g. Ctrl+C) still cancels the tool;
+// the deadline additionally guarantees a hard ceiling for tools that lack
+// their own timeout flag (hydra, snmpwalk, enum4linux-ng, etc.).
+func toolContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, time.Duration(utils.ToolTimeout)*time.Minute)
+}
+
 // WPEnumeration provides enumeration for WordPress
 func WPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
 	// Identify WordPress: Run curl
@@ -196,8 +205,11 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) err
 		time.Sleep(delay)
 	}
 
-	// Use CommandContext to allow cancellation via global context
-	ctx := utils.GetGlobalContext()
+	// Use CommandContext to allow cancellation via global context, plus a
+	// per-tool wall-clock deadline so tools without their own timeout flag
+	// cannot run indefinitely.
+	ctx, cancel := toolContext(utils.GetGlobalContext())
+	defer cancel()
 	cmd := exec.CommandContext(ctx, tool, cmdArgs...)
 
 	// Create pipes to capture the command's output
@@ -267,6 +279,11 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) err
 		// Check if the error was due to context cancellation (shutdown)
 		if ctx.Err() == context.Canceled {
 			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Tool '", tool, "' terminated due to shutdown")
+			return err
+		}
+		// Check if the error was due to the per-tool wall-clock deadline
+		if ctx.Err() == context.DeadlineExceeded {
+			utils.PrintCustomBiColourMsg("yellow", "red", "[!] Tool '", tool, fmt.Sprintf("' exceeded the %d-minute timeout and was terminated", utils.ToolTimeout))
 			return err
 		}
 		if tool == "nikto" || tool == "fping" {
