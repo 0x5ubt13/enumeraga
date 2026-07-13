@@ -1,6 +1,8 @@
 package portsIterator
 
 import (
+	"fmt"
+
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/protocols"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
@@ -8,7 +10,6 @@ import (
 
 // Run iterates through each port, groups by protocol and automates launching tools
 func Run(openPortsSlice []string) {
-	protocols.RunWhatWebForDetectedWebPorts(openPortsSlice)
 
 	for _, port := range openPortsSlice {
 		routePort(port, openPortsSlice)
@@ -41,8 +42,15 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.IMAP()
 
 	// Web
-	case "80", "443", "8080":
-		protocols.HTTP()
+	case "80", "8080":
+		if protocols.IsHTTPService( fmt.Sprintf("http://%s:%s", utils.Target, port)) { 
+			protocols.HTTP(port,"http")
+		}
+	case "443":
+		if protocols.IsHTTPSService( fmt.Sprintf("https://%s:%s", utils.Target, port)) {
+			protocols.HTTP(port,"https")
+		}
+
 
 	// SMB/NetBIOS
 	case "137", "138", "139", "445":
@@ -82,9 +90,22 @@ func routePort(port string, openPortsSlice []string) {
 	case "10000":
 		protocols.Port10000()
 
+	// Try Detect Service
 	default:
+		// check for HTTP/HTTPS service
+		if protocols.IsHTTPService( fmt.Sprintf("http://%s:%s", utils.Target, port)) { 
+			protocols.HTTP(port,"http")
+			return
+		}
+		if protocols.IsHTTPSService( fmt.Sprintf("https://%s:%s", utils.Target, port)) { 
+			protocols.HTTP(port,"https")
+			return
+		}
+
+		// Detection Failed
 		if *checks.OptVVerbose {
 			utils.PrintSafe("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
 		}
 	}
 }
+

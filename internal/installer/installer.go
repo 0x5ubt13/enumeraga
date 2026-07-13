@@ -101,6 +101,7 @@ func getKeyTools() []string {
 		"testssl",
 		"wafw00f",
 		"whatweb",
+		"gowitness",
 	}
 }
 
