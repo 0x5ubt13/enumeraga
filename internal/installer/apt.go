@@ -55,10 +55,7 @@ func DpkgIsPackageInstalled(pkg string) bool {
 	dpkg := exec.Command("dpkg", "-l", pkg)
 
 	dpkgErr := dpkg.Run() // dpkg returns 1 if pkg not installed
-	if dpkgErr == nil {
-		return true
-	}
-	return false
+	return dpkgErr == nil
 }
 
 // AptGetInstallCmd runs the apt-get install <tool> command

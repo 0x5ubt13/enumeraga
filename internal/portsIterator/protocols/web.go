@@ -38,9 +38,11 @@ func IsHTTPService(url string) bool {
 
 func IsHTTPSService(url string) bool {
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify:       true,
-		MinVersion:               tls.VersionTLS10, // Allow TLS 1.0 and above
-		MaxVersion:               tls.VersionTLS13,
+		// A recon tool must probe endpoints presenting self-signed or otherwise
+		// invalid certificates, so certificate verification is deliberately skipped.
+		InsecureSkipVerify: true, //nolint:gosec // scanner must reach hosts with invalid TLS certs
+		MinVersion:         tls.VersionTLS10, // allow TLS 1.0 and above
+		MaxVersion:         tls.VersionTLS13,
 	}
 
 	client := &http.Client{
@@ -99,17 +101,25 @@ func HTTP(port string, scheme string) {
 	// Nuclei
 	nucleiArgs := []string{
 		"nuclei",
-		"-u", fmt.Sprintf("%s:%s", utils.Target,port),
+		"-u", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port),
+		"-t", "http/",
 		"-silent",
+		"-no-interactivity",
 		"-no-color",
+		"-timeout", common.GetTimeoutSeconds(),
 	}
 	nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
 	commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 
 	// testssl with 10 minute timeout
-	if scheme == "https"{
-		testsslArgs := []string{"testssl", "--connect-timeout", "30", "--openssl-timeout", "30", fmt.Sprintf("https://%s:%s", utils.Target,port)}
-		testsslPath := fmt.Sprintf("%stestssl_%s.out", dir,port)
+	if scheme == "https" {
+		// The Kali package installs the binary as 'testssl.sh'; fall back to it if 'testssl' is absent.
+		testssl := "testssl"
+		if !utils.CheckToolExists("testssl") && utils.CheckToolExists("testssl.sh") {
+			testssl = "testssl.sh"
+		}
+		testsslArgs := []string{testssl, "--connect-timeout", "30", "--openssl-timeout", "30", fmt.Sprintf("https://%s:%s", utils.Target, port)}
+		testsslPath := fmt.Sprintf("%stestssl_%s.out", dir, port)
 		commands.CallRunTool(testsslArgs, testsslPath, checks.OptVVerbose)
 	}
 

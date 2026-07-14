@@ -13,7 +13,7 @@ import (
 
 // Consent asks for user consent to install a tool
 func Consent(tool string) rune {
-	output.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs follwing package ", tool , " to be installed")
+	output.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs the following package ", tool, " to be installed")
 	output.PrintCustomBiColourMsgNoNL("yellow", "cyan", "Do you want to install '", tool , "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
 
 	consent := bufio.NewScanner(os.Stdin)
