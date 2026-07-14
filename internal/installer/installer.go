@@ -13,8 +13,8 @@ import (
 
 // Consent asks for user consent to install a tool
 func Consent(tool string) rune {
-	output.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be installed")
-	output.PrintCustomBiColourMsg("yellow", "cyan", "Do you want to install '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
+	output.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs follwing package ", tool , " to be installed")
+	output.PrintCustomBiColourMsgNoNL("yellow", "cyan", "Do you want to install '", tool , "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
 
 	consent := bufio.NewScanner(os.Stdin)
 	consent.Scan()
@@ -78,6 +78,7 @@ func CheckToolExists(tool string) bool {
 // getKeyTools returns the list of key infrastructure scanning tools
 func getKeyTools() []string {
 	return []string{
+		"braa",
 		"cewl",
 		"enum4linux-ng",
 		"dirsearch",
@@ -86,22 +87,31 @@ func getKeyTools() []string {
 		"fping",
 		"hydra",
 		"ident-user-enum",
-		"impacket-rpcdump",
-		"msfconsole",
 		"nbtscan-unixwiz",
 		"nikto",
 		"nmap",
 		"nuclei",
 		"odat",
-		"responder-RunFinger",
+		"responder", //responder-RunFinger
 		"rusers",
+		"rwho",
 		"seclists",
 		"smbclient",
 		"ssh-audit",
-		"testssl",
+		"testssl.sh",
 		"wafw00f",
 		"whatweb",
 		"gowitness",
+		"netexec",
+		"ldap-utils", // ldapsearch
+		"nfs-client", // showmount
+		"rsync",
+		"openssl",
+		"python3-impacket", // impacket-rpcdump
+		"onesixtyone",
+		"snmp", // snmpwalk
+		"smbmap",
+		"metasploit-framework", // msfconsole
 	}
 }
 
@@ -153,7 +163,8 @@ func InstallMissingTools(kind rune, optInstall *bool) {
 			}
 		}
 
-		if CheckToolExists(tool) {
+		// check if tool is installed 
+		if DpkgIsPackageInstalled(tool) {
 			continue
 		}
 
@@ -231,3 +242,4 @@ func printOSCPConsentNotGiven(tool string) {
 		output.Red(". Aborting..."),
 	)
 }
+

@@ -51,22 +51,20 @@ func AptGetUpdateCmd() {
 	fmt.Printf("%s\n", output.Green("Done!"))
 }
 
+func DpkgIsPackageInstalled(pkg string) bool {
+	dpkg := exec.Command("dpkg", "-l", pkg)
+
+	dpkgErr := dpkg.Run() // dpkg returns 1 if pkg not installed
+	if dpkgErr == nil {
+		return true
+	}
+	return false
+}
+
 // AptGetInstallCmd runs the apt-get install <tool> command
 func AptGetInstallCmd(tool string) {
 	// Moving to go due to import cycle
 	PrintInstallingTool(tool)
-
-	// Map tool names to their package names
-	packageMap := map[string]string{
-		"finger":              "nfs-common",
-		"msfconsole":          "metasploit-framework",
-		"responder-RunFinger": "responder",
-		"impacket-rpcdump":    "python3-impacket",
-	}
-
-	if pkg, exists := packageMap[tool]; exists {
-		tool = pkg
-	}
 
 	aptGetInstall := exec.Command("apt", "install", "-y", tool)
 
