@@ -141,7 +141,8 @@ func printToolSuccess(command, tool, filePath string, completed, total int) {
 	}
 	runningTools := utils.ToolRegistry.GetRunningTools()
 
-	progressStr := fmt.Sprintf("[%d/%d]", completed, total)
+	//progressStr := fmt.Sprintf("[%d/%d]", completed, total)
+	progressPerc := fmt.Sprintf("[%d%%]", (completed*100)/total)
 
 	// If command (port) is not empty, show it in the message
 	var toolDesc string
@@ -151,20 +152,16 @@ func printToolSuccess(command, tool, filePath string, completed, total int) {
 		toolDesc = tool
 	}
 
-	utils.PrintCustomBiColourMsg("green", "cyan",
-		fmt.Sprintf("[+] Done! '%s' finished successfully %s",
-			toolDesc, progressStr))
-
-	utils.PrintCustomBiColourMsg("yellow", "cyan",
-		fmt.Sprintf("    Shortcut: less -R '%s'", filePath))
+	utils.PrintCustomBiColourMsg("green", "cyan", fmt.Sprintf("[+] Done! '%s' finished successfully",toolDesc))
+	utils.PrintCustomBiColourMsg("yellow", "cyan", fmt.Sprintf("    Shortcut: less -R '%s'", filePath))
 
 	n := len(runningTools)
 	if n > 0 && n <= 10 {
 		utils.PrintCustomBiColourMsg("cyan", "white",
-			fmt.Sprintf("    Still running: %s", strings.Join(runningTools, ", ")))
+			fmt.Sprintf("%s Still running: %s", progressPerc, strings.Join(runningTools, ", ")))
 	} else if n > 10 {
 		utils.PrintCustomBiColourMsg("cyan", "white",
-			fmt.Sprintf("    Still running: %d tools", n))
+			fmt.Sprintf("%s Still running: %d tools", progressPerc, n))
 	}
 }
 
@@ -286,7 +283,7 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) err
 			utils.PrintCustomBiColourMsg("yellow", "red", "[!] Tool '", tool, fmt.Sprintf("' exceeded the %d-minute timeout and was terminated", utils.ToolTimeout))
 			return err
 		}
-		if tool == "nikto" || tool == "fping" {
+		if tool == "nikto" || tool == "fping" || tool == "ssh-audit" {
 			// Nikto and fping don't have a clean exit
 			// We return nil as success for these tools
 			return nil
