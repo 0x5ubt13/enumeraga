@@ -69,6 +69,20 @@ func PrintCustomBiColourMsg(dominantColour, secondaryColour string, text ...stri
 	}
 	fmt.Printf("\n")
 }
+func PrintCustomBiColourMsgNoNL(dominantColour, secondaryColour string, text ...string) {
+	printer := NewPrinter()
+
+	for i, str := range text {
+		var colorFunc func(...interface{}) string
+		if i%2 == 0 || i == 0 {
+			colorFunc = printer.getColor(dominantColour)
+		} else {
+			colorFunc = printer.getColor(secondaryColour)
+		}
+		fmt.Printf("%s", colorFunc(str))
+	}
+}
+
 
 // PrintBanner displays the enumeraga ASCII art banner with version information.
 func PrintBanner(version string) {
