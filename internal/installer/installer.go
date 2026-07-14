@@ -101,6 +101,7 @@ func getKeyTools() []string {
 		"testssl.sh",
 		"wafw00f",
 		"whatweb",
+		"gowitness",
 		"netexec",
 		"ldap-utils", // ldapsearch
 		"nfs-client", // showmount

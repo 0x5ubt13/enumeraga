@@ -40,6 +40,15 @@ func ProtocolDetected(protocol, baseDir string) string {
 	}
 	return protocolDir
 }
+func ProtocolDetected2(protocol, port string, baseDir string) string {
+	output.PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected on port ", port)
+
+	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
+	if _, err := CustomMkdir(protocolDir); err != nil {
+		output.PrintCustomBiColourMsg("red", "cyan", "[-] Error: ", fmt.Sprintf("Error creating protocol directory: %v", err))
+	}
+	return protocolDir
+}
 
 // writeLineTo creates (or truncates) filePath and writes a single line to it.
 // The caller receives any error; close errors are printed directly.

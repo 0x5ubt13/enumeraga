@@ -200,6 +200,10 @@ func ProtocolDetected(protocol, baseDir string) string {
 	return files.ProtocolDetected(protocol, baseDir)
 }
 
+func ProtocolDetected2(protocol, port string, baseDir string) string {
+	return files.ProtocolDetected2(protocol, port, baseDir)
+}
+
 func WriteTextToFile(filePath string, message string) error {
 	return files.WriteTextToFile(filePath, message)
 }
