@@ -30,8 +30,8 @@ func MSSQL() {
 	commands.CallIndividualPortScannerWithNSEScriptsAndScriptArgs(utils.Target, "1433", nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs, checks.OptVVerbose)
 
 	if *checks.OptBrute {
-		bruteCMEArgs := []string{"crackmapexec", "mssql", utils.Target, "-u", utils.UsersList, "-p", utils.DarkwebTop1000}
-		bruteCMEPath := fmt.Sprintf("%scme_brute.out", dir)
+		bruteCMEArgs := []string{"netexec", "mssql", utils.Target, "-u", utils.UsersList, "-p", utils.DarkwebTop1000}
+		bruteCMEPath := fmt.Sprintf("%snetexec_brute.out", dir)
 		commands.CallRunTool(bruteCMEArgs, bruteCMEPath, checks.OptVVerbose)
 	}
 }

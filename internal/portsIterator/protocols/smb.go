@@ -23,14 +23,14 @@ func SMB() {
 	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "137", nmapUDPOutputFile, "nbstat.nse", checks.OptVVerbose)         // UDP
 
 	// CME
-	cmeArgs := []string{"crackmapexec", "smb", "-u", "''", "-p", "''", utils.Target}
-	cmePath := fmt.Sprintf("%scme_anon.out", dir)
+	cmeArgs := []string{"netexec", "smb", "-u", "''", "-p", "''", utils.Target}
+	cmePath := fmt.Sprintf("%snetexec_anon.out", dir)
 	commands.CallRunTool(cmeArgs, cmePath, checks.OptVVerbose)
 
 	if *checks.OptBrute {
 		// CME BruteForcing
-		cmeBfArgs := []string{"crackmapexec", "smb", "-u", utils.UsersList, "-p", utils.DarkwebTop1000, "--shares", "--sessions", "--disks", "--loggedon-users", "--users", "--groups", "--computers", "--local-groups", "--pass-pol", "--rid-brute", utils.Target}
-		cmeBfPath := fmt.Sprintf("%scme_bf.out", dir)
+		cmeBfArgs := []string{"netexec", "smb", "-u", utils.UsersList, "-p", utils.DarkwebTop1000, "--shares", "--sessions", "--disks", "--loggedon-users", "--users", "--groups", "--computers", "--local-groups", "--pass-pol", "--rid-brute", utils.Target}
+		cmeBfPath := fmt.Sprintf("%snetexec_bf.out", dir)
 		commands.CallRunTool(cmeBfArgs, cmeBfPath, checks.OptVVerbose)
 	}
 

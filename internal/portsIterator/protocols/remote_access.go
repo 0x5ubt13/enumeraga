@@ -1,6 +1,8 @@
 package protocols
 
 import (
+	"fmt"
+
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
@@ -10,7 +12,15 @@ import (
 // SSH enumerates Secure Shell Protocol (22/TCP)
 func SSH() {
 	dir := utils.ProtocolDetected("SSH", utils.BaseDir)
+
+	// nmap with nse
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "22", dir+"ssh_scan", "ssh-* and not brute", checks.OptVVerbose)
+	// ssh-audit
+	sshAuditPath := fmt.Sprintf("%sssh_audit_22.out", dir)
+	sshAuditArgs := []string{"ssh-audit", utils.Target}
+	commands.CallRunTool(sshAuditArgs, sshAuditPath, checks.OptVVerbose)
+
+	// hydra
 	common.RunHydraBrute("ssh", dir)
 }
 

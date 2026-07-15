@@ -101,10 +101,9 @@ func HTTP(port string, scheme string) {
 	// Nuclei
 	nucleiArgs := []string{
 		"nuclei",
-		"-u", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port),
+		"-target", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port),
 		"-t", "http/",
 		"-silent",
-		"-no-interactivity",
 		"-no-color",
 		"-timeout", common.GetTimeoutSeconds(),
 	}
