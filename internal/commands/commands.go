@@ -141,8 +141,10 @@ func printToolSuccess(command, tool, filePath string, completed, total int) {
 	}
 	runningTools := utils.ToolRegistry.GetRunningTools()
 
-	//progressStr := fmt.Sprintf("[%d/%d]", completed, total)
-	progressPerc := fmt.Sprintf("[%d%%]", (completed*100)/total)
+	progressPerc := "[--%]"
+	if total > 0 {
+		progressPerc = fmt.Sprintf("[%d%%]", (completed*100)/total)
+	}
 
 	// If command (port) is not empty, show it in the message
 	var toolDesc string
@@ -152,7 +154,7 @@ func printToolSuccess(command, tool, filePath string, completed, total int) {
 		toolDesc = tool
 	}
 
-	utils.PrintCustomBiColourMsg("green", "cyan", fmt.Sprintf("[+] Done! '%s' finished successfully",toolDesc))
+	utils.PrintCustomBiColourMsg("green", "cyan", fmt.Sprintf("[+] Done! '%s' finished successfully", toolDesc))
 	utils.PrintCustomBiColourMsg("yellow", "cyan", fmt.Sprintf("    Shortcut: less -R '%s'", filePath))
 
 	n := len(runningTools)

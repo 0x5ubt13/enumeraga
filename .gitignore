@@ -25,6 +25,10 @@ go.work
 .idea/*
 .vscode/*
 .*
+# Keep tracking project config that lives in dot-paths, despite the broad .* rule above
+!.github/
+!.gitignore
+!.golangci.yml
 docker_build_test.sh
 docker_infra_build_test.sh
 
