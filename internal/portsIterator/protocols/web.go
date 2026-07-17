@@ -81,7 +81,7 @@ func HTTP(port string, scheme string) {
 	dir := utils.ProtocolDetected2("HTTP", port, utils.BaseDir)
 
 	// nmap + nse
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"http_scan_"+port, "version,discovery,default", checks.OptVVerbose)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"http_scan_"+port, "http-* and not (brute or fuzzer or dos)", checks.OptVVerbose)
 
 	// WhatWeb
 	whatWebArgs := []string{"whatweb", "-a", "3", "-v", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port)}
