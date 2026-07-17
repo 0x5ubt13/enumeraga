@@ -258,30 +258,43 @@ func multiTarget(targetsFile *string) {
 			continue
 		}
 
-		// Try to resolve hostname/URL to IP if it's not already an IP
-		resolvedTarget := target
-		if ip := strings.TrimSpace(target); ip != "" {
-			// Check if it's not already an IP address
-			if net.ParseIP(ip) == nil {
-				// Try to resolve as hostname/URL
-				if resolvedIP, err := utils.ResolveHostToIP(ip); err == nil {
-					utils.PrintCustomBiColourMsg("green", "cyan", "[+] Resolved hostname '", target, "' to IP: ", resolvedIP)
-					resolvedTarget = resolvedIP
-				} else {
-					utils.PrintCustomBiColourMsg("red", "yellow", "[-] Failed to resolve hostname '", target, "': ", err.Error())
-					continue
-				}
+		// Check if target is a CIDR IP range (IPv4 or IPv6)
+		_, _, err := net.ParseCIDR(target)
+		if err == nil {
+			utils.PrintCustomBiColourMsg("red", "yellow", "[!] Target validation failed for '",target,"' : CIDR detected ")
+			continue 
+		}
+
+		// Check if target have '/' char && valid netmask
+		parts := strings.Split(target, "/")
+		if len(parts) == 2 {
+			// Check if netmask
+			netmask := net.ParseIP(parts[1])
+			if netmask != nil {
+				utils.PrintCustomBiColourMsg("red", "yellow", "[!] Target validation failed for '",target,"' : netmask detected ")
+				continue
+			}
+		}
+
+		// Check if it's not already an IP address
+		if net.ParseIP(target) == nil {
+			// Try to resolve as hostname/URL
+			if resolvedIP, err := utils.ResolveHostToIP(target); err == nil {
+				utils.PrintCustomBiColourMsg("green", "cyan", "[+] Resolved hostname '", target, "' to IP: ", resolvedIP)
+			} else {
+				utils.PrintCustomBiColourMsg("red", "yellow", "[!] Failed to resolve hostname '", target, "': ", err.Error())
+				continue
 			}
 		}
 
 		// Launch enumeration for the target
-		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Attacking target ", fmt.Sprint(i+1), " of ", fmt.Sprint(lines), ": ", resolvedTarget)
-		err := singleTarget(resolvedTarget, targetsBaseFilePath)
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Attacking target ", fmt.Sprint(i+1), " of ", fmt.Sprint(lines), ": ", target)
+		err = singleTarget(target, targetsBaseFilePath)
 		if err != nil {
-			utils.PrintCustomBiColourMsg("red", "yellow", "[-] No open ports were found in host '", resolvedTarget, "'. Aborting the rest of scans for this host")
+			utils.PrintCustomBiColourMsg("red", "yellow", "[-] No open ports were found in host '", target, "'. Aborting the rest of scans for this host")
 			continue
 		}
 
-		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", resolvedTarget, "' were successfully parsed.")
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Done! All well-known ports included in Enumeraga for '", target, "' were successfully parsed.")
 	}
 }

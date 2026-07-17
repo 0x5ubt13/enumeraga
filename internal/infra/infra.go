@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/pborman/getopt/v2"
@@ -76,7 +77,7 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 	// Call check 6
 	checkSix(OptOutput, OptQuiet, OptVVerbose)
 
-	// Check 8: Determine whether it is a single target or multi-target and return number of lines
+	// Check 7: Determine whether it is a single target or multi-target and return number of lines
 	lines, err := checkSeven(OptTarget)
 	return lines, err
 
@@ -128,9 +129,27 @@ func checkSix(OptOutput *string, OptQuiet, OptVVerbose *bool) {
 
 // checkSeven finishes this section by returning number of lines if multi-target or 0 if single-target
 func checkSeven(OptTarget *string) (int, error) {
-	targetInput := net.ParseIP(*OptTarget)
+
+	// Check if target is a CIDR IP range (IPv4 or IPv6)
+	_, _, err := net.ParseCIDR(*OptTarget)
+	if err == nil {
+		utils.ErrorMsg(fmt.Sprintf("Target validation failed: %s CIDR provided", *OptTarget))
+		return 0, fmt.Errorf("target validation failed ")
+	}
+
+	// Check if target have '/' char && valid netmask
+	parts := strings.Split(*OptTarget, "/")
+	if len(parts) == 2 {
+		// Check if netmask
+		netmask := net.ParseIP(parts[1])
+		if netmask != nil {
+			utils.ErrorMsg(fmt.Sprintf("Target validation failed: %s netmask detected", netmask))
+			return 0, fmt.Errorf("target validation failed ")
+		}
+	}
 
 	// Check if it's a valid IP address (IPv4 or IPv6)
+	targetInput := net.ParseIP(*OptTarget)
 	if targetInput != nil {
 		// Valid IP - single target mode
 		return 0, nil
@@ -141,8 +160,6 @@ func checkSeven(OptTarget *string) (int, error) {
 	if err == nil {
 		// Successfully resolved hostname to IP
 		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Resolved hostname '", *OptTarget, "' to IP: ", resolvedIP)
-		// Update OptTarget to use the resolved IP for scanning
-		*OptTarget = resolvedIP
 		return 0, nil
 	}
 
