@@ -2,11 +2,11 @@
 
 # Enumeraga - Hack your initial scans
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/0x5ubt13/enumeraga)](https://goreportcard.com/report/github.com/0x5ubt13/enumeraga)
-[![Maintainability](https://api.codeclimate.com/v1/badges/a26c3b3db97f4a3fdeef/maintainability)](https://codeclimate.com/github/0x5ubt13/enumeraga/maintainability)
-[![GoDoc](https://godoc.org/github.com/0x5ubt13/enumeraga?status.svg)](https://godoc.org/github.com/0x5ubt13/enumeraga)
+[![Go Tests](https://github.com/0x5ubt13/enumeraga/actions/workflows/test.yml/badge.svg)](https://github.com/0x5ubt13/enumeraga/actions/workflows/test.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/0x5ubt13/enumeraga.svg)](https://pkg.go.dev/github.com/0x5ubt13/enumeraga)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/0x5ubt13/enumeraga)](https://golang.org)
+[![Latest Release](https://img.shields.io/github/v/release/0x5ubt13/enumeraga?sort=semver)](https://github.com/0x5ubt13/enumeraga/releases/latest)
 ![License](https://img.shields.io/github/license/0x5ubt13/enumeraga?color=blue)
-[![Go Version](https://img.shields.io/badge/Go-1.23+-blue.svg)](https://golang.org)
 
 Automatic multiprocess Linux CLI tool that aims for a quick enumeration wrapping pentesting tools. Scan your target in 20 seconds! This is an attempt to develop a rich tool that leverages the nice features Go has to offer. Now available in containerised versions for both infrastructure and cloud scanning!
 
