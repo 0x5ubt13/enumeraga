@@ -17,6 +17,12 @@ jobs:
   build-infra:
     name: Build Infrastructure Image
     runs-on: ubuntu-latest
+    # Skip on pull requests from forks: untrusted fork code must never build here
+    # (it can poison the shared GHA cache and would run with our runner/secrets
+    # context). Same-repo PRs, branch pushes and tags still build normally.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       packages: write
@@ -86,6 +92,12 @@ jobs:
   build-cloud:
     name: Build Cloud Image
     runs-on: ubuntu-latest
+    # Skip on pull requests from forks: untrusted fork code must never build here
+    # (it can poison the shared GHA cache and would run with our runner/secrets
+    # context). Same-repo PRs, branch pushes and tags still build normally.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       packages: write
@@ -155,7 +167,11 @@ jobs:
     name: Test Docker Images
     needs: [build-infra, build-cloud]
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # Only test images built by same-repo PRs; fork PRs skip the build entirely
+    # (see build-infra/build-cloud) so there is nothing to test.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Checkout code
