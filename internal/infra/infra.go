@@ -158,8 +158,10 @@ func checkSeven(OptTarget *string) (int, error) {
 	// Not a valid IP - try to resolve as hostname/URL
 	resolvedIP, err := utils.ResolveHostToIP(*OptTarget)
 	if err == nil {
-		// Successfully resolved hostname to IP
+		// Successfully resolved hostname to IP; rewrite target to the IP so the
+		// rest of the scan operates on the resolved address rather than the hostname.
 		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Resolved hostname '", *OptTarget, "' to IP: ", resolvedIP)
+		*OptTarget = resolvedIP
 		return 0, nil
 	}
 
