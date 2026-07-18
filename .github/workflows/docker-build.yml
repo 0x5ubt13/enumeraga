@@ -5,8 +5,20 @@ on:
     branches: [ main, develop ]
     tags:
       - 'v*.*.*'
+    # Docs-only changes never affect the built images, so skip the (slow,
+    # multi-arch) image build+push for them. Tag pushes are unaffected.
+    paths-ignore:
+      - '**.md'
+      - 'img/**'
+      - 'docs/**'
+      - 'LICENSE'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'img/**'
+      - 'docs/**'
+      - 'LICENSE'
 
 env:
   REGISTRY: docker.io

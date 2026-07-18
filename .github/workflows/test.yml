@@ -3,8 +3,19 @@ name: Go Tests
 on:
   push:
     branches: [ main, develop ]
+    # Docs-only changes can't affect Go tests, linting or the binary build.
+    paths-ignore:
+      - '**.md'
+      - 'img/**'
+      - 'docs/**'
+      - 'LICENSE'
   pull_request:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'img/**'
+      - 'docs/**'
+      - 'LICENSE'
 
 jobs:
   test:
