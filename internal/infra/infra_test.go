@@ -127,10 +127,12 @@ func TestCheckSeven(t *testing.T) {
 				t.Errorf("checkSeven() = %d, want %d", result, tt.wantLines)
 			}
 
-			// For hostname resolution tests, verify the target was updated to IP
+			// For hostname resolution tests, verify the target is preserved as the
+			// hostname. It must not be rewritten to the resolved IP, so that web
+			// tools send the correct Host header for name-based virtual hosts.
 			if tt.name == "resolvable hostname" {
-				if targetCopy == tt.target {
-					t.Errorf("checkSeven() did not update target from hostname to IP")
+				if targetCopy != tt.target {
+					t.Errorf("checkSeven() rewrote target from hostname %q to %q; hostname should be preserved", tt.target, targetCopy)
 				}
 			}
 		})

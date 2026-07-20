@@ -158,10 +158,12 @@ func checkSeven(OptTarget *string) (int, error) {
 	// Not a valid IP - try to resolve as hostname/URL
 	resolvedIP, err := utils.ResolveHostToIP(*OptTarget)
 	if err == nil {
-		// Successfully resolved hostname to IP; rewrite target to the IP so the
-		// rest of the scan operates on the resolved address rather than the hostname.
+		// Successfully resolved hostname to IP. Keep the hostname as the target:
+		// web tools (nikto, whatweb, dirsearch, etc.) must send the correct Host
+		// header so name-based virtual hosts are scanned as the user intended,
+		// and TLS tools rely on the hostname for SNI. Resolution is used only to
+		// confirm the target is reachable before proceeding.
 		utils.PrintCustomBiColourMsg("green", "cyan", "[+] Resolved hostname '", *OptTarget, "' to IP: ", resolvedIP)
-		*OptTarget = resolvedIP
 		return 0, nil
 	}
 
