@@ -20,14 +20,14 @@ func safeMsfRHost(target string) bool {
 }
 
 // DNS enumerates Domain Name System (53/TCP)
-func DNS() {
-	dir := utils.ProtocolDetected("DNS", utils.BaseDir)
+func DNS(port string) {
+	dir := utils.ProtocolDetected2("DNS", port, utils.BaseDir)
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "53", dir+"dns_scan", "*dns*", checks.OptVVerbose)
 }
 
 // Finger enumerates Finger (79/TCP)
-func Finger() {
-	dir := utils.ProtocolDetected("Finger", utils.BaseDir)
+func Finger(port string) {
+	dir := utils.ProtocolDetected2("Finger", port, utils.BaseDir)
 	commands.CallIndividualPortScanner(utils.Target, "79", dir+"finger_scan", checks.OptVVerbose)
 
 	if !safeMsfRHost(utils.Target) {
@@ -39,15 +39,15 @@ func Finger() {
 }
 
 // RPC enumerates Remote Procedure Call Protocol (111/TCP)
-func RPC() {
-	dir := utils.ProtocolDetected("RPC", utils.BaseDir)
+func RPC(port string) {
+	dir := utils.ProtocolDetected2("RPC", port, utils.BaseDir)
 	nmapOutputFile := dir + "rpc_scan"
 	commands.CallIndividualPortScanner(utils.Target, "111", nmapOutputFile, checks.OptVVerbose)
 }
 
 // Ident enumerates Ident Protocol (113/TCP)
-func Ident(openPortsSlice []string) {
-	dir := utils.ProtocolDetected("Ident", utils.BaseDir)
+func Ident(port string, openPortsSlice []string) {
+	dir := utils.ProtocolDetected2("Ident", port, utils.BaseDir)
 	nmapOutputFile := dir + "ident_scan"
 	commands.CallIndividualPortScanner(utils.Target, "113", nmapOutputFile, checks.OptVVerbose)
 
@@ -59,8 +59,8 @@ func Ident(openPortsSlice []string) {
 }
 
 // MSRPC enumerates Microsoft's Remote Procedure Call Protocol (135,593/TCP)
-func MSRPC() {
-	dir := utils.ProtocolDetected("MSRPC", utils.BaseDir)
+func MSRPC(port string) {
+	dir := utils.ProtocolDetected2("MSRPC", port, utils.BaseDir)
 	nmapOutputFile := dir + "msrpc_scan"
 	commands.CallIndividualPortScanner(utils.Target, "135,593", nmapOutputFile, checks.OptVVerbose)
 
@@ -74,11 +74,11 @@ func MSRPC() {
 }
 
 // SNMP enumerates Simple Network Management Protocol (161-162,10161-10162/UDP)
-func SNMP() {
+func SNMP(port string) {
 	if utils.IsVisited("snmp") {
 		return
 	}
-	dir := utils.ProtocolDetected("SNMP", utils.BaseDir)
+	dir := utils.ProtocolDetected2("SNMP", port, utils.BaseDir)
 
 	// Nmap
 	nmapOutputFile := dir + "snmp_scan"
@@ -102,11 +102,11 @@ func SNMP() {
 }
 
 // RServices enumerates Berkeley R-services (512-514/TCP)
-func RServices() {
+func RServices(port string) {
 	if utils.IsVisited("rsvc") {
 		return
 	}
-	dir := utils.ProtocolDetected("RServices", utils.BaseDir)
+	dir := utils.ProtocolDetected2("RServices", port, utils.BaseDir)
 
 	// Nmap
 	nmapOutputFile := dir + "rservices_scan"
@@ -133,8 +133,8 @@ func RServices() {
 }
 
 // IPMI enumerates Intelligent Platform Management Interface Protocol (623/TCP)
-func IPMI() {
-	dir := utils.ProtocolDetected("IPMI", utils.BaseDir)
+func IPMI(port string) {
+	dir := utils.ProtocolDetected2("IPMI", port, utils.BaseDir)
 	nmapOutputFile := dir + "ipmi_scan"
 
 	// Nmap
@@ -152,8 +152,8 @@ func IPMI() {
 }
 
 // Port10000 enumerates port 10000/TCP - commonly Webmin or NDMP
-func Port10000() {
-	dir := utils.ProtocolDetected("port_10000", utils.BaseDir)
+func Port10000(port string) {
+	dir := utils.ProtocolDetected2("port_10000", port, utils.BaseDir)
 	nmapOutputFile := dir + "port_10000_scan"
 	// Use service version detection to identify Webmin vs NDMP vs other
 	commands.CallIndividualPortScanner(utils.Target, "10000", nmapOutputFile, checks.OptVVerbose)

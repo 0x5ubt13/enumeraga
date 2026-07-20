@@ -196,9 +196,9 @@ func CustomMkdir(name string) (string, error) {
 	return files.CustomMkdir(name)
 }
 
-func ProtocolDetected(protocol, baseDir string) string {
-	return files.ProtocolDetected(protocol, baseDir)
-}
+//func ProtocolDetected(protocol, baseDir string) string {
+//	return files.ProtocolDetected(protocol, baseDir)
+//}
 
 func ProtocolDetected2(protocol, port string, baseDir string) string {
 	return files.ProtocolDetected2(protocol, port, baseDir)

@@ -10,25 +10,42 @@ import (
 )
 
 // MySQL enumerates MySQL server (3306/TCP)
-func MySQL() {
-	dir := utils.ProtocolDetected("MYSQL", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3306", dir+"mysql_scan", "mysql*", checks.OptVVerbose)
+func MySQL(port string) {
+	dir := utils.ProtocolDetected2("MYSQL", port, utils.BaseDir)
+
+	// Nmap with NSE
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"mysql_scan_"+port, "mysql-* and not (brute or fuzzer or dos)", checks.OptVVerbose)
+
+	// Nuclei
+        nucleiArgs := []string{
+                "nuclei",
+                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+                "-tags", "mysql",
+                "-timeout", common.GetTimeoutSeconds(),
+        }
+        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
+        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+
+	// Hydra
 	common.RunHydraBrute("mysql", dir)
 }
 
 // MSSQL enumerates Microsoft's SQL Server (1433/TCP)
-func MSSQL() {
-	dir := utils.ProtocolDetected("MSSQL", utils.BaseDir)
-	nmapOutputFile := dir + "mssql"
+func MSSQL(port string) {
+	dir := utils.ProtocolDetected2("MSSQL",port ,utils.BaseDir)
+
+	// Nmap with NSE
+	nmapOutputFile := dir + "mssql_scan_" + port
 	nmapNSEScripts := "ms-sql-info,ms-sql-empty-password,ms-sql-xp-cmdshell,ms-sql-config,ms-sql-ntlm-info,ms-sql-tables,ms-sql-hasdbaccess,ms-sql-dac,ms-sql-dump-hashes"
 	nmapNSEScriptsArgs := map[string]string{
-		"mssql.instance-port": "1433",
+		"mssql.instance-port": port,
 		"mssql.username":      "sa",
 		"mssql.password":      "",
 		"mssql.instance-name": "MSSQLSERVER",
 	}
-	commands.CallIndividualPortScannerWithNSEScriptsAndScriptArgs(utils.Target, "1433", nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs, checks.OptVVerbose)
+	commands.CallIndividualPortScannerWithNSEScriptsAndScriptArgs(utils.Target, port, nmapOutputFile, nmapNSEScripts, nmapNSEScriptsArgs, checks.OptVVerbose)
 
+	// netexec brute
 	if *checks.OptBrute {
 		bruteCMEArgs := []string{"netexec", "mssql", utils.Target, "-u", utils.UsersList, "-p", utils.DarkwebTop1000}
 		bruteCMEPath := fmt.Sprintf("%snetexec_brute.out", dir)
@@ -37,21 +54,24 @@ func MSSQL() {
 }
 
 // TNS enumerates Oracle's Transparent Network Substrate (1521/TCP)
-func TNS() {
-	dir := utils.ProtocolDetected("TNS", utils.BaseDir)
-	nmapOutputFile := dir + "tns_scan"
-	nmapNSEScripts := "oracle-sid-brute"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "1521", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+func TNS(port string) {
+	dir := utils.ProtocolDetected2("TNS", port, utils.BaseDir)
+	nmapOutputFile := dir + "tns_scan_" + port
+	nmapNSEScripts := "oracle-tns-version,oracle-sid-brute"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+	// Nuclei
+        nucleiArgs := []string{
+                "nuclei",
+                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+                "-tags", "oracle",
+                "-timeout", common.GetTimeoutSeconds(),
+        }
+        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
+        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 
 	// ODAT - Oracle Database Attacking Tool
-	if utils.CheckToolExists("odat") {
-		odatArgs := []string{"odat", "all", "-s", utils.Target}
-		odatPath := fmt.Sprintf("%sodat.out", dir)
-		commands.CallRunTool(odatArgs, odatPath, checks.OptVVerbose)
-	} else {
-		// Provide manual command if odat not installed
-		startSentence := "[!] ODAT not found. Run this manually: '"
-		midSentence := fmt.Sprintf("odat all --output-file %sodat.out -s %s", dir, utils.Target)
-		utils.PrintCustomBiColourMsg("yellow", "cyan", startSentence, midSentence, "'")
-	}
+	odatArgs := []string{"odat", "all", "-s", utils.Target, "-p", port}
+	odatPath := fmt.Sprintf("%sodat_%s.out", dir, port)
+	commands.CallRunTool(odatArgs, odatPath, checks.OptVVerbose)
 }
