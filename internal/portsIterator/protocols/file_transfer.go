@@ -10,21 +10,21 @@ import (
 )
 
 // FTP enumerates File Transfer Protocol (20-21/TCP)
-func FTP() {
+func FTP(port string) {
 	if utils.IsVisited("ftp") {
 		return
 	}
 
-	dir := utils.ProtocolDetected("FTP", utils.BaseDir)
+	dir := utils.ProtocolDetected2("FTP", port, utils.BaseDir)
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "20,21", dir+"ftp_scan", "ftp-* and not brute", checks.OptVVerbose)
 	common.RunHydraBrute("ftp", dir)
 }
 
 // Rsync enumerates Remote Synchronisation protocol (873/TCP)
-func Rsync() {
-	dir := utils.ProtocolDetected("Rsync", utils.BaseDir)
+func Rsync(port string) {
+	dir := utils.ProtocolDetected2("Rsync", port, utils.BaseDir)
 	nmapOutputFile := dir + "rsync_scan"
-	commands.CallIndividualPortScanner(utils.Target, "873", nmapOutputFile, checks.OptVVerbose)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "873", nmapOutputFile, "rsync-list-modules", checks.OptVVerbose)
 
 	// Netcat
 	ncArgs := []string{"nc", "-nv", utils.Target, "873"}
@@ -40,8 +40,8 @@ func Rsync() {
 }
 
 // NFS enumerates Network File System Protocol (2049/TCP)
-func NFS() {
-	dir := utils.ProtocolDetected("NFS/", utils.BaseDir)
+func NFS(port string) {
+	dir := utils.ProtocolDetected2("NFS", port,  utils.BaseDir)
 	nmapOutputFile := dir + "nfs_scan"
 	nmapNSEScripts := "nfs-ls,nfs-showmount,nfs-statfs"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "2049", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)

@@ -8,36 +8,48 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
-// SMTP enumerates Simple Mail Transfer Protocol (25,465,587/TCP)
-func SMTP() {
+// SMTP enumerates Simple Mail Transfer Protocol 
+func SMTP(port string) {
 	if utils.IsVisited("smtp") {
 		return
 	}
+	smtpDir := utils.ProtocolDetected2("SMTP", port, utils.BaseDir)
 
-	smtpDir := utils.ProtocolDetected("SMTP", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "25,465,587", smtpDir+"smtp_scan", "smtp-commands,smtp-enum-users,smtp-open-relay", checks.OptVVerbose)
+	// Namap with NSE
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, smtpDir+"smtp_scan_"+port, "smtp-commands,smtp-enum-users,smtp-ntlm-info,ssl-cert,ssl-date,smtp-open-relay", checks.OptVVerbose)
 }
 
-// IMAP enumerates Internet Message Access Protocol (110,143,993,995/TCP)
-func IMAP() {
+// IMAP enumerates Internet Message Access Protocol 
+func IMAP(port string) {
 	if utils.IsVisited("imap") {
 		return
 	}
+	dir := utils.ProtocolDetected2("IMAP", port, utils.BaseDir)
 
-	dir := utils.ProtocolDetected("IMAP-POP3", utils.BaseDir)
-	nmapOutputFile := dir + "imap_pop3_scan"
-	commands.CallIndividualPortScanner(utils.Target, "110,143,993,995", nmapOutputFile, checks.OptVVerbose)
-
-	// Openssl
-	openSSLArgs := []string{"openssl", "s_client", "-connect", fmt.Sprintf("%s:imaps", utils.Target)}
-	openSSLPath := fmt.Sprintf("%sopenssl_imap.out", dir)
-	commands.CallRunTool(openSSLArgs, openSSLPath, checks.OptVVerbose)
+	// Namap with NSE
+	nmapOutputFile := dir + "imap_scan_" + port 
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, "imap-ntlm-info,imap-capabilities,ssl-cert,ssl-date", checks.OptVVerbose)
 
 	// NC banner grabbing
-	ports := []string{"110", "143", "993", "995"}
-	for port := range ports {
-		ncArgs := []string{"nc", "-nv", utils.Target, ports[port]}
-		ncPath := fmt.Sprintf("%s%s_banner_grab.out", dir, ports[port])
-		commands.CallRunTool(ncArgs, ncPath, checks.OptVVerbose)
+	ncArgs := []string{"nc", "-nv", utils.Target, port}
+	ncPath := fmt.Sprintf("%simap_banner_%s.out", dir, port)
+	commands.CallRunTool(ncArgs, ncPath, checks.OptVVerbose)
+}
+
+
+// POP3 Enumerate Post Office Protocol
+func POP3(port string) {
+	if utils.IsVisited("pop3") {
+		return
 	}
+	dir := utils.ProtocolDetected2("POP3", port, utils.BaseDir)
+
+	// Namap with NSE
+	nmapOutputFile := dir + "pop3_scan_" + port 
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, "pop3-ntlm-info,pop3-capabilities,ssl-cert,ssl-date", checks.OptVVerbose)
+
+	// NC banner grabbing
+	ncArgs := []string{"nc", "-nv", utils.Target, port}
+	ncPath := fmt.Sprintf("%spop3_banner_%s.out", dir, port)
+	commands.CallRunTool(ncArgs, ncPath, checks.OptVVerbose)
 }

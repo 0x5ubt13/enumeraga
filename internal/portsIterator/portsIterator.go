@@ -21,25 +21,27 @@ func routePort(port string, openPortsSlice []string) {
 	switch port {
 	// File Transfer
 	case "20", "21":
-		protocols.FTP()
+		protocols.FTP(port)
 	case "873":
-		protocols.Rsync()
+		protocols.Rsync(port)
 	case "2049":
-		protocols.NFS()
+		protocols.NFS(port)
 
 	// Remote Access
 	case "22":
-		protocols.SSH()
+		protocols.SSH(port)
 	case "3389":
-		protocols.RDP()
+		protocols.RDP(port)
 	case "5985", "5986":
-		protocols.WinRM()
+		protocols.WinRM(port)
 
 	// Mail
 	case "25", "465", "587":
-		protocols.SMTP()
-	case "110", "143", "993", "995":
-		protocols.IMAP()
+		protocols.SMTP(port)
+	case "143", "993":
+		protocols.IMAP(port)
+	case "110", "995":
+		protocols.POP3(port)
 
 	// Web
 	case "80", "8080":
@@ -54,41 +56,43 @@ func routePort(port string, openPortsSlice []string) {
 
 	// SMB/NetBIOS
 	case "137", "138", "139", "445":
-		protocols.SMB()
+		protocols.SMB(port)
 
 	// Directory Services
 	case "88":
-		protocols.Kerberos()
-	case "389", "636", "3268", "3269":
-		protocols.LDAP()
+		protocols.Kerberos(port)
+	case "389", "3268":
+		protocols.LDAP(port,"ldap")
+	case "636", "3269":
+		protocols.LDAP(port,"ldaps")
 
 	// Databases
 	case "3306":
-		protocols.MySQL()
+		protocols.MySQL(port)
 	case "1433":
-		protocols.MSSQL()
-	case "1521":
-		protocols.TNS()
+		protocols.MSSQL(port)
+	case "1521", "1522", "1523", "1524", "1525", "1526", "1527", "1528", "1529":
+		protocols.TNS(port)
 
 	// Miscellaneous
 	case "53":
-		protocols.DNS()
+		protocols.DNS(port)
 	case "79":
-		protocols.Finger()
+		protocols.Finger(port)
 	case "111":
-		protocols.RPC()
+		protocols.RPC(port)
 	case "113":
-		protocols.Ident(openPortsSlice)
+		protocols.Ident(port, openPortsSlice)
 	case "135", "593":
-		protocols.MSRPC()
+		protocols.MSRPC(port)
 	case "161", "162", "10161", "10162": // UDP
-		protocols.SNMP()
+		protocols.SNMP(port)
 	case "512", "513", "514":
-		protocols.RServices()
+		protocols.RServices(port)
 	case "623":
-		protocols.IPMI()
+		protocols.IPMI(port)
 	case "10000":
-		protocols.Port10000()
+		protocols.Port10000(port)
 
 	// Try Detect Service
 	default:

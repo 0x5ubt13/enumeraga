@@ -9,11 +9,11 @@ import (
 )
 
 // SMB enumerates NetBIOS / Server Message Block Protocol (137-139,445/TCP - 137/UDP)
-func SMB() {
+func SMB(port string) {
 	if utils.IsVisited("smb") {
 		return
 	}
-	dir := utils.ProtocolDetected("NetBIOS-SMB", utils.BaseDir)
+	dir := utils.ProtocolDetected2("NetBIOS-SMB", port, utils.BaseDir)
 
 	// Nmap
 	nmapOutputFile := dir + "nb_smb_scan"

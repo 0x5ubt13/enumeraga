@@ -10,13 +10,13 @@ import (
 )
 
 // SSH enumerates Secure Shell Protocol (22/TCP)
-func SSH() {
-	dir := utils.ProtocolDetected("SSH", utils.BaseDir)
+func SSH(port string) {
+	dir := utils.ProtocolDetected2("SSH", port, utils.BaseDir)
 
 	// nmap with nse
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "22", dir+"ssh_scan", "ssh-* and not brute", checks.OptVVerbose)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"ssh_scan_"+port, "ssh-* and not brute", checks.OptVVerbose)
 	// ssh-audit
-	sshAuditPath := fmt.Sprintf("%sssh_audit_22.out", dir)
+	sshAuditPath := fmt.Sprintf("%sssh_audit_%s.out", dir, port)
 	sshAuditArgs := []string{"ssh-audit", utils.Target}
 	commands.CallRunTool(sshAuditArgs, sshAuditPath, checks.OptVVerbose)
 
@@ -25,19 +25,19 @@ func SSH() {
 }
 
 // RDP enumerates Remote Desktop Protocol (3389/TCP)
-func RDP() {
-	dir := utils.ProtocolDetected("RDP", utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "3389", dir+"rdp_scan", "rdp*", checks.OptVVerbose)
+func RDP(port string) {
+	dir := utils.ProtocolDetected2("RDP", port, utils.BaseDir)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"rdp_scan_"+port, "rdp*", checks.OptVVerbose)
 	common.RunHydraBrute("rdp", dir)
 }
 
 // WinRM enumerates Windows Remote Management Protocol (5985-5986/TCP)
-func WinRM() {
+func WinRM(port string) {
 	if utils.IsVisited("winrm") {
 		return
 	}
 
-	dir := utils.ProtocolDetected("WinRM", utils.BaseDir)
-	nmapOutputFile := dir + "winrm_scan"
-	commands.CallIndividualPortScanner(utils.Target, "5985,5986", nmapOutputFile, checks.OptVVerbose)
+	dir := utils.ProtocolDetected2("WinRM", port, utils.BaseDir)
+	nmapOutputFile := dir + "winrm_scan_" + port 
+	commands.CallIndividualPortScanner(utils.Target, port, nmapOutputFile, checks.OptVVerbose)
 }

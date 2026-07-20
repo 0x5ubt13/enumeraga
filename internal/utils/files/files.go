@@ -31,15 +31,15 @@ func CustomMkdir(name string) (string, error) {
 }
 
 // ProtocolDetected announces a detected protocol, creates its base directory, and returns the path.
-func ProtocolDetected(protocol, baseDir string) string {
-	output.PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
-
-	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
-	if _, err := CustomMkdir(protocolDir); err != nil {
-		output.PrintCustomBiColourMsg("red", "cyan", "[-] Error: ", fmt.Sprintf("Error creating protocol directory: %v", err))
-	}
-	return protocolDir
-}
+//func ProtocolDetected(protocol, baseDir string) string {
+//	output.PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected")
+//
+//	protocolDir := fmt.Sprintf("%s%s/", baseDir, strings.ToLower(protocol))
+//	if _, err := CustomMkdir(protocolDir); err != nil {
+//		output.PrintCustomBiColourMsg("red", "cyan", "[-] Error: ", fmt.Sprintf("Error creating protocol directory: %v", err))
+//	}
+//	return protocolDir
+//}
 func ProtocolDetected2(protocol, port string, baseDir string) string {
 	output.PrintCustomBiColourMsg("green", "cyan", "[+] '", protocol, "' service detected on port ", port)
 
