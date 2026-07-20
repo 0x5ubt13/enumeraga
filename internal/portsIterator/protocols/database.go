@@ -12,9 +12,19 @@ import (
 // MySQL enumerates MySQL server (3306/TCP)
 func MySQL(port string) {
 	dir := utils.ProtocolDetected2("MYSQL", port, utils.BaseDir)
-	
+
 	// Nmap with NSE
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"mysql_scan_"+port, "mysql-* and not (brute or fuzzer or dos)", checks.OptVVerbose)
+
+	// Nuclei
+        nucleiArgs := []string{
+                "nuclei",
+                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+                "-tags", "mysql",
+                "-timeout", common.GetTimeoutSeconds(),
+        }
+        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
+        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 
 	// Hydra
 	common.RunHydraBrute("mysql", dir)
@@ -49,6 +59,16 @@ func TNS(port string) {
 	nmapOutputFile := dir + "tns_scan_" + port
 	nmapNSEScripts := "oracle-tns-version,oracle-sid-brute"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+	// Nuclei
+        nucleiArgs := []string{
+                "nuclei",
+                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+                "-tags", "oracle",
+                "-timeout", common.GetTimeoutSeconds(),
+        }
+        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
+        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 
 	// ODAT - Oracle Database Attacking Tool
 	odatArgs := []string{"odat", "all", "-s", utils.Target, "-p", port}

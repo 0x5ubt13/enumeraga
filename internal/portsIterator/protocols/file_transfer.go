@@ -11,12 +11,22 @@ import (
 
 // FTP enumerates File Transfer Protocol (20-21/TCP)
 func FTP(port string) {
-	if utils.IsVisited("ftp") {
-		return
-	}
-
 	dir := utils.ProtocolDetected2("FTP", port, utils.BaseDir)
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "20,21", dir+"ftp_scan", "ftp-* and not brute", checks.OptVVerbose)
+
+	// Nmap
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"ftp_scan_"+port, "ftp-* and not brute", checks.OptVVerbose)
+
+        // Nuclei
+        nucleiArgs := []string{
+                "nuclei",
+                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+                "-tags", "ftp",
+                "-timeout", common.GetTimeoutSeconds(),
+        }
+        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
+        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+
+	//hydra
 	common.RunHydraBrute("ftp", dir)
 }
 

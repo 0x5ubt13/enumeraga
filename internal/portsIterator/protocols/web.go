@@ -103,8 +103,6 @@ func HTTP(port string, scheme string) {
 		"nuclei",
 		"-target", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port),
 		"-t", "http/",
-		"-silent",
-		"-no-color",
 		"-timeout", common.GetTimeoutSeconds(),
 	}
 	nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)

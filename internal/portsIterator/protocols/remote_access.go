@@ -15,10 +15,21 @@ func SSH(port string) {
 
 	// nmap with nse
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"ssh_scan_"+port, "ssh-* and not brute", checks.OptVVerbose)
+
 	// ssh-audit
 	sshAuditPath := fmt.Sprintf("%sssh_audit_%s.out", dir, port)
 	sshAuditArgs := []string{"ssh-audit", utils.Target}
 	commands.CallRunTool(sshAuditArgs, sshAuditPath, checks.OptVVerbose)
+
+        // Nuclei
+        nucleiArgs := []string{
+                "nuclei",
+                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+		"-tags", "ssh",
+                "-timeout", common.GetTimeoutSeconds(),
+        }
+        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
+        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 
 	// hydra
 	common.RunHydraBrute("ssh", dir)
@@ -27,7 +38,21 @@ func SSH(port string) {
 // RDP enumerates Remote Desktop Protocol (3389/TCP)
 func RDP(port string) {
 	dir := utils.ProtocolDetected2("RDP", port, utils.BaseDir)
+
+	// Nmap
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"rdp_scan_"+port, "rdp*", checks.OptVVerbose)
+
+        // Nuclei
+        nucleiArgs := []string{
+                "nuclei",
+                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+		"-tags", "rdp",
+                "-timeout", common.GetTimeoutSeconds(),
+        }
+        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
+        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+
+	// hydra
 	common.RunHydraBrute("rdp", dir)
 }
 
