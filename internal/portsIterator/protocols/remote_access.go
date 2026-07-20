@@ -35,6 +35,28 @@ func SSH(port string) {
 	common.RunHydraBrute("ssh", dir)
 }
 
+// TELNET Protocol (23/TCP)
+func TELNET(port string) {
+	dir := utils.ProtocolDetected2("TELNET", port, utils.BaseDir)
+
+	// nmap with nse
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"telnet_scan_"+port, "telnet-encryption,telnet-ntlm-info", checks.OptVVerbose)
+
+        // Nuclei
+        nucleiArgs := []string{
+                "nuclei",
+                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+		"-tags", "telnet",
+                "-timeout", common.GetTimeoutSeconds(),
+        }
+        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
+        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+
+	// hydra
+	common.RunHydraBrute("telnet", dir)
+}
+
+
 // RDP enumerates Remote Desktop Protocol (3389/TCP)
 func RDP(port string) {
 	dir := utils.ProtocolDetected2("RDP", port, utils.BaseDir)

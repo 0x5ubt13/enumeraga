@@ -30,6 +30,8 @@ func routePort(port string, openPortsSlice []string) {
 	// Remote Access
 	case "22":
 		protocols.SSH(port)
+	case "23":
+		protocols.TELNET(port)
 	case "3389":
 		protocols.RDP(port)
 	case "5985", "5986":
