@@ -102,6 +102,11 @@ func routePort(port string, openPortsSlice []string) {
 
 	// Try Detect Service
 	default:
+		// Detection Failed
+		if *checks.OptVVerbose {
+			utils.PrintSafe("%s %s %s %s %s\n", utils.Cyan("[*] Port"), utils.Yellow(port), utils.Cyan("is open, but there is no protocol handler. Trying service autodetection"))
+		}
+
 		// check for HTTP/HTTPS service
 		if protocols.IsHTTPService( fmt.Sprintf("http://%s:%s", utils.Target, port)) { 
 			protocols.HTTP(port,"http")
@@ -112,10 +117,9 @@ func routePort(port string, openPortsSlice []string) {
 			return
 		}
 
-		// Detection Failed
-		if *checks.OptVVerbose {
-			utils.PrintSafe("%s %s %s %s %s\n", utils.Red("[-] Port"), utils.Yellow(port), utils.Red("detected, but I don't know how to handle it yet. Please check the"), utils.Cyan("main Nmap"), utils.Red("scan"))
-		}
+		// Not HTTP based protocol, execute default port handler
+		protocols.DEFAULT(port)
+
 	}
 }
 

@@ -14,7 +14,7 @@ func DEFAULT(port string) {
 	dir := utils.ProtocolDetected2("unknown", port, utils.BaseDir)
 
 	// nmap
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"ntp_scan", "version,discovery,default", checks.OptVVerbose)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"nmap_scan_"+port, "(default and version and discovery) and not (broadcast) ", checks.OptVVerbose)
 
         // Nuclei
         nucleiArgs := []string{
