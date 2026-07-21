@@ -17,7 +17,7 @@ func UdpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithUDPScan(),
-		nmap.WithPorts("111,161,162,10161,10162,623"),
+		nmap.WithPorts("111,161,162,10161,10162,623,500,123"),
 		nmap.WithPrivileged(),
 	}
 	if utils.GentleMode {
@@ -47,7 +47,7 @@ func SlowerUdpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithUDPScan(),
-		nmap.WithPorts("111,161,162,10161,10162,623"),
+		nmap.WithPorts("111,161,162,10161,10162,623,500,123"),
 		nmap.WithPrivileged(),
 	}
 	if utils.GentleMode {

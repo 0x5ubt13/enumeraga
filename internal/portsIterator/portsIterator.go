@@ -95,6 +95,10 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.IPMI(port)
 	case "10000":
 		protocols.Port10000(port)
+	case "123":
+		protocols.NTP(port)
+	case "500":
+		protocols.IPSEC(port)
 
 	// Try Detect Service
 	default:
