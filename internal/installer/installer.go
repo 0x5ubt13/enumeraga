@@ -112,6 +112,7 @@ func getKeyTools() []string {
 		"snmp", // snmpwalk
 		"smbmap",
 		"metasploit-framework", // msfconsole
+		"cmseek",
 	}
 }
 
