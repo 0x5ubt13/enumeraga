@@ -98,6 +98,11 @@ func HTTP(port string, scheme string) {
 	niktoPath := fmt.Sprintf("%snikto_%s.out", dir,port)
 	commands.CallRunTool(niktoArgs, niktoPath, checks.OptVVerbose)
 
+	// cmseek
+	cmseekArgs := []string{"cmseek", "--url", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port), "--batch"}
+	cmseekPath := fmt.Sprintf("%scmseek_%s.out", dir,port)
+	commands.CallRunTool(cmseekArgs, cmseekPath, checks.OptVVerbose)
+
 	// Nuclei
 	nucleiArgs := []string{
 		"nuclei",

@@ -73,34 +73,6 @@ func MSRPC(port string) {
 	commands.CallRunTool(rpcDump593Args, rpcDump593Path, checks.OptVVerbose)
 }
 
-// SNMP enumerates Simple Network Management Protocol (161-162,10161-10162/UDP)
-func SNMP(port string) {
-	if utils.IsVisited("snmp") {
-		return
-	}
-	dir := utils.ProtocolDetected2("SNMP", port, utils.BaseDir)
-
-	// Nmap
-	nmapOutputFile := dir + "snmp_scan"
-	nmapNSEScripts := "snmp* and not snmp-brute"
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "161,162,10161,10162", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
-	// SNMPWalk
-	snmpWalkArgs := []string{"snmpwalk", "-v2c", "-c", "public", utils.Target}
-	snmpWalkPath := fmt.Sprintf("%ssnmpwalk_v2c_public.out", dir)
-	commands.CallRunTool(snmpWalkArgs, snmpWalkPath, checks.OptVVerbose)
-
-	// OneSixtyOne
-	oneSixtyOneArgs := []string{"onesixtyone", "-c", utils.SnmpList, utils.Target}
-	oneSixtyOnePath := fmt.Sprintf("%snblookup.out", dir)
-	commands.CallRunTool(oneSixtyOneArgs, oneSixtyOnePath, checks.OptVVerbose)
-
-	// Braa
-	braaArgs := []string{"braa", fmt.Sprintf("public@%s:.1.3.6.*", utils.Target)}
-	braaPath := fmt.Sprintf("%sbraa_public.out", dir)
-	commands.CallRunTool(braaArgs, braaPath, checks.OptVVerbose)
-}
-
 // RServices enumerates Berkeley R-services (512-514/TCP)
 func RServices(port string) {
 	if utils.IsVisited("rsvc") {
@@ -158,3 +130,4 @@ func Port10000(port string) {
 	// Use service version detection to identify Webmin vs NDMP vs other
 	commands.CallIndividualPortScanner(utils.Target, "10000", nmapOutputFile, checks.OptVVerbose)
 }
+
