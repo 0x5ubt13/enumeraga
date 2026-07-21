@@ -20,7 +20,8 @@ func DEFAULT(port string) {
         nucleiArgs := []string{
                 "nuclei",
                 "-target", fmt.Sprintf("%s:%s", utils.Target, port),
-                "-timeout", common.GetTimeoutSeconds(),
+		"-automatic-scan",
+		"-timeout", common.GetTimeoutSeconds(),
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
