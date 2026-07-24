@@ -25,7 +25,7 @@ func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutpu
 	}
 
 	if !*OptQuiet {
-		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting infra checks phase"), utils.Cyan(" ----------"))
+		fmt.Printf("\n%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting infra checks"), utils.Cyan(" ----------"))
 	}
 
 	// Check 1: Args passed fine?

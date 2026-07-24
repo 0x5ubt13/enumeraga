@@ -78,6 +78,11 @@ const (
 	GentleMaxWorkers = 2
 	// GentleToolStartDelay adds spacing between tool starts in gentle mode.
 	GentleToolStartDelay = 750 * time.Millisecond
+
+	// DefaultMaxWorkers limits concurrent tools
+	DefaultMaxWorkers = 25
+	// DefaultToolStartDelay adds spacing between tool starts
+	DefaultToolStartDelay = 0 
 )
 
 func init() {
@@ -104,6 +109,8 @@ func SetGentleMode(enabled bool) {
 func MaxWorkersForMode() int {
 	if GentleMode {
 		return GentleMaxWorkers
+	} else {
+		return DefaultMaxWorkers
 	}
 	return 0
 }
@@ -112,6 +119,8 @@ func MaxWorkersForMode() int {
 func ToolStartDelay() time.Duration {
 	if GentleMode {
 		return GentleToolStartDelay
+	} else {
+		return DefaultToolStartDelay
 	}
 	return 0
 }
@@ -323,9 +332,7 @@ func FinishLine(start time.Time, interrupted bool) {
 		return
 	}
 
-	PrintCustomBiColourMsg("cyan", "green", "\n[*] Done! It only took '", outputStr, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.")
-	fmt.Printf("%s%s%s\n\n", Cyan("[*] ---------- "), Green("Enumeration phase complete"), Cyan(" ----------"))
-	fmt.Printf("%s%s%s\n", Cyan("[*] ---------- "), Green("Program complete. Awaiting tools to finish"), Cyan(" ----------"))
+	PrintCustomBiColourMsg("cyan", "green", "[*] Done! It only took '", outputStr, "' to run ", "Enumeraga ", "based on your settings!! Please allow your tools some time to finish.")
 }
 
 // CheckAdminPrivileges checks for appropriate permissions based on scanning mode

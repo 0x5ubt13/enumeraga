@@ -104,7 +104,7 @@ func routePort(port string, openPortsSlice []string) {
 	default:
 		// Detection Failed
 		if *checks.OptVVerbose {
-			utils.PrintSafe("%s %s %s %s %s\n", utils.Cyan("[*] Port"), utils.Yellow(port), utils.Cyan("is open, but there is no protocol handler. Trying service autodetection"))
+			utils.PrintSafe("%s %s %s", utils.Yellow("[*] Port"), utils.Green(port), utils.Yellow("is open, but there is no protocol handler. Trying service autodetection"))
 		}
 
 		// check for HTTP/HTTPS service
