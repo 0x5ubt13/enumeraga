@@ -109,20 +109,16 @@ func SetGentleMode(enabled bool) {
 func MaxWorkersForMode() int {
 	if GentleMode {
 		return GentleMaxWorkers
-	} else {
-		return DefaultMaxWorkers
 	}
-	return 0
+	return DefaultMaxWorkers
 }
 
 // ToolStartDelay returns the configured delay between tool starts.
 func ToolStartDelay() time.Duration {
 	if GentleMode {
 		return GentleToolStartDelay
-	} else {
-		return DefaultToolStartDelay
 	}
-	return 0
+	return DefaultToolStartDelay
 }
 
 // GetVersion returns the full version string
