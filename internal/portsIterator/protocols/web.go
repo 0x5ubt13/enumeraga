@@ -74,9 +74,6 @@ func IsHTTPSService(url string) bool {
 // HTTP(s) port
 func HTTP(port string, scheme string) {
 
-	if *checks.OptVVerbose {
-		utils.PrintSafe("Testing port: %s -> scheme: %s\n",port,scheme)
-	}
 
 	dir := utils.ProtocolDetected2("HTTP", port, utils.BaseDir)
 

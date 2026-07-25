@@ -109,7 +109,7 @@ func runCewlAndFfuf(target, caseDir, port, scheme string, OptVVerbose *bool) {
 	cewlArgs := []string{"cewl", "-m7", "--lowercase", "-w", keywordsList, targetURL}
 	cewlPath := fmt.Sprintf("%scewl_%s.out", caseDir, port)
 	if err := runTool(cewlArgs, cewlPath, port, OptVVerbose); err == nil {
-		printToolSuccess(port, "cewl", cewlPath, -1, -1)
+		printToolSuccess(port, "cewl", cewlPath, -1, -1, OptVVerbose)
 	}
 
 	ffufArgs := []string{
@@ -123,7 +123,7 @@ func runCewlAndFfuf(target, caseDir, port, scheme string, OptVVerbose *bool) {
 	utils.PrintSafe("%s\n", utils.Debug("[?] Debug: ffuf keywords command:", ffufArgs))
 	ffufPath := fmt.Sprintf("%sffuf_keywords_%s.out", caseDir, port)
 	if err := runTool(ffufArgs, ffufPath, port, OptVVerbose); err == nil {
-		printToolSuccess(port, "ffuf", ffufPath, -1, -1)
+		printToolSuccess(port, "ffuf", ffufPath, -1, -1, OptVVerbose)
 	}
 }
 
@@ -135,7 +135,7 @@ func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
 	runCewlAndFfuf(target, caseDir, port, "https", OptVVerbose)
 }
 
-func printToolSuccess(command, tool, filePath string, completed, total int) {
+func printToolSuccess(command, tool, filePath string, completed, total int, OptVVerbose *bool) {
 	if completed == -1 {
 		completed, total = utils.ToolRegistry.GetProgress()
 	}
@@ -154,8 +154,10 @@ func printToolSuccess(command, tool, filePath string, completed, total int) {
 		toolDesc = tool
 	}
 
-	utils.PrintCustomBiColourMsg("green", "cyan", fmt.Sprintf("[+] Done! '%s' finished successfully", toolDesc))
-	utils.PrintCustomBiColourMsg("yellow", "cyan", fmt.Sprintf("    Shortcut: less -R '%s'", filePath))
+	if *OptVVerbose {
+		utils.PrintCustomBiColourMsg("green", "cyan", fmt.Sprintf("[+] Done! '%s' finished successfully", toolDesc))
+		utils.PrintCustomBiColourMsg("yellow", "cyan", fmt.Sprintf("    Shortcut: less -R '%s'", filePath))
+	}
 
 	n := len(runningTools)
 	if n > 0 && n <= 10 {
@@ -355,7 +357,7 @@ func RunRangeTools(targetRange string, OptVVerbose *bool, OptOutput *string) {
 func eternalBlueSweepCheck(msfEternalBlueArgs []string, msfEternalBluePath, dir string, OptVVerbose *bool) {
 	// Run msf recon first
 	if err := runTool(msfEternalBlueArgs, msfEternalBluePath, "445", OptVVerbose); err == nil {
-		printToolSuccess("445", "msfconsole (eternalblue)", msfEternalBluePath, -1, -1)
+		printToolSuccess("445", "msfconsole (eternalblue)", msfEternalBluePath, -1, -1, OptVVerbose)
 	}
 
 	var confirmedVuln = false
@@ -464,7 +466,7 @@ func runAsync(fn AsyncFunc) {
 
 // runNmapScanAsync is a generic helper to run nmap scans asynchronously with tool registration and worker pool throttling
 // It handles: WaitGroup, tool registration, goroutine spawning, error handling, success printing, and concurrency limiting
-func runNmapScanAsync(toolName string, port string, outFile string, scanFunc NmapScanFunc) {
+func runNmapScanAsync(toolName string, port string, outFile string, scanFunc NmapScanFunc, OptVVerbose *bool ) {
 	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
@@ -490,7 +492,7 @@ func runNmapScanAsync(toolName string, port string, outFile string, scanFunc Nma
 			return
 		}
 		completed, total := utils.ToolRegistry.CompleteTool(name, true)
-		printToolSuccess(portNum, name, outputFile+".nmap", completed, total)
+		printToolSuccess(portNum, name, outputFile+".nmap", completed, total, OptVVerbose)
 	}(toolName, port, outFile)
 }
 
@@ -609,7 +611,7 @@ func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 		err := runTool(args, filePath, portNum, OptVVerbose)
 		completed, total := utils.ToolRegistry.CompleteTool(name, err == nil)
 		if err == nil {
-			printToolSuccess(portNum, args[0], filePath, completed, total)
+			printToolSuccess(portNum, args[0], filePath, completed, total, OptVVerbose)
 		}
 	}(args, filePath, OptVVerbose, toolName, port)
 }
@@ -619,7 +621,7 @@ func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts stri
 	toolName := fmt.Sprintf("nmap NSE on port %s", port)
 	runNmapScanAsync(toolName, port, outFile, func() error {
 		return scans.IndividualPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
-	})
+	},OptVVerbose)
 }
 
 // CallIndividualPortScannerWithNSEScriptsAndScriptArgs is a Goroutine for scans.IndividualPortScannerWithNSEScriptsAndScriptArgs()
@@ -627,7 +629,7 @@ func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile,
 	toolName := fmt.Sprintf("nmap NSE with args on port %s", port)
 	runNmapScanAsync(toolName, port, outFile, func() error {
 		return scans.IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs, OptVVerbose)
-	})
+	},OptVVerbose)
 }
 
 // CallIndividualUDPPortScannerWithNSEScripts is a Goroutine for scans.IndividualUDPPortScannerWithNSEScripts()
@@ -635,7 +637,7 @@ func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts s
 	toolName := fmt.Sprintf("nmap UDP on port %s", port)
 	runNmapScanAsync(toolName, port, outFile, func() error {
 		return scans.IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
-	})
+	},OptVVerbose)
 }
 
 // CallIndividualPortScanner is a Goroutine for scans.IndividualPortScanner()
@@ -643,7 +645,7 @@ func CallIndividualPortScanner(target, port, outFile string, OptVVerbose *bool) 
 	toolName := fmt.Sprintf("nmap on port %s", port)
 	runNmapScanAsync(toolName, port, outFile, func() error {
 		return scans.IndividualPortScanner(target, port, outFile, OptVVerbose)
-	})
+	},OptVVerbose)
 }
 
 // CallFullAggressiveScan is a Goroutine for scans.FullAggressiveScan()
@@ -654,7 +656,7 @@ func CallFullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
 	runNmapScanAsync(toolName, "", outFile, func() error {
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on '", target, "' and sending it to the background")
 		return scans.FullAggressiveScan(target, portsWithClosed, outFile, OptVVerbose)
-	})
+	},OptVVerbose)
 }
 
 /* --------------------------------
@@ -1591,7 +1593,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		}
 	}
 
-	printToolSuccess(command, tool, filePath, -1, -1)
+	printToolSuccess(command, tool, filePath, -1, -1, OptVVerbose)
 }
 
 // RunCloudScan orchestrates the cloud security scanning

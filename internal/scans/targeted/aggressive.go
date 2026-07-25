@@ -10,7 +10,7 @@ import (
 )
 
 // IndividualPortScanner runs a simple Nmap scan
-func IndividualPortScanner(target, port, outFile string, optVVerbose *bool) error {
+func IndividualPortScanner(target, port, outFile string, OptVVerbose *bool) error {
 	ctx, cancel := common.CreateContext()
 	defer cancel()
 
@@ -36,9 +36,11 @@ func IndividualPortScanner(target, port, outFile string, optVVerbose *bool) erro
 		return fmt.Errorf("unable to create nmap scanner individualPortScanner: %s %s %s %w", target, port, outFile, err)
 	}
 
-	tracker := common.NewProgressTracker(1 * time.Minute)
-	tracker.StartMinuteProgress(target, port, optVVerbose, "Individual protocol nmap scan")
-	defer tracker.Stop()
+	if *OptVVerbose {
+		tracker := common.NewProgressTracker(1 * time.Minute)
+		tracker.StartMinuteProgress(target, port, OptVVerbose, "Individual protocol nmap scan")
+		defer tracker.Stop()
+	}
 
 	_, _, err = scanner.Run()
 	if err != nil {
@@ -49,7 +51,7 @@ func IndividualPortScanner(target, port, outFile string, optVVerbose *bool) erro
 }
 
 // FullAggressiveScan runs main aggressive scan for all open ports on the target
-func FullAggressiveScan(target, ports, outFile string, optVVerbose *bool) error {
+func FullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) error {
 	ctx, cancel := common.CreateContext()
 	defer cancel()
 
@@ -76,9 +78,11 @@ func FullAggressiveScan(target, ports, outFile string, optVVerbose *bool) error 
 		return fmt.Errorf("unable to create nmap scanner fullAggressiveScan: %w", err)
 	}
 
-	tracker := common.NewProgressTracker(1 * time.Minute)
-	tracker.StartAggressiveProgress(target, optVVerbose)
-	defer tracker.Stop()
+	if *OptVVerbose {
+		tracker := common.NewProgressTracker(1 * time.Minute)
+		tracker.StartAggressiveProgress(target, OptVVerbose)
+		defer tracker.Stop()
+	}
 
 	_, _, err = scanner.Run()
 	if err != nil {

@@ -47,11 +47,6 @@ func main() {
 		utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Remember you can also pass a range in ", "CIDR notation ", "to use ", "enum tools ", "that scan a wide range with '", "-r", "'")
 	}
 
-	if !*checks.OptQuiet {
-		fmt.Printf("%s%s%s\n\n", utils.Cyan("[*] ---------- "), utils.Green("Checks phase complete"), utils.Cyan(" ----------"))
-		fmt.Printf("%s%s%s\n", utils.Cyan("[*] ---------- "), utils.Green("Starting enumeration phase"), utils.Cyan(" ----------"))
-	}
-
 	// Main flow
 	flowErr := targetInit(totalLines)
 	if flowErr != nil {
