@@ -12,6 +12,18 @@ _restore_output_owner() {
 }
 trap _restore_output_owner EXIT
 
+# `docker stop` sends SIGTERM to PID 1, which here is this shell. The EXIT trap above does fire
+# on its own, but the scan process never sees the signal: it dies with the PID namespace, so
+# enumeraga's graceful shutdown is skipped and the chown can race its final writes. Forward the
+# signal and wait, so enumeraga flushes before ownership is restored.
+_terminate() {
+    if [ -n "${_enumeraga_pid:-}" ]; then
+        kill -TERM "$_enumeraga_pid" 2>/dev/null || true
+        wait "$_enumeraga_pid" 2>/dev/null || true
+    fi
+}
+trap _terminate TERM INT
+
 # Enumeraga Cloud Scanner Entrypoint
 # Usage: docker run gagarter/enumeraga_cloud aws [additional flags]
 #        docker run gagarter/enumeraga_cloud azure -o /tmp/enumeraga_output
@@ -54,7 +66,13 @@ done
 echo "[*] Provider/Args:$safe_args"
 echo ""
 
-./enumeraga cloud "$@"
+# Run in the background and wait. This is required for the handler above, not a style choice:
+# bash defers trap handling until a foreground command returns, so a foreground scan would hold
+# SIGTERM pending for its entire multi-minute run, `docker stop` would escalate to SIGKILL, and
+# the EXIT trap would be lost too — leaving results root-owned, which is worse than no handler.
+./enumeraga cloud "$@" &
+_enumeraga_pid=$!
+wait "$_enumeraga_pid"
 
 # Report output location
 echo ""
