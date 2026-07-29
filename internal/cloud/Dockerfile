@@ -191,6 +191,11 @@ COPY --chmod=755 --from=builder /build/enumeraga /app/enumeraga
 COPY --chmod=755 --from=builder /go/bin/aws-enumerator /usr/local/bin/aws-enumerator
 COPY --chmod=755 internal/cloud/entrypoint.sh /app/entrypoint.sh
 
+# ScoutSuite, Prowler and monkey365 are Python, and their stdout is a pipe into the Go parent
+# rather than a TTY, so Python block-buffers it. Progress then arrives in silent multi-minute
+# bursts, making a healthy scan look hung in `docker logs` and inviting an operator to kill it.
+ENV PYTHONUNBUFFERED=1
+
 # Volume for output persistence
 ENV ENUMERAGA_OUTPUT="/tmp/enumeraga_output"
 VOLUME ["/tmp/enumeraga_output"]
