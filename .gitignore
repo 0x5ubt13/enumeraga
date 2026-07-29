@@ -43,3 +43,8 @@ docker_infra_build_test.sh
 internal/cloud/latest
 internal/cloud/latestest
 enumeraga_output*
+
+# Scan output is JSON-heavy and may contain client data. This is a public repo, and results
+# moved out of the shared results directory do not always land under enumeraga_output/.
+*.json
+!pipeline-key.json
