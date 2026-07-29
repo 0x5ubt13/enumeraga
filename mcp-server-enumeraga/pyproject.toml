@@ -13,10 +13,20 @@ authors = [
 ]
 license = { text = "MIT" }
 keywords = ["mcp", "enumeraga", "pentesting", "security", "automation"]
+# Upper bounds are deliberate: the Dockerfile installs with a plain `pip install .` and no
+# lockfile, so floor-only constraints let every rebuild silently resolve a different major.
+#
+# mcp is held below 2.0. run_server() registers handlers with the @server.list_tools() and
+# @server.call_tool() decorators, which 2.0 removed — on 2.0 the server dies at startup with
+# "'Server' object has no attribute 'list_tools'". Moving to 2.0 means porting that
+# registration to the new API; until then this ceiling is what keeps the server bootable.
+#
+# The `sse` extra is gone as of recent 1.x, so asking for mcp[sse] only produced a warning;
+# sse-starlette arrives as a dependency of mcp itself.
 dependencies = [
-    "mcp[sse]>=0.9.0",
-    "uvicorn[standard]",
-    "starlette",
+    "mcp>=1.29,<2",
+    "uvicorn[standard]>=0.52,<1",
+    "starlette>=1.3,<2",
 ]
 
 [project.optional-dependencies]
