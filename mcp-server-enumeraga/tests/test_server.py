@@ -1,5 +1,47 @@
+import asyncio
+
 import pytest
+from mcp_server_enumeraga import server
 from mcp_server_enumeraga.server import build_docker_infra_command, build_docker_cloud_command
+
+
+def _call_tool(monkeypatch, name, args, docker_output="done"):
+    """Invoke handle_tool_call with docker and duplicate-detection stubbed out."""
+
+    async def fake_run_command(cmd, timeout=3600, extra_env=None):
+        return docker_output
+
+    async def no_duplicate(key):
+        return None
+
+    monkeypatch.setattr(server, "run_command", fake_run_command)
+    monkeypatch.setattr(server, "running_scan_name", no_duplicate)
+    result = asyncio.run(server.handle_tool_call(name, args))
+    return result[0].text
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("enumeraga_infra_scan", {"target": "192.168.1.100"}),
+        ("enumeraga_infra_scan", {"target": "192.168.1.100", "detach": True}),
+        ("enumeraga_cloud_scan", {"provider": "azure", "subscription": "sub-1"}),
+        ("enumeraga_cloud_scan", {"provider": "azure", "subscription": "sub-1", "detach": True}),
+    ],
+)
+def test_scan_results_carry_handling_policy(monkeypatch, name, args):
+    """Every scan result must carry the mv-not-cp policy, detached or not.
+
+    The shared results directory must not retain client data, and scan output uses generic
+    names that can clobber an operator's hand-written files. Neither is inferable from the
+    results path alone, so the policy has to travel with it.
+    """
+    text = _call_tool(monkeypatch, name, args)
+
+    assert "MOVE" in text and "`mv`" in text
+    assert "do not copy" in text
+    assert "NEW subdirectory" in text
+    assert "never overwrite" in text
 
 def test_build_docker_infra_command_basic():
     """Test infrastructure command building with basic arguments."""
