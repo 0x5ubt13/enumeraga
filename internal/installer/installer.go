@@ -11,9 +11,28 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/utils/output"
 )
 
+// stdinIsInteractive reports whether stdin is a terminal a user can answer from.
+// Under `docker run` without -it, stdin is not a TTY: a prompt would be printed
+// to nobody and Scan() returns immediately, reading as a declined install.
+func stdinIsInteractive() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
 // Consent asks for user consent to install a tool
 func Consent(tool string) rune {
 	output.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs the following package ", tool, " to be installed")
+
+	// Without a terminal there is no one to answer; say so rather than appearing
+	// to ask and then reporting that consent was withheld.
+	if !stdinIsInteractive() {
+		output.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Non-interactive session", ": cannot prompt to install ", tool, ". Re-run with a TTY (docker run -it) or install it in the image.")
+		return 'n'
+	}
+
 	output.PrintCustomBiColourMsgNoNL("yellow", "cyan", "Do you want to install '", tool , "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
 
 	consent := bufio.NewScanner(os.Stdin)
@@ -73,6 +92,23 @@ func CheckToolExists(tool string) bool {
 	}
 	_, lookPatherr := exec.LookPath(tool)
 	return lookPatherr == nil
+}
+
+// isToolPresent reports whether a tool is already available, by either route it
+// can arrive: registered as an apt package, or present as a binary on PATH.
+// getKeyTools lists apt package names (ldap-utils, snmp, python3-impacket),
+// which only dpkg can resolve. But tools installed out-of-band bypass dpkg
+// entirely — the Docker image fetches nuclei as a pre-built binary into
+// /usr/local/bin and creates /usr/share/seclists directly — so a dpkg-only
+// check prompts to install tools that are in fact already there.
+func isToolPresent(tool string) bool {
+	return isToolPresentWith(tool, DpkgIsPackageInstalled, CheckToolExists)
+}
+
+// isToolPresentWith is isToolPresent with its lookups injected, so the either-source
+// logic can be tested without depending on what happens to be installed.
+func isToolPresentWith(tool string, dpkgLookup, binaryLookup func(string) bool) bool {
+	return dpkgLookup(tool) || binaryLookup(tool)
 }
 
 // getKeyTools returns the list of key infrastructure scanning tools
@@ -164,8 +200,8 @@ func InstallMissingTools(kind rune, optInstall *bool) {
 			}
 		}
 
-		// check if tool is installed 
-		if DpkgIsPackageInstalled(tool) {
+		// check if tool is installed, as an apt package or a binary on PATH
+		if isToolPresent(tool) {
 			continue
 		}
 
@@ -225,13 +261,15 @@ func PrintInstallingTool(tool string) {
 	fmt.Printf("%s %s%s ", output.Yellow("[!] Installing"), output.Cyan(tool), output.Yellow("..."))
 }
 
+// printConsentNotGiven reports a declined install. Declining skips this one tool
+// and the scan carries on without it, so this must not claim to be aborting.
 func printConsentNotGiven(tool string) {
 	fmt.Printf(
 		"%s\n%s %s %s\n",
 		output.Red("[-] Consent not given."),
-		output.Red("[-] Please install"),
+		output.Red("[-] Skipping checks that need"),
 		output.Cyan(tool),
-		output.Red("manually. Aborting..."),
+		output.Red("- install it manually to enable them."),
 	)
 }
 

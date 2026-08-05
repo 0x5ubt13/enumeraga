@@ -38,7 +38,7 @@ WORKDIR /opt/enumeraga
 # unzip kept - needed to extract ProjectDiscovery pre-built binaries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core utilities
-    curl wget jq ca-certificates unzip \
+    curl wget jq ca-certificates unzip rsync \
     # Python (no golang - compiled binaries are copied from builder)
     python3 python3-pip pipx \
     # Network scanning tools
@@ -47,7 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nfs-common tree \
     # Enumeration tools
     cewl enum4linux-ng dirsearch finger fping hydra \
-    nbtscan nikto smbclient smbmap \
+    nbtscan nikto smbclient smbmap cmseek gowitness \
     # Security tools
     ssh-audit wafw00f whatweb testssl.sh python3-impacket \
     # Additional infra tools
