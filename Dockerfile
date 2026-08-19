@@ -47,7 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nfs-common tree \
     # Enumeration tools
     cewl enum4linux-ng dirsearch finger fping hydra \
-    nbtscan nikto smbclient smbmap cmseek gowitness \
+    nbtscan nikto smbclient smbmap cmseek gowitness sippts \
     # Security tools
     ssh-audit wafw00f whatweb testssl.sh python3-impacket \
     # Additional infra tools

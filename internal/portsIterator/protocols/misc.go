@@ -131,3 +131,34 @@ func Port10000(port string) {
 	commands.CallIndividualPortScanner(utils.Target, "10000", nmapOutputFile, checks.OptVVerbose)
 }
 
+// SIP enumerates Session Initiation Protocol (5060/TCP, 5060/UDP)
+func SIP(port string) {
+
+	if utils.IsVisited("sip") {
+		return
+	}
+	dir := utils.ProtocolDetected2("SIP", port, utils.BaseDir)
+	nmapNSEScripts := "sip-methods,sip-enum-users"
+
+	// Nmap
+	nmapOutputFile := dir + "sip_scan_5060_udp"
+	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "5060", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	nmapOutputFile = dir + "sip_scan_5060_tcp"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "5060", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+	// sippts scan
+        sipptsArgs1 := []string{"sippts", "scan", "-p", "all", "-r", "5060-5070", "-fp", "-cve", "-i",  utils.Target}
+        sipptsPath1 := fmt.Sprintf("%ssippts_scan.out", dir)
+        commands.CallRunTool(sipptsArgs1, sipptsPath1, checks.OptVVerbose)
+
+	// sippts enum
+        sipptsArgs2 := []string{"sippts", "enumerate", "-p", "tcp", "-r", "5060", "-i",  utils.Target}
+        sipptsPath2 := fmt.Sprintf("%ssippts_enumerate_tcp.out", dir)
+        commands.CallRunTool(sipptsArgs2, sipptsPath2, checks.OptVVerbose)
+
+	sipptsArgs3 := []string{"sippts", "enumerate", "-p", "udp", "-r", "5060", "-i",  utils.Target}
+        sipptsPath3 := fmt.Sprintf("%ssippts_enumerate_udp.out", dir)
+        commands.CallRunTool(sipptsArgs3, sipptsPath3, checks.OptVVerbose)
+
+}
+

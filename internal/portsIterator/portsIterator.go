@@ -100,6 +100,10 @@ func routePort(port string, openPortsSlice []string) {
 	case "500":
 		protocols.IPSEC(port)
 
+	// VoiP
+	case "5060":
+		protocols.SIP(port)
+
 	// Try Detect Service
 	default:
 		// Detection Failed
