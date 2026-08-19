@@ -39,7 +39,7 @@ func GetWordlists(optVVerbose *bool) error {
 	}
 
 	// Locate the "darkweb2017-top1000.txt" file
-	DarkwebTop1000Slice, err := zglob.Glob("/usr/share/seclists/Passwords/darkweb2017-top1000.txt")
+	DarkwebTop1000Slice, err := zglob.Glob("/usr/share/seclists/Passwords/Common-Credentials/darkweb2017_top-1000.txt")
 	if err != nil || len(DarkwebTop1000Slice) == 0 {
 		missingWordlists = append(missingWordlists, "darkweb2017-top1000.txt")
 		output.PrintCustomBiColourMsg("red", "cyan", "[-] Warning: ", "Could not locate 'darkweb2017-top1000.txt' - password bruteforcing may not work")
