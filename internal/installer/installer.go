@@ -149,6 +149,7 @@ func getKeyTools() []string {
 		"smbmap",
 		"metasploit-framework", // msfconsole
 		"cmseek",
+		"sippts",
 	}
 }
 
