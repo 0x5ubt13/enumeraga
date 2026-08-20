@@ -32,6 +32,9 @@ if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "  # CIDR range scan:"
     echo "  docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -r 192.168.1.0/24 -t 192.168.1.99"
     echo ""
+    echo "  # Bounded scan: exactly these ports, 5 requests/second, 15 minute limit:"
+    echo "  docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 --ports 80,443 --rate 5 --max-runtime 900"
+    echo ""
     echo "Note: --network host is required for nmap scans to work properly"
     echo ""
     ./enumeraga infra -h

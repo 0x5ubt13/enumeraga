@@ -84,6 +84,13 @@ Give `enumeraga infra` either a single IP address or a file containing a list of
     -t, --target TARGET  Specify target single IP / List of IPs file (required)
     -T, --timeout MINS   Maximum time in minutes for long-running tools (default: 10)
     -V, --vv             Flood your terminal with plenty of verbosity!
+        --bounded        Enforce a strict scan contract: single target, no port widening, no re-sweeps
+        --ports SPEC     Scan exactly these ports, e.g. '80,443' or '80,U:53' (implies --bounded)
+        --rate N         Cap requests/packets per second (implies --bounded)
+        --concurrency N  Maximum simultaneous tool processes (implies --bounded)
+        --max-runtime N  Wall-clock limit in seconds for the whole run (implies --bounded)
+        --allow-multi-target       Permit a targets file or CIDR range under --bounded
+        --allow-unthrottled-tools  Run tools that have no rate control instead of skipping them
 
 
     Examples:
@@ -121,6 +128,70 @@ sudo enumeraga infra -t targets.txt
 # Quiet mode (minimal output)
 sudo enumeraga infra -t 192.168.1.100 -q
 ```
+
+### Bounded scans
+
+`--bounded` enforces a strict scan contract for callers that must guarantee what
+their traffic did. It is implied by any of `--ports`, `--rate`, `--concurrency`
+or `--max-runtime`, so bounds never have to be paired with a mode flag.
+
+```bash
+enumeraga infra -t ptp.ninja --ports 80,443 --rate 5 --concurrency 2 --max-runtime 900
+```
+
+Under `--bounded`:
+
+- A targets file or a `-r` CIDR range is refused unless `--allow-multi-target` is passed.
+- There is no second re-sweep, and the extra port normally added for OS fingerprinting
+  is suppressed.
+- Without `U:` entries in `--ports`, no UDP scan runs at all.
+- The run stops at `--max-runtime` and exits **124**, having printed the results
+  produced so far. Partial results are valid; they are not discarded.
+- `--gentle` cannot be combined with `--rate` or `--concurrency`: it is itself a
+  rate/concurrency preset, and passing it alongside either is rejected at startup
+  with an error naming both flags.
+
+`--rate` is requests per second for HTTP tools and packets per second for nmap.
+Tools differ in what they can honour, and the end-of-run summary says which was
+which rather than implying the cap applied uniformly:
+
+| Behaviour | Tools |
+|-----------|-------|
+| Rate-capped directly | `nmap`, `ffuf`, `nikto`, `onesixtyone`, `fping`, `nuclei` |
+| Thread-capped only (not a true rate) | `gobuster`, `dirsearch`, `hydra`, `wpscan`, `whatweb`, `netexec`, `crackmapexec`, `gowitness` |
+| Roughly one request, run uncapped | `ldapsearch`, `showmount`, `nmblookup`, `nc`, `openssl`, `impacket-rpcdump`, `ssh-audit`, `rusers`, `rwho`, `ident-user-enum` |
+| No throttle available — skipped under `--rate` | `cmseek`, `braa`, `snmpwalk`, `smbmap`, `enum4linux-ng`, `odat`, `cewl`, `wafw00f`, `msfconsole`, `nbtscan-unixwiz`, `responder-RunFinger`, `testssl` (also as `testssl.sh`) |
+
+Pass `--allow-unthrottled-tools` to run the last group anyway. A tool with no
+table entry is treated as unthrottled, so a newly added tool is skipped and
+reported rather than quietly running uncapped. `testssl` is worth calling out: a
+full TLS sweep is many hundreds of handshakes with no rate or delay control, so
+under `--rate` it is skipped and the summary says so. A caller who wants TLS
+coverage under a rate cap has to pass `--allow-unthrottled-tools`.
+
+**What `--ports` does and does not guarantee.** Every nmap scan, and every tool
+that takes a port as an argument, is confined to the ports named in `--ports`.
+The port clusters that protocol handlers used to scan wholesale — SMB's
+137/138/139/445, MSRPC's 135/593, R-services' 512/513/514, SNMP's
+161/162/10161/10162 — are filtered down to whichever of those ports were
+actually authorised, and `impacket-rpcdump` and `nuclei` (its SMB templates
+target 445 specifically) only run against a port that is in scope.
+
+Nmap scans are confined by protocol as well as by port number: a `T:`/`U:` prefix
+is honoured, so `--ports U:53` produces no TCP probe of port 53 and the aggressive
+scan, which is TCP, omits any port authorised only for UDP. Tools other than nmap
+are held to the port numbers but not to the protocol, since most of them speak one
+protocol by construction and take no protocol argument to constrain. Some tools
+take no port argument at all, though — they connect to whatever port their
+protocol implies, and `--ports` cannot constrain them. `nmblookup`,
+`enum4linux-ng`, `netexec`, `smbmap`, `snmpwalk`, `showmount` and `ssh-audit`
+all behave this way, and the list should not be assumed complete. So with
+`--ports 445` the SMB tool suite may still reach port 139. A caller who needs
+an absolute guarantee that nothing beyond the named ports is touched should
+combine `--ports` with `-n`/`--nmap-only`, which runs nmap alone and skips the
+tool suite entirely.
+
+For why these bounds exist, and the trade-offs taken to get there, see [the bounded scanning rationale](docs/bounded-scanning-rationale.md).
 
 ### Enumeraga Cloud
 
