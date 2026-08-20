@@ -3,6 +3,7 @@ package protocols
 import (
 	"fmt"
 
+	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
@@ -16,6 +17,8 @@ func MySQL(port string) {
 	// Nmap with NSE
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"mysql_scan_"+port, "mysql-* and not (brute or fuzzer or dos)", checks.OptVVerbose)
 
+	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
+	if bounds.Active.PortInScope(port, false) {
 	// Nuclei
         nucleiArgs := []string{
                 "nuclei",
@@ -25,9 +28,10 @@ func MySQL(port string) {
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	}
 
 	// Hydra
-	common.RunHydraBrute("mysql", dir)
+	common.RunHydraBrute("mysql", port, dir)
 }
 
 // MSSQL enumerates Microsoft's SQL Server (1433/TCP)
@@ -60,6 +64,8 @@ func TNS(port string) {
 	nmapNSEScripts := "oracle-tns-version,oracle-sid-brute"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
 
+	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
+	if bounds.Active.PortInScope(port, false) {
 	// Nuclei
         nucleiArgs := []string{
                 "nuclei",
@@ -69,9 +75,13 @@ func TNS(port string) {
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	}
 
+	// ODAT takes the port with -p and connects over TCP, so the same check applies.
+	if bounds.Active.PortInScope(port, false) {
 	// ODAT - Oracle Database Attacking Tool
 	odatArgs := []string{"odat", "all", "-s", utils.Target, "-p", port}
 	odatPath := fmt.Sprintf("%sodat_%s.out", dir, port)
 	commands.CallRunTool(odatArgs, odatPath, checks.OptVVerbose)
+	}
 }

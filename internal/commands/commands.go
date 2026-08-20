@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/config"
 	"github.com/0x5ubt13/enumeraga/internal/installer"
 	"github.com/0x5ubt13/enumeraga/internal/scans"
@@ -169,6 +171,15 @@ func printToolSuccess(command, tool, filePath string, completed, total int, OptV
 	}
 }
 
+// registryName reproduces the name a tool is registered under, so every path
+// that reports on a tool — success, failure or skip — uses the same key.
+func registryName(tool, port string) string {
+	if port == "" {
+		return tool
+	}
+	return fmt.Sprintf("%s on port %s", tool, port)
+}
+
 // Handle messages for HTTP tools to avoid confusion
 func announceTool(tool, port string) {
 	total := utils.ToolRegistry.GetTotal()
@@ -189,14 +200,71 @@ func announceCloudTool(tool string) {
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Running '", tool, "'. Please wait...")
 }
 
+// errToolSkipped reports that a tool was deliberately not run. It is not a
+// failure: callers must neither mark the tool complete nor announce success,
+// but must not treat it as an error either.
+var errToolSkipped = errors.New("tool skipped")
+
+// recordUnstartedTool records a tool that never acquired a worker slot because
+// the run was already stopping. An expired wall-clock budget is recorded as a
+// skip naming the budget, since the run ended deliberately and the results
+// produced so far are valid; anything else (a Ctrl+C, or a pool closed for
+// another reason) keeps the long-standing failure status.
+func recordUnstartedTool(name string) {
+	if utils.RunDeadlineExceeded() {
+		utils.ToolRegistry.SkipTool(name, fmt.Sprintf(
+			"wall-clock budget of %s expired before this tool could start", bounds.Active.MaxRuntime))
+		return
+	}
+	utils.ToolRegistry.CompleteTool(name, false)
+}
+
+// activeBounds returns the rate and concurrency bounds in force. When gentle mode
+// is on, it returns the gentle preset, so a tool's throttle is decided in one
+// place rather than two that must be kept in step. The preset and explicit bounds
+// (--rate, --concurrency) are mutually exclusive by validation, so this
+// short-circuit cannot discard a caller's explicit bound.
+func activeBounds() *bounds.Bounds {
+	if utils.GentleMode {
+		return bounds.GentlePreset()
+	}
+	return bounds.Active
+}
+
 // Announce tool and run it
 func runTool(args []string, filePath string, port string, OptVVerbose *bool) error {
-	// Check if shutdown is in progress before starting
-	if utils.IsShuttingDown() {
-		return nil
+	if len(args) == 0 {
+		return fmt.Errorf("runTool called with no arguments")
 	}
 
-	args = applyGentleArgs(args)
+	name := registryName(args[0], port)
+
+	// A shutdown already under way (a Ctrl+C the user sent before this tool
+	// acquired its worker slot) means it will never start. Recording it as a
+	// skip rather than returning a bare nil error stops the caller from
+	// treating "never ran" as "ran and succeeded".
+	if utils.IsShuttingDown() {
+		utils.ToolRegistry.SkipTool(name, "scan shutting down before this tool could start")
+		return errToolSkipped
+	}
+
+	active := activeBounds()
+	result := active.ApplyRate(args)
+	// The note says how the rate cap applied, so it is only meaningful when a rate
+	// cap was asked for. Recording it unconditionally made a run bounded only by
+	// --ports report its tools as "rate-capped" when no rate was ever requested.
+	if active.Rate > 0 {
+		if note := result.Class.Note(); note != "" {
+			utils.ToolRegistry.NoteRate(name, note)
+		}
+	}
+	if result.Skip {
+		utils.ToolRegistry.SkipTool(name, result.Reason)
+		utils.PrintCustomBiColourMsg("yellow", "cyan",
+			fmt.Sprintf("[!] Skipping '%s': %s", name, result.Reason))
+		return errToolSkipped
+	}
+	args = result.Args
 
 	tool := args[0]
 	cmdArgs := args[1:]
@@ -212,6 +280,25 @@ func runTool(args []string, filePath string, port string, OptVVerbose *bool) err
 	ctx, cancel := toolContext(utils.GetGlobalContext())
 	defer cancel()
 	cmd := exec.CommandContext(ctx, tool, cmdArgs...)
+	setProcessGroup(cmd)
+
+	// os/exec invokes Cancel when ctx is done, and guarantees it is never called
+	// after the process has been reaped — which a hand-rolled watcher goroutine
+	// cannot promise. Killing the group here rather than letting CommandContext
+	// signal the child alone is what stops a tool's helper processes.
+	cmd.Cancel = func() error {
+		killProcessGroup(cmd)
+		return nil
+	}
+	// WaitDelay is deliberately left unset. Its force-close-the-pipes behaviour
+	// only fires when os/exec owns the output copy itself, which requires
+	// cmd.Stdout/cmd.Stderr to be set directly; that path is gated behind
+	// goroutineErr being non-nil in os/exec's Wait (exec.go:865-880). Here the
+	// stdout/stderr pipes are taken with cmd.StdoutPipe()/cmd.StderrPipe() and
+	// drained by our own goroutines, so os/exec never populates goroutineErr and
+	// a WaitDelay timer would have nothing to act on. It would be dead weight at
+	// best and a source of false confidence at worst, so it is left at its zero
+	// value rather than set.
 
 	// Create pipes to capture the command's output
 	stdout, err := cmd.StdoutPipe()
@@ -476,8 +563,9 @@ func runNmapScanAsync(toolName string, port string, outFile string, scanFunc Nma
 		// Acquire a worker slot (blocks if pool is full)
 		pool := utils.GetWorkerPool()
 		if !pool.Acquire() {
-			// Shutdown in progress, skip this tool
-			utils.ToolRegistry.CompleteTool(name, false)
+			// See recordUnstartedTool: a scan the wall-clock budget stopped before it
+			// began is a skip, not a failure.
+			recordUnstartedTool(name)
 			return
 		}
 		defer pool.Release()
@@ -494,44 +582,6 @@ func runNmapScanAsync(toolName string, port string, outFile string, scanFunc Nma
 		completed, total := utils.ToolRegistry.CompleteTool(name, true)
 		printToolSuccess(portNum, name, outputFile+".nmap", completed, total, OptVVerbose)
 	}(toolName, port, outFile)
-}
-
-func applyGentleArgs(args []string) []string {
-	if !utils.GentleMode || len(args) == 0 {
-		return args
-	}
-
-	tool := args[0]
-	out := make([]string, len(args))
-	copy(out, args)
-
-	switch tool {
-	case "ffuf":
-		out = setFlagValue(out, "-rate", "50")
-		out = setFlagValue(out, "-t", "2")
-	case "dirsearch":
-		out = setFlagValue(out, "-t", "2")
-	case "gobuster":
-		out = setFlagValue(out, "-t", "5")
-	case "hydra":
-		out = setFlagValue(out, "-t", "2")
-	case "wpscan":
-		out = setFlagValue(out, "--max-threads", "1")
-	case "whatweb":
-		out = setFlagValue(out, "-a", "1")
-	}
-
-	return out
-}
-
-func setFlagValue(args []string, flag string, value string) []string {
-	for i := 0; i < len(args)-1; i++ {
-		if args[i] == flag {
-			args[i+1] = value
-			return args
-		}
-	}
-	return append(args, flag, value)
 }
 
 // portPatternTable maps ports to the path substrings that unambiguously identify them.
@@ -586,11 +636,8 @@ func extractPortFromPath(filePath string) string {
 
 // CallRunTool is a Goroutine for runTool() with worker pool throttling
 func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
-	toolName := args[0]
 	port := extractPortFromPath(filePath)
-	if port != "" {
-		toolName = fmt.Sprintf("%s on port %s", args[0], port)
-	}
+	toolName := registryName(args[0], port)
 
 	utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
@@ -601,14 +648,23 @@ func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 		// Acquire a worker slot (blocks if pool is full)
 		pool := utils.GetWorkerPool()
 		if !pool.Acquire() {
-			// Shutdown in progress, skip this tool
-			utils.ToolRegistry.CompleteTool(name, false)
+			// The pool refuses a slot once the global context is done, which covers
+			// both a Ctrl+C and an expired wall-clock budget. A budget that expired
+			// is a clean stop, not a failure: reporting these as failures produced a
+			// summary claiming 25 failures alongside "results are partial but valid".
+			recordUnstartedTool(name)
 			return
 		}
 		defer pool.Release()
 
 		utils.ToolRegistry.StartTool(name)
 		err := runTool(args, filePath, portNum, OptVVerbose)
+		if errors.Is(err, errToolSkipped) {
+			// runTool already recorded the terminal skip status; calling
+			// CompleteTool here would overwrite it with ToolCompleted and
+			// announce a success for a tool that never ran.
+			return
+		}
 		completed, total := utils.ToolRegistry.CompleteTool(name, err == nil)
 		if err == nil {
 			printToolSuccess(portNum, args[0], filePath, completed, total, OptVVerbose)
@@ -616,9 +672,39 @@ func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 	}(args, filePath, OptVVerbose, toolName, port)
 }
 
+// scanPortsInScope confines an nmap scan to the ports the caller authorised for
+// the protocol the scan actually uses, returning "" when none of them are.
+//
+// The check belongs here, at the four points where a targeted nmap scan is
+// launched, rather than only in the handlers. The open-port list the handlers are
+// dispatched from merges the TCP and UDP sweep results with no protocol tag, so a
+// port found open on UDP reaches handlers that scan it over TCP: without this,
+// --ports U:111 would have rpcbind's TCP 111 probed as well. Filtering by
+// protocol at the launch point covers every handler at once, including the
+// default one, instead of relying on each having remembered to check.
+//
+// With no explicit port list this returns its argument unchanged, so nothing
+// changes for a caller who passed no bounds.
+func scanPortsInScope(toolName, ports string, udp bool, OptVVerbose *bool) string {
+	inScope := bounds.Active.PortsInScope(ports, udp)
+	if inScope == "" && *OptVVerbose {
+		protocol := "TCP"
+		if udp {
+			protocol = "UDP"
+		}
+		utils.PrintCustomBiColourMsg("yellow", "cyan",
+			"[!] Skipping ", toolName, fmt.Sprintf(": %s port(s) '%s' are outside the --ports list", protocol, ports))
+	}
+	return inScope
+}
+
 // CallIndividualPortScannerWithNSEScripts is a Goroutine for individualPortScannerWithNSEScripts()
 func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts string, OptVVerbose *bool) {
 	toolName := fmt.Sprintf("nmap NSE on port %s", port)
+	port = scanPortsInScope(toolName, port, false, OptVVerbose)
+	if port == "" {
+		return
+	}
 	runNmapScanAsync(toolName, port, outFile, func() error {
 		return scans.IndividualPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
 	},OptVVerbose)
@@ -627,6 +713,10 @@ func CallIndividualPortScannerWithNSEScripts(target, port, outFile, scripts stri
 // CallIndividualPortScannerWithNSEScriptsAndScriptArgs is a Goroutine for scans.IndividualPortScannerWithNSEScriptsAndScriptArgs()
 func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts string, scriptArgs map[string]string, OptVVerbose *bool) {
 	toolName := fmt.Sprintf("nmap NSE with args on port %s", port)
+	port = scanPortsInScope(toolName, port, false, OptVVerbose)
+	if port == "" {
+		return
+	}
 	runNmapScanAsync(toolName, port, outFile, func() error {
 		return scans.IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scripts, scriptArgs, OptVVerbose)
 	},OptVVerbose)
@@ -635,6 +725,10 @@ func CallIndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile,
 // CallIndividualUDPPortScannerWithNSEScripts is a Goroutine for scans.IndividualUDPPortScannerWithNSEScripts()
 func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts string, OptVVerbose *bool) {
 	toolName := fmt.Sprintf("nmap UDP on port %s", port)
+	port = scanPortsInScope(toolName, port, true, OptVVerbose)
+	if port == "" {
+		return
+	}
 	runNmapScanAsync(toolName, port, outFile, func() error {
 		return scans.IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts, OptVVerbose)
 	},OptVVerbose)
@@ -643,16 +737,54 @@ func CallIndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts s
 // CallIndividualPortScanner is a Goroutine for scans.IndividualPortScanner()
 func CallIndividualPortScanner(target, port, outFile string, OptVVerbose *bool) {
 	toolName := fmt.Sprintf("nmap on port %s", port)
+	port = scanPortsInScope(toolName, port, false, OptVVerbose)
+	if port == "" {
+		return
+	}
 	runNmapScanAsync(toolName, port, outFile, func() error {
 		return scans.IndividualPortScanner(target, port, outFile, OptVVerbose)
 	},OptVVerbose)
 }
 
+// aggressiveScanPorts returns the port list for the main aggressive scan.
+//
+// An unbounded run adds one likely-closed port, which gives nmap a closed port
+// to compare against and sharpens its OS fingerprint. A bounded run must not:
+// the caller guaranteed which ports may be touched, and an extra probe port
+// breaks that guarantee however useful it is otherwise.
+//
+// Under an explicit port list the candidate set is filtered as well as left
+// unwidened. The open-port list this receives merges the TCP and UDP sweep
+// results with no protocol tag, while this scan is TCP only, so --ports 80,U:53
+// with UDP 53 open would otherwise SYN-probe TCP 53 — a port and protocol pair
+// the caller never authorised. Filtering against the authorised TCP set is what
+// makes "exactly these ports" true of this scan.
+func aggressiveScanPorts(ports string) string {
+	if bounds.Active.HasPortList() {
+		return bounds.Active.PortsInScope(ports, false)
+	}
+	if bounds.Active.Enabled {
+		return ports
+	}
+	return ports + ",1337"
+}
+
 // CallFullAggressiveScan is a Goroutine for scans.FullAggressiveScan()
 func CallFullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) {
 	toolName := "nmap full aggressive scan"
-	// Adding one likely closed port for OS fingerprinting purposes
-	portsWithClosed := ports + ",1337"
+	portsWithClosed := aggressiveScanPorts(ports)
+	// No authorised TCP port among those found open, which is the correct outcome
+	// for a UDP-only --ports U:53. The scan is recorded as skipped with its reason
+	// rather than dropped silently, so the caller can see why no aggressive scan
+	// appears in the output.
+	if portsWithClosed == "" {
+		utils.ToolRegistry.SkipTool(toolName, "no open TCP port is within the --ports list")
+		if *OptVVerbose {
+			utils.PrintCustomBiColourMsg("yellow", "cyan",
+				"[!] Skipping ", toolName, ": no open TCP port is within the --ports list")
+		}
+		return
+	}
 	runNmapScanAsync(toolName, "", outFile, func() error {
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Starting ", "main aggressive nmap scan ", "against all open ports on '", target, "' and sending it to the background")
 		return scans.FullAggressiveScan(target, portsWithClosed, outFile, OptVVerbose)

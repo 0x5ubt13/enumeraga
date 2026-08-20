@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
@@ -22,6 +23,13 @@ func safeMsfRHost(target string) bool {
 // DNS enumerates Domain Name System (53/TCP)
 func DNS(port string) {
 	dir := utils.ProtocolDetected2("DNS", port, utils.BaseDir)
+
+	// The scan below is TCP, while DNS is commonly discovered on UDP 53, so the
+	// scope check is against the authorised TCP ports specifically: --ports U:53
+	// authorises UDP 53 and nothing on TCP.
+	if !bounds.Active.PortInScope("53", false) {
+		return
+	}
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "53", dir+"dns_scan", "*dns*", checks.OptVVerbose)
 }
 
@@ -62,15 +70,24 @@ func Ident(port string, openPortsSlice []string) {
 func MSRPC(port string) {
 	dir := utils.ProtocolDetected2("MSRPC", port, utils.BaseDir)
 	nmapOutputFile := dir + "msrpc_scan"
-	commands.CallIndividualPortScanner(utils.Target, "135,593", nmapOutputFile, checks.OptVVerbose)
 
-	rpcDump135Args := []string{"impacket-rpcdump", "135"}
-	rpcDump135Path := fmt.Sprintf("%srpcdump_135.out", dir)
-	commands.CallRunTool(rpcDump135Args, rpcDump135Path, checks.OptVVerbose)
+	// MSRPC is dispatched on either 135 or 593, so a caller who named only one of
+	// them via --ports must not have the other touched too.
+	if ports := bounds.Active.PortsInScope("135,593", false); ports != "" {
+		commands.CallIndividualPortScanner(utils.Target, ports, nmapOutputFile, checks.OptVVerbose)
+	}
 
-	rpcDump593Args := []string{"impacket-rpcdump", "593"}
-	rpcDump593Path := fmt.Sprintf("%srpcdump_593.out", dir)
-	commands.CallRunTool(rpcDump593Args, rpcDump593Path, checks.OptVVerbose)
+	if bounds.Active.PortInScope("135", false) {
+		rpcDump135Args := []string{"impacket-rpcdump", "135"}
+		rpcDump135Path := fmt.Sprintf("%srpcdump_135.out", dir)
+		commands.CallRunTool(rpcDump135Args, rpcDump135Path, checks.OptVVerbose)
+	}
+
+	if bounds.Active.PortInScope("593", false) {
+		rpcDump593Args := []string{"impacket-rpcdump", "593"}
+		rpcDump593Path := fmt.Sprintf("%srpcdump_593.out", dir)
+		commands.CallRunTool(rpcDump593Args, rpcDump593Path, checks.OptVVerbose)
+	}
 }
 
 // RServices enumerates Berkeley R-services (512-514/TCP)
@@ -82,7 +99,12 @@ func RServices(port string) {
 
 	// Nmap
 	nmapOutputFile := dir + "rservices_scan"
-	commands.CallIndividualPortScanner(utils.Target, "512,513,514", nmapOutputFile, checks.OptVVerbose)
+
+	// RServices is dispatched on any one of 512,513,514, so a caller who named
+	// only one of them via --ports must not have the rest of the cluster touched too.
+	if ports := bounds.Active.PortsInScope("512,513,514", false); ports != "" {
+		commands.CallIndividualPortScanner(utils.Target, ports, nmapOutputFile, checks.OptVVerbose)
+	}
 
 	// Rwho
 	rwhoArgs := []string{"rwho", "-a", utils.Target}
@@ -109,9 +131,12 @@ func IPMI(port string) {
 	dir := utils.ProtocolDetected2("IPMI", port, utils.BaseDir)
 	nmapOutputFile := dir + "ipmi_scan"
 
-	// Nmap
+	// Nmap. IPMI is dispatched on port 623 however it was discovered, and the scan
+	// is UDP, so it runs only when UDP 623 is one of the ports the caller authorised.
 	nmapNSEScripts := "ipmi*"
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "623", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	if bounds.Active.PortInScope("623", true) {
+		commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "623", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	}
 
 	// Metasploit
 	if !safeMsfRHost(utils.Target) {

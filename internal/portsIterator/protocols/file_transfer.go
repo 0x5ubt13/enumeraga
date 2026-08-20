@@ -3,6 +3,7 @@ package protocols
 import (
 	"fmt"
 
+	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
@@ -16,6 +17,8 @@ func FTP(port string) {
 	// Nmap
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"ftp_scan_"+port, "ftp-* and not brute", checks.OptVVerbose)
 
+	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
+	if bounds.Active.PortInScope(port, false) {
         // Nuclei
         nucleiArgs := []string{
                 "nuclei",
@@ -25,9 +28,10 @@ func FTP(port string) {
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	}
 
 	//hydra
-	common.RunHydraBrute("ftp", dir)
+	common.RunHydraBrute("ftp", port, dir)
 }
 
 // Rsync enumerates Remote Synchronisation protocol (873/TCP)

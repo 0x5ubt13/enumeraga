@@ -26,11 +26,7 @@ func IndividualPortScanner(target, port, outFile string, OptVVerbose *bool) erro
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
-	}
+	options = append(options, common.RateOptions(common.DefaultMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualPortScanner: %s %s %s %w", target, port, outFile, err)
@@ -68,11 +64,7 @@ func FullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) error 
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
-	}
+	options = append(options, common.RateOptions(common.DefaultMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner fullAggressiveScan: %w", err)

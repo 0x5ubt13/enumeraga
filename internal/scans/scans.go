@@ -35,6 +35,11 @@ func SlowerUdpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 	return sweeps.SlowerUdpPortSweep(target, optVVerbose)
 }
 
+// BoundedPortSweep scans exactly the ports requested and nothing else
+func BoundedPortSweep(target, tcpPorts, udpPorts string, optVVerbose *bool) ([]nmap.Host, []nmap.Host, error) {
+	return sweeps.BoundedPortSweep(target, tcpPorts, udpPorts, optVVerbose)
+}
+
 // Targeted Scans - delegating to targeted package
 
 // IndividualPortScannerWithNSEScripts runs Nmap scan with NSE scripts

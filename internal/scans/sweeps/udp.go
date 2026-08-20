@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/0x5ubt13/enumeraga/internal/scans/common"
-	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/Ullaakut/nmap/v3"
 )
 
@@ -20,11 +19,7 @@ func UdpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 		nmap.WithPorts("53,67,69,111,161,162,10161,10162,623,500,123,5060,514"),
 		nmap.WithPrivileged(),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.FastMinRate))
-	}
+	options = append(options, common.RateOptions(common.FastMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner udpPortSweep: %s %w", target, err)
@@ -50,11 +45,7 @@ func SlowerUdpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 		nmap.WithPorts("53,67,69,111,161,162,10161,10162,623,500,123,5060,514"),
 		nmap.WithPrivileged(),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
-	}
+	options = append(options, common.RateOptions(common.DefaultMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner udpPortSweep: %s %w", target, err)

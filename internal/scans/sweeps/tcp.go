@@ -20,11 +20,7 @@ func TcpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 		nmap.WithPorts("1-65535"),
 		nmap.WithPrivileged(),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.FastMinRate))
-	}
+	options = append(options, common.RateOptions(common.FastMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner: %w", err)
@@ -50,11 +46,7 @@ func SlowerTcpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 		nmap.WithPorts("1-65535"),
 		nmap.WithPrivileged(),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
-	}
+	options = append(options, common.RateOptions(common.DefaultMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner: %w", err)
@@ -83,11 +75,7 @@ func TcpPortSweepWithTopPorts(target string, optTopPorts *string, optVVerbose *b
 		nmap.WithTargets(target),
 		nmap.WithPrivileged(),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.FastMinRate))
-	}
+	options = append(options, common.RateOptions(common.FastMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner: %w", err)

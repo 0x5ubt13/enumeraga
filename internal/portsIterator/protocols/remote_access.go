@@ -3,6 +3,7 @@ package protocols
 import (
 	"fmt"
 
+	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
@@ -21,6 +22,8 @@ func SSH(port string) {
 	sshAuditArgs := []string{"ssh-audit", utils.Target}
 	commands.CallRunTool(sshAuditArgs, sshAuditPath, checks.OptVVerbose)
 
+	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
+	if bounds.Active.PortInScope(port, false) {
         // Nuclei
         nucleiArgs := []string{
                 "nuclei",
@@ -30,9 +33,10 @@ func SSH(port string) {
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	}
 
 	// hydra
-	common.RunHydraBrute("ssh", dir)
+	common.RunHydraBrute("ssh", port, dir)
 }
 
 // TELNET Protocol (23/TCP)
@@ -42,6 +46,8 @@ func TELNET(port string) {
 	// nmap with nse
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"telnet_scan_"+port, "telnet-encryption,telnet-ntlm-info", checks.OptVVerbose)
 
+	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
+	if bounds.Active.PortInScope(port, false) {
         // Nuclei
         nucleiArgs := []string{
                 "nuclei",
@@ -51,9 +57,10 @@ func TELNET(port string) {
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	}
 
 	// hydra
-	common.RunHydraBrute("telnet", dir)
+	common.RunHydraBrute("telnet", port, dir)
 }
 
 
@@ -64,6 +71,8 @@ func RDP(port string) {
 	// Nmap
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"rdp_scan_"+port, "rdp*", checks.OptVVerbose)
 
+	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
+	if bounds.Active.PortInScope(port, false) {
         // Nuclei
         nucleiArgs := []string{
                 "nuclei",
@@ -73,9 +82,10 @@ func RDP(port string) {
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	}
 
 	// hydra
-	common.RunHydraBrute("rdp", dir)
+	common.RunHydraBrute("rdp", port, dir)
 }
 
 // WinRM enumerates Windows Remote Management Protocol (5985-5986/TCP)

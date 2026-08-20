@@ -29,11 +29,7 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string, 
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
-	}
+	options = append(options, common.RateOptions(common.DefaultMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualPortScannerWithNSEScripts: %s %s %s %w", target, port, outFile, err)
@@ -77,11 +73,7 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
-	}
+	options = append(options, common.RateOptions(common.DefaultMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualPortScannerWithNSEScriptsAndScriptArgs: %s %s %s %w", target, port, outFile, err)
@@ -125,11 +117,7 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithVerbosity(2),
 	}
-	if utils.GentleMode {
-		options = append(options, common.GentleTimingOptions()...)
-	} else {
-		options = append(options, nmap.WithMinRate(common.DefaultMinRate))
-	}
+	options = append(options, common.RateOptions(common.DefaultMinRate)...)
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualUDPPortScannerWithNSEScripts: %s %s %s %w", target, port, outFile, err)
