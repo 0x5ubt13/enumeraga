@@ -2,7 +2,12 @@ import asyncio
 
 import pytest
 from mcp_server_enumeraga import server
-from mcp_server_enumeraga.server import build_docker_infra_command, build_docker_cloud_command
+from mcp_server_enumeraga.server import (
+    build_docker_infra_command,
+    build_docker_cloud_command,
+    scan_key,
+    TOOLS,
+)
 
 
 def _call_tool(monkeypatch, name, args, docker_output="done"):
@@ -137,3 +142,118 @@ def test_build_docker_cloud_command_azure_service_principal():
     assert "AZURE_CLIENT_SECRET" in cmd
     assert "super-secret-value" not in joined
     assert extra_env == {"AZURE_CLIENT_SECRET": "super-secret-value"}
+
+
+def test_scan_key_distinguishes_different_port_lists():
+    """Two bounded scans of one target are not the same work."""
+    a = scan_key("infra", {"target": "192.168.1.100", "ports": "80"})
+    b = scan_key("infra", {"target": "192.168.1.100", "ports": "443"})
+    assert a != b
+
+
+def test_scan_key_matches_for_identical_scans():
+    """The retry-storm guard still has to recognise a genuine repeat."""
+    args = {"target": "192.168.1.100", "ports": "80,443", "rate": 5}
+    assert scan_key("infra", args) == scan_key("infra", dict(args))
+
+
+def test_scan_key_treats_falsy_bounds_as_unset():
+    """A client passing explicit defaults must not look different from one omitting them."""
+    bare = scan_key("infra", {"target": "192.168.1.100"})
+    defaulted = scan_key("infra", {"target": "192.168.1.100", "rate": 0, "brute": False})
+    assert bare == defaulted
+
+
+def test_scan_key_distinguishes_rate_and_concurrency():
+    """Every bounding argument changes what the scan does, so each must enter the key."""
+    base = {"target": "192.168.1.100", "ports": "80"}
+    assert scan_key("infra", base) != scan_key("infra", {**base, "rate": 5})
+    assert scan_key("infra", base) != scan_key("infra", {**base, "concurrency": 2})
+    assert scan_key("infra", base) != scan_key("infra", {**base, "max_runtime": 900})
+    assert scan_key("infra", base) != scan_key("infra", {**base, "nmap_only": True})
+
+
+def test_scan_key_cloud_unchanged():
+    """Cloud keys are untouched by this change."""
+    assert scan_key("cloud", {"provider": "aws"}) == "cloud:aws:all"
+
+
+def test_build_docker_infra_command_bounds():
+    """Every bounding flag reaches the binary in the form it expects."""
+    args = {
+        "target": "192.168.1.100",
+        "ports": "80,U:53",
+        "rate": 5,
+        "concurrency": 2,
+        "max_runtime": 900,
+        "allow_multi_target": True,
+        "allow_unthrottled_tools": True,
+        "nmap_only": True,
+        "gentle": True,
+        "timeout": 15,
+    }
+    cmd = build_docker_infra_command(args)
+
+    def flag_value(flag):
+        return cmd[cmd.index(flag) + 1]
+
+    assert flag_value("--ports") == "80,U:53"
+    assert flag_value("--rate") == "5"
+    assert flag_value("--concurrency") == "2"
+    assert flag_value("--max-runtime") == "900"
+    assert flag_value("-T") == "15"
+    assert "--allow-multi-target" in cmd
+    assert "--allow-unthrottled-tools" in cmd
+    assert "-n" in cmd
+    assert "-g" in cmd
+
+
+def test_build_docker_infra_command_bounded_alone():
+    """--bounded is usable on its own, without any of the four bounding values."""
+    cmd = build_docker_infra_command({"target": "192.168.1.100", "bounded": True})
+    assert "--bounded" in cmd
+
+
+def test_build_docker_infra_command_omits_unset_bounds():
+    """An unbounded call must produce exactly the command it produced before."""
+    cmd = build_docker_infra_command({"target": "192.168.1.100"})
+    for flag in (
+        "--bounded",
+        "--ports",
+        "--rate",
+        "--concurrency",
+        "--max-runtime",
+        "--allow-multi-target",
+        "--allow-unthrottled-tools",
+        "-n",
+        "-g",
+        "-T",
+    ):
+        assert flag not in cmd, f"{flag} must not appear when it was not requested"
+
+
+def test_build_docker_infra_command_numeric_args_are_strings():
+    """docker run takes strings; an int in the list raises at subprocess time."""
+    cmd = build_docker_infra_command(
+        {"target": "192.168.1.100", "rate": 5, "concurrency": 2, "max_runtime": 900, "timeout": 15}
+    )
+    assert all(isinstance(part, str) for part in cmd)
+
+
+def test_infra_tool_schema_declares_the_bounding_flags():
+    """A flag the builder emits but the schema hides is unreachable from a client."""
+    infra = next(t for t in TOOLS if t.name == "enumeraga_infra_scan")
+    properties = infra.inputSchema["properties"]
+    for name in (
+        "bounded",
+        "ports",
+        "rate",
+        "concurrency",
+        "max_runtime",
+        "allow_multi_target",
+        "allow_unthrottled_tools",
+        "nmap_only",
+        "gentle",
+        "timeout",
+    ):
+        assert name in properties, f"{name} is not declared in the infra tool schema"

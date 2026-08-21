@@ -171,11 +171,29 @@ Run infrastructure enumeration using Docker container.
 
 **Parameters:**
 - `target` (required, string): IP address, hostname, or comma-separated IPs
-- `output_dir` (optional, string): Output directory (default: ./enumeraga_output)
+- `output_dir` (optional, string): Sub-folder name for this scan's results, under the server's configured results directory
 - `brute` (optional, boolean): Enable bruteforce/fuzzing tools
-- `top_ports` (optional, string): Scan only top N ports (e.g., "100")
+- `top_ports` (optional, string): Scan only top N ports (e.g., "100"). Mutually exclusive with `ports`
 - `quiet` (optional, boolean): Suppress verbose output
 - `verbose` (optional, boolean): Very verbose debugging output
+- `detach` (optional, boolean): Run in the background to avoid client timeouts; returns a container ID
+- `nmap_only` (optional, boolean): Run nmap scans only and skip the tool suite
+- `gentle` (optional, boolean): Throttle scans and tools. Cannot be combined with `rate` or `concurrency`
+- `timeout` (optional, integer): Maximum minutes for any single long-running tool (default 10)
+
+**Bounding parameters.** Any one of `ports`, `rate`, `concurrency` or `max_runtime` implies `bounded`, so bounds never need pairing with a mode flag:
+
+- `bounded` (optional, boolean): Enforce a strict scan contract — a single target, no port widening, no re-sweeps
+- `ports` (optional, string): Scan exactly these ports and enumerate whichever are open, e.g. `"80,443"` or `"80,U:53"`. `U:` means UDP, `T:` means TCP; with no `U:` entry no UDP scan runs at all
+- `rate` (optional, integer): Requests per second for HTTP tools, packets per second for nmap
+- `concurrency` (optional, integer): Maximum simultaneous tool processes, also applied to nmap's parallelism
+- `max_runtime` (optional, integer): Wall-clock limit in seconds. On expiry the scan and its children are killed and it exits 124, having printed the results produced so far
+- `allow_multi_target` (optional, boolean): Permit a targets file under a bounded run, which otherwise refuses more than one target
+- `allow_unthrottled_tools` (optional, boolean): Run tools that have no rate control instead of skipping them
+
+Tools differ in what a `rate` cap can mean for them, and a tool with no throttle at all is skipped and reported rather than run uncapped. The repository README's "Bounded scans" section carries the per-tool capability table and an account of what `ports` cannot constrain; `docs/bounded-scanning-rationale.md` records why the bounds exist and which alternatives were rejected.
+
+Validation lives in the scanner, not here. Passing `ports` with `top_ports`, or `gentle` with `rate`, is rejected at startup with a message naming both flags.
 
 **Example:**
 ```python
@@ -186,12 +204,31 @@ Run infrastructure enumeration using Docker container.
 }
 ```
 
+**Example — bounded scan:**
+```python
+{
+    "target": "192.168.1.100",
+    "ports": "80,443",
+    "rate": 5,
+    "concurrency": 2,
+    "max_runtime": 900
+}
+```
+
 **Docker Command Generated:**
 ```bash
 docker run --rm --network host \
   -v ./scan_results:/tmp/enumeraga_output \
   gagarter/enumeraga_infra:latest \
   -t 192.168.1.100 -b
+```
+
+For the bounded example above:
+```bash
+docker run --rm --network host \
+  -v ./enumeraga_output:/tmp/enumeraga_output \
+  gagarter/enumeraga_infra:latest \
+  -t 192.168.1.100 --ports 80,443 --rate 5 --concurrency 2 --max-runtime 900
 ```
 
 ### 2. enumeraga_cloud_scan
