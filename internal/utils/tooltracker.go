@@ -47,13 +47,36 @@ func NewToolTracker() *ToolTracker {
 	}
 }
 
-func (t *ToolTracker) RegisterTool(name string) {
+// RegisterTool records a tool as pending and returns the key it was registered
+// under, which every later call about that launch must use.
+//
+// The name a caller offers is derived from the tool and the port, so two launches
+// of one tool against one port arrive under the same name: the SIP handler runs
+// sippts three times into one directory. Replacing the earlier entry left one
+// record where three tools ran, so the total undercounted, progress could not
+// reach 100%, and — because a skip is terminal — a skip recorded by one launch
+// suppressed the success recorded by another. A name already taken therefore
+// gains a numeric suffix rather than displacing its predecessor.
+//
+// The suffix is chosen under the same lock as the insertion, so two goroutines
+// registering the same name concurrently cannot both settle on the same key.
+func (t *ToolTracker) RegisterTool(name string) string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.tools[name] = &ToolInfo{
-		Name:   name,
+
+	key := name
+	for n := 2; ; n++ {
+		if _, taken := t.tools[key]; !taken {
+			break
+		}
+		key = fmt.Sprintf("%s (%d)", name, n)
+	}
+
+	t.tools[key] = &ToolInfo{
+		Name:   key,
 		Status: ToolPending,
 	}
+	return key
 }
 
 func (t *ToolTracker) StartTool(name string) {

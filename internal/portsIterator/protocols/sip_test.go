@@ -41,59 +41,45 @@ func drainWorkerPool(t *testing.T) {
 	}
 }
 
-// TestSIPHonoursTheAuthorisedProtocol covers the SIP handler's port gate.
+// TestSIPHonoursTheAuthorisedProtocol is the regression test for the SIP gate.
 //
 // SIP is reached from a flat port list that merges the TCP and UDP sweep results,
 // so the handler cannot tell which protocol found 5060. It used to run an nmap UDP
 // scan, an nmap TCP scan, and sippts over both tcp and udp on any sighting at all,
 // so --ports U:5060 had TCP 5060 probed without ever being authorised.
 //
-// Two limits on what this can assert, both worth knowing before trusting it:
-//
-// All three sippts launches share one registry entry, because registryName derives
-// a name from the tool and port alone and RegisterTool overwrites. Exact totals
-// would encode that collision, hence the relational assertions.
-//
-// The relational assertions are satisfied by the nmap wrappers' own scope gates,
-// which suppress the off-protocol scan whether or not this handler gates sippts.
-// So they pin the nmap half; the sippts transport and range decisions are pinned
-// separately by TestSIPTransportSelectionFollowsTheAuthorisedProtocol. Only the
-// --ports 80 case exercises this handler's own early return.
+// Five launches when both protocols are authorised: nmap UDP, nmap TCP, sippts
+// scan, sippts enumerate over tcp, and sippts enumerate over udp. Authorising one
+// protocol suppresses exactly two of them — one nmap scan and one sippts
+// enumerate — and a port outside the list launches nothing at all.
 func TestSIPHonoursTheAuthorisedProtocol(t *testing.T) {
-	launches := func(t *testing.T, ports string) int {
-		t.Helper()
-		utils.ResetVisitedFlags()
-		setBounds(t, bounds.Config{Ports: ports, MaxRuntimeSeconds: 1})
-		utils.ToolRegistry = utils.NewToolTracker()
-		utils.BaseDir = t.TempDir() + "/"
-		drainWorkerPool(t)
+	for _, tt := range []struct {
+		name  string
+		ports string
+		want  int
+	}{
+		{name: "both protocols authorised", ports: "5060,U:5060", want: 5},
+		{name: "UDP only suppresses the TCP half", ports: "U:5060", want: 3},
+		{name: "TCP only suppresses the UDP half", ports: "5060", want: 3},
+		{name: "a different port authorises nothing", ports: "80", want: 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			utils.ResetVisitedFlags()
+			setBounds(t, bounds.Config{Ports: tt.ports, MaxRuntimeSeconds: 1})
+			utils.ToolRegistry = utils.NewToolTracker()
+			utils.BaseDir = t.TempDir() + "/"
+			drainWorkerPool(t)
 
-		SIP("5060")
-		utils.Wg.Wait()
+			SIP("5060")
+			utils.Wg.Wait()
 
-		if got := utils.ToolRegistry.CountByStatus(utils.ToolCompleted); got != 0 {
-			t.Errorf("completed count = %d, want 0: nothing should execute in this test", got)
-		}
-		return utils.ToolRegistry.GetTotal()
-	}
-
-	var both, udpOnly, tcpOnly, elsewhere int
-	t.Run("both protocols authorised", func(t *testing.T) { both = launches(t, "5060,U:5060") })
-	t.Run("UDP only", func(t *testing.T) { udpOnly = launches(t, "U:5060") })
-	t.Run("TCP only", func(t *testing.T) { tcpOnly = launches(t, "5060") })
-	t.Run("a different port", func(t *testing.T) { elsewhere = launches(t, "80") })
-
-	if both == 0 {
-		t.Fatalf("both-protocol run launched nothing, so the rest of this test proves nothing")
-	}
-	if udpOnly >= both {
-		t.Errorf("UDP-only launches = %d, both-protocol launches = %d: authorising only UDP must suppress the TCP half", udpOnly, both)
-	}
-	if tcpOnly >= both {
-		t.Errorf("TCP-only launches = %d, both-protocol launches = %d: authorising only TCP must suppress the UDP half", tcpOnly, both)
-	}
-	if elsewhere != 0 {
-		t.Errorf("launches for --ports 80 = %d, want 0: port 5060 was never authorised", elsewhere)
+			if got := utils.ToolRegistry.GetTotal(); got != tt.want {
+				t.Errorf("launches = %d, want %d for --ports %q", got, tt.want, tt.ports)
+			}
+			if got := utils.ToolRegistry.CountByStatus(utils.ToolCompleted); got != 0 {
+				t.Errorf("completed count = %d, want 0: nothing should execute in this test", got)
+			}
+		})
 	}
 }
 

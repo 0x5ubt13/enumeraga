@@ -231,13 +231,21 @@ func activeBounds() *bounds.Bounds {
 	return bounds.Active
 }
 
-// Announce tool and run it
+// runTool announces and runs a tool, deriving its tracker name from the tool and
+// the port. Callers that registered the tool themselves must use runToolAs, so a
+// name the registry disambiguated is not re-derived and lost.
 func runTool(args []string, filePath string, port string, OptVVerbose *bool) error {
 	if len(args) == 0 {
 		return fmt.Errorf("runTool called with no arguments")
 	}
+	return runToolAs(registryName(args[0], port), args, filePath, port, OptVVerbose)
+}
 
-	name := registryName(args[0], port)
+// runToolAs is runTool for a caller holding the key the tracker registered.
+func runToolAs(name string, args []string, filePath string, port string, OptVVerbose *bool) error {
+	if len(args) == 0 {
+		return fmt.Errorf("runToolAs called with no arguments")
+	}
 
 	// A shutdown already under way (a Ctrl+C the user sent before this tool
 	// acquired its worker slot) means it will never start. Recording it as a
@@ -554,7 +562,7 @@ func runAsync(fn AsyncFunc) {
 // runNmapScanAsync is a generic helper to run nmap scans asynchronously with tool registration and worker pool throttling
 // It handles: WaitGroup, tool registration, goroutine spawning, error handling, success printing, and concurrency limiting
 func runNmapScanAsync(toolName string, port string, outFile string, scanFunc NmapScanFunc, OptVVerbose *bool ) {
-	utils.ToolRegistry.RegisterTool(toolName)
+	toolName = utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
 	go func(name, portNum, outputFile string) {
@@ -639,7 +647,7 @@ func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 	port := extractPortFromPath(filePath)
 	toolName := registryName(args[0], port)
 
-	utils.ToolRegistry.RegisterTool(toolName)
+	toolName = utils.ToolRegistry.RegisterTool(toolName)
 	utils.Wg.Add(1)
 
 	go func(args []string, filePath string, OptVVerbose *bool, name, portNum string) {
@@ -658,7 +666,7 @@ func CallRunTool(args []string, filePath string, OptVVerbose *bool) {
 		defer pool.Release()
 
 		utils.ToolRegistry.StartTool(name)
-		err := runTool(args, filePath, portNum, OptVVerbose)
+		err := runToolAs(name, args, filePath, portNum, OptVVerbose)
 		if errors.Is(err, errToolSkipped) {
 			// runTool already recorded the terminal skip status; calling
 			// CompleteTool here would overwrite it with ToolCompleted and

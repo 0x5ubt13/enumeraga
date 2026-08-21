@@ -393,3 +393,54 @@ func TestToolTrackerSkipStillRegistersUnknownTools(t *testing.T) {
 		t.Errorf("skipped count = %d, want 1", got)
 	}
 }
+
+// TestRegisterToolDisambiguatesARepeatedLaunch is the regression test for the
+// registry collision.
+//
+// The registry key is derived from the tool binary and the port parsed out of the
+// output path, so two launches of one tool writing into one protocol directory
+// used to collide: RegisterTool replaced the map entry, leaving one record where
+// three tools ran. The SIP handler launches sippts three times into one directory.
+func TestRegisterToolDisambiguatesARepeatedLaunch(t *testing.T) {
+	tracker := NewToolTracker()
+
+	first := tracker.RegisterTool("sippts on port 5060")
+	second := tracker.RegisterTool("sippts on port 5060")
+	third := tracker.RegisterTool("sippts on port 5060")
+
+	if first != "sippts on port 5060" {
+		t.Errorf("first registration = %q, want the name unchanged", first)
+	}
+	if second != "sippts on port 5060 (2)" {
+		t.Errorf("second registration = %q, want the name suffixed with ' (2)'", second)
+	}
+	if third != "sippts on port 5060 (3)" {
+		t.Errorf("third registration = %q, want the name suffixed with ' (3)'", third)
+	}
+	if got := tracker.GetTotal(); got != 3 {
+		t.Errorf("total = %d, want 3: each launch needs its own entry", got)
+	}
+}
+
+// TestASkipOnOneLaunchLeavesItsSiblingsAlone covers the consequence of the
+// collision that actually lost information.
+//
+// Skips are terminal, so when three launches shared one entry a skip recorded by
+// the first suppressed the success recorded by the second. Distinct entries mean
+// each launch reports its own outcome.
+func TestASkipOnOneLaunchLeavesItsSiblingsAlone(t *testing.T) {
+	tracker := NewToolTracker()
+
+	skipped := tracker.RegisterTool("sippts on port 5060")
+	completed := tracker.RegisterTool("sippts on port 5060")
+
+	tracker.SkipTool(skipped, "no throttle available")
+	tracker.CompleteTool(completed, true)
+
+	if got := tracker.CountByStatus(ToolSkipped); got != 1 {
+		t.Errorf("skipped = %d, want 1", got)
+	}
+	if got := tracker.CountByStatus(ToolCompleted); got != 1 {
+		t.Errorf("completed = %d, want 1: a sibling's skip must not suppress this success", got)
+	}
+}
