@@ -183,8 +183,8 @@ func TestEveryLaunchedToolIsClassified(t *testing.T) {
 	// run time. The identifier form has to be matched too — a launch site written
 	// as []string{someTool, ...} would otherwise slip past the check entirely,
 	// which is how testssl came to be launched with no table entry at all.
-	literalPattern := regexp.MustCompile(`[A-Za-z0-9_]+Args\s*:?=\s*\[\]string\{\s*"([a-zA-Z0-9_.-]+)"`)
-	identifierPattern := regexp.MustCompile(`[A-Za-z0-9_]+Args\s*:?=\s*\[\]string\{\s*([a-zA-Z_][A-Za-z0-9_]*)\s*,`)
+	literalPattern := regexp.MustCompile(`[A-Za-z0-9_]*Args[A-Za-z0-9_]*\s*:?=\s*\[\]string\{\s*"([a-zA-Z0-9_.-]+)"`)
+	identifierPattern := regexp.MustCompile(`[A-Za-z0-9_]*Args[A-Za-z0-9_]*\s*:?=\s*\[\]string\{\s*([a-zA-Z_][A-Za-z0-9_]*)\s*,`)
 
 	var unclassified []string
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {

@@ -113,8 +113,12 @@ var toolRates = map[string]ToolRate{
 	// hold them to a cap. Both spellings are listed because the Kali package
 	// installs the binary as 'testssl.sh' while a manual install commonly names
 	// it 'testssl', and the launch site picks whichever exists.
-	"testssl":             {Class: RateUnthrottled},
-	"testssl.sh":          {Class: RateUnthrottled},
+	"testssl":    {Class: RateUnthrottled},
+	"testssl.sh": {Class: RateUnthrottled},
+	// sippts exposes no rate or inter-request delay, and its scan subcommand
+	// sweeps a port spread per host. Classified unthrottled so a rate-capped run
+	// skips it and says so, rather than sweeping at whatever speed it likes.
+	"sippts":              {Class: RateUnthrottled},
 	"cmseek":              {Class: RateUnthrottled},
 	"braa":                {Class: RateUnthrottled},
 	"snmpwalk":            {Class: RateUnthrottled},

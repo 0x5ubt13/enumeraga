@@ -160,7 +160,7 @@ which rather than implying the cap applied uniformly:
 | Rate-capped directly | `nmap`, `ffuf`, `nikto`, `onesixtyone`, `fping`, `nuclei` |
 | Thread-capped only (not a true rate) | `gobuster`, `dirsearch`, `hydra`, `wpscan`, `whatweb`, `netexec`, `crackmapexec`, `gowitness` |
 | Roughly one request, run uncapped | `ldapsearch`, `showmount`, `nmblookup`, `nc`, `openssl`, `impacket-rpcdump`, `ssh-audit`, `rusers`, `rwho`, `ident-user-enum` |
-| No throttle available — skipped under `--rate` | `cmseek`, `braa`, `snmpwalk`, `smbmap`, `enum4linux-ng`, `odat`, `cewl`, `wafw00f`, `msfconsole`, `nbtscan-unixwiz`, `responder-RunFinger`, `testssl` (also as `testssl.sh`) |
+| No throttle available — skipped under `--rate` | `cmseek`, `braa`, `snmpwalk`, `smbmap`, `enum4linux-ng`, `odat`, `cewl`, `wafw00f`, `msfconsole`, `nbtscan-unixwiz`, `responder-RunFinger`, `sippts`, `testssl` (also as `testssl.sh`) |
 
 Pass `--allow-unthrottled-tools` to run the last group anyway. A tool with no
 table entry is treated as unthrottled, so a newly added tool is skipped and
