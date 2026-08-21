@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/bounds"
+	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
@@ -127,5 +128,48 @@ func TestSIPTransportSelectionFollowsTheAuthorisedProtocol(t *testing.T) {
 				t.Errorf("sippts -r = %q, want %q for --ports %q", scanRange, tt.wantRange, tt.ports)
 			}
 		})
+	}
+}
+
+// TestSipptsCveProbingIsHeldBehindBruteMode covers the one part of the SIP
+// handler that is not enumeration.
+//
+// -cve makes sippts probe for known SIP vulnerabilities. It ran by default when
+// the handler was contributed, which put vulnerability probing in the same run as
+// ordinary service discovery. It now sits behind -b, alongside the brute-force
+// tools, and the scan still runs without it.
+func TestSipptsCveProbingIsHeldBehindBruteMode(t *testing.T) {
+	has := func(args []string, flag string) bool {
+		for _, a := range args {
+			if a == flag {
+				return true
+			}
+		}
+		return false
+	}
+
+	original := *checks.OptBrute
+	t.Cleanup(func() { *checks.OptBrute = original })
+
+	*checks.OptBrute = false
+	without := sipptsScanArgs("udp", "5060", "192.0.2.1")
+	if has(without, "-cve") {
+		t.Errorf("-cve present without -b: %v", without)
+	}
+
+	*checks.OptBrute = true
+	with := sipptsScanArgs("udp", "5060", "192.0.2.1")
+	if !has(with, "-cve") {
+		t.Errorf("-cve missing under -b: %v", with)
+	}
+
+	// The scan must still be a scan either way: dropping -cve must not drop the
+	// target, the transport, the port list or the fingerprinting flag.
+	for _, args := range [][]string{without, with} {
+		for _, required := range []string{"sippts", "scan", "-p", "udp", "-r", "5060", "-fp", "-i", "192.0.2.1"} {
+			if !has(args, required) {
+				t.Errorf("%q missing from %v", required, args)
+			}
+		}
 	}
 }

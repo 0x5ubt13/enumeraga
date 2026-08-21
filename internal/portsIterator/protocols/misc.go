@@ -156,6 +156,22 @@ func Port10000(port string) {
 	commands.CallIndividualPortScanner(utils.Target, "10000", nmapOutputFile, checks.OptVVerbose)
 }
 
+// sipptsScanArgs builds the argument vector for a sippts service scan.
+//
+// -cve makes sippts probe for known SIP vulnerabilities, which is a different
+// activity from enumerating what is there, and closer to what the brute-force
+// tools do. It is therefore held behind -b rather than running by default.
+//
+// The scan itself is unaffected by the choice: -cve is an independent flag, and
+// without it sippts still performs its service scan and reports what it finds.
+func sipptsScanArgs(transport, ports, target string) []string {
+	sipptsArgs := []string{"sippts", "scan", "-p", transport, "-r", ports, "-fp"}
+	if *checks.OptBrute {
+		sipptsArgs = append(sipptsArgs, "-cve")
+	}
+	return append(sipptsArgs, "-i", target)
+}
+
 // SIP enumerates Session Initiation Protocol (5060/TCP, 5060/UDP)
 //
 // The dispatcher routes on the port number alone and keeps no record of which
@@ -205,9 +221,8 @@ func SIP(port string) {
 		sipptsTransport = "udp"
 	}
 
-	sipptsScanArgs := []string{"sippts", "scan", "-p", sipptsTransport, "-r", scanRange, "-fp", "-cve", "-i", utils.Target}
 	sipptsScanPath := fmt.Sprintf("%ssippts_scan.out", dir)
-	commands.CallRunTool(sipptsScanArgs, sipptsScanPath, checks.OptVVerbose)
+	commands.CallRunTool(sipptsScanArgs(sipptsTransport, scanRange, utils.Target), sipptsScanPath, checks.OptVVerbose)
 
 	// sippts enumerate
 	if tcpInScope {

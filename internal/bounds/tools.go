@@ -118,6 +118,11 @@ var toolRates = map[string]ToolRate{
 	// sippts exposes no rate or inter-request delay, and its scan subcommand
 	// sweeps a port spread per host. Classified unthrottled so a rate-capped run
 	// skips it and says so, rather than sweeping at whatever speed it likes.
+	//
+	// It cannot be classified as thread-capped even though `sippts scan` accepts
+	// -th: this table keys on the binary, and `sippts enumerate` rejects -th with
+	// a usage error, so a thread cap applied here would break two of the three
+	// launches. Per-subcommand classification would be needed to do better.
 	"sippts":              {Class: RateUnthrottled},
 	"cmseek":              {Class: RateUnthrottled},
 	"braa":                {Class: RateUnthrottled},
