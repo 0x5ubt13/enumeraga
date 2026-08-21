@@ -436,8 +436,19 @@ def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
     """Build Docker command for infrastructure scan."""
     cmd = [
         "docker", "run", "--rm",
-        # These capabilities replace --privileged for nmap raw-socket SYN scans
-        "--cap-add=NET_RAW", "--cap-add=NET_ADMIN",
+        # NET_RAW replaces --privileged. It is all the scanners need: nmap's SYN and
+        # UDP scans, OS fingerprinting and fping's ICMP were all verified against a
+        # fixture with this capability alone. NET_ADMIN was granted here too and has
+        # been dropped -- it confers netfilter administration, so under host
+        # networking it would let a scan flush the host firewall, and inside a
+        # mediator's network namespace it would let a scan tear down the rules
+        # confining it.
+        #
+        # This requires the image built by the repository Dockerfile, which strips
+        # nmap's file capabilities. Kali's nmap requests cap_net_admin via those, and
+        # the kernel refuses the exec if it is outside the bounding set, so an older
+        # image run with these arguments fails at exit 126 rather than scanning less.
+        "--cap-add=NET_RAW",
         "--network", "host",  # Required for nmap to work properly
         "-v", f"{resolve_output_source(args)}:/tmp/enumeraga_output",
         *host_owner_env(),

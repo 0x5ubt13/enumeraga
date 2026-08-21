@@ -58,6 +58,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Strip nmap's file capabilities so the container needs only CAP_NET_RAW.
+#
+# Kali ships /usr/lib/nmap/nmap with cap_net_bind_service,cap_net_admin,cap_net_raw=eip.
+# The kernel refuses to exec a file whose requested capabilities are not all in the
+# process's bounding set, so a container run without NET_ADMIN cannot start nmap at
+# all -- it fails with "Operation not permitted" and exit 126 before scanning
+# anything. None of those capabilities is needed: this container runs as root, and
+# root with CAP_NET_RAW effective opens raw sockets without them. Dropping them lets
+# the runtime withhold NET_ADMIN, which matters because NET_ADMIN confers netfilter
+# administration -- under host networking it would let a scan flush the host
+# firewall, and inside a mediator's network namespace it would let a scan tear down
+# the rules confining it.
+#
+# This depends on the container running as root. Adding a USER directive below
+# would break nmap, and the failure would appear at exec, far from the change that
+# caused it. fping's capabilities are left alone: it asks only for cap_net_raw,
+# which the runtime still grants.
+RUN setcap -r /usr/lib/nmap/nmap \
+    && test -z "$(getcap /usr/lib/nmap/nmap)"
+
 # Download only the specific SecLists wordlists we need instead of full 1.9GB package
 # This reduces image size from ~3GB to ~1GB
 RUN mkdir -p /usr/share/seclists/Discovery/Web-Content \

@@ -257,3 +257,21 @@ def test_infra_tool_schema_declares_the_bounding_flags():
         "timeout",
     ):
         assert name in properties, f"{name} is not declared in the infra tool schema"
+
+
+def test_infra_command_grants_net_raw_but_not_net_admin():
+    """NET_RAW is all the scanners need; NET_ADMIN is not, and granting it is unsafe.
+
+    Verified against a fixture on 2026-08-21: nmap (SYN, UDP, -O, -sV, NSE), masscan,
+    fping, nbtscan-unixwiz, onesixtyone, braa and snmpwalk all behave identically with
+    NET_RAW alone, and the real binary produces identical results end to end. `ip link
+    set` fails without NET_ADMIN and succeeds with it, so the capability's absence is
+    detectable and no scanning tool needed it.
+
+    This pairs with the `setcap -r /usr/lib/nmap/nmap` step in the Dockerfile. Kali's
+    nmap requests cap_net_admin through file capabilities, and the kernel refuses to
+    exec it when that is outside the bounding set, so the two must ship together.
+    """
+    cmd = build_docker_infra_command({"target": "192.168.1.100"})
+    assert "--cap-add=NET_RAW" in cmd
+    assert not any("NET_ADMIN" in part for part in cmd)
