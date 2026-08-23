@@ -158,7 +158,7 @@ VOLUME ["/tmp/enumeraga_output"]
 # Build:
 #   docker build -t gagarter/enumeraga_infra .
 #
-# Run (network host required for nmap):
+# Run (host networking is the default, not a requirement; see README):
 #   docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99
 #   docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 -b
 #   docker run --network host -v ./output:/tmp/enumeraga_output -v ./targets.txt:/targets.txt gagarter/enumeraga_infra -t /targets.txt

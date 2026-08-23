@@ -200,6 +200,8 @@ Tools differ in what a `rate` cap can mean for them, and a tool with no throttle
 
 Validation lives in the scanner, not here. Passing `ports` with `top_ports`, or `gentle` with `rate`, is rejected at startup with a message naming both flags.
 
+**The run record.** Every scan writes `run.jsonl` into the mounted results directory: one JSON object per line naming each tool launched, its argument vector, its timings and its real exit status, bracketed by a pair of `run` lines carrying the bounds and the final disposition. It is appended as the scan proceeds, so it can be read while a scan is still running — which is the point when `detach` is set. Its absence means recording was disabled, not that nothing ran. The repository README documents the entry shapes.
+
 **Example:**
 ```python
 {
@@ -398,7 +400,7 @@ The Docker images are automatically built and published via GitHub Actions:
 - Reproducible environment
 
 ⚠️ **Important:**
-- Infrastructure scans use `--network host` (required for nmap)
+- Infrastructure scans default to `--network host`; pass `network_mode` to join another container's network namespace instead
 - Cloud credentials mounted read-only
 - Output directory writable by container
 - No sensitive data in container after removal

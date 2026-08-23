@@ -35,7 +35,8 @@ if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "  # Bounded scan: exactly these ports, 5 requests/second, 15 minute limit:"
     echo "  docker run --network host -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 --ports 80,443 --rate 5 --max-runtime 900"
     echo ""
-    echo "Note: --network host is required for nmap scans to work properly"
+    echo "Note: --network host is the default and reaches LAN targets; it is not required."
+    echo "      Use --network container:<name-or-id> to scan from inside another container."
     echo ""
     ./enumeraga infra -h
     exit 0

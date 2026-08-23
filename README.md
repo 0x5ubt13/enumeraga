@@ -191,6 +191,24 @@ an absolute guarantee that nothing beyond the named ports is touched should
 combine `--ports` with `-n`/`--nmap-only`, which runs nmap alone and skips the
 tool suite entirely.
 
+#### The run record
+
+Every run writes `run.jsonl` into the output root — one JSON object per line, appended as the scan proceeds, so it can be read while a scan is still running. It exists for callers that must account for their own traffic: a scanner invoked as one approved executable makes many connections, so a record of what it launched is the only thing that lets an outer audit log and a packet capture be reconciled against each other.
+
+Three kinds of line appear:
+
+- `run` — exactly twice. The opening line carries the version, the target as given and the bounds verbatim, and is what a caller hashes against the request it approved. The closing line carries the end timestamp, whether the wall-clock budget expired and the exit code the process is about to use.
+- `tool` — one per external command launch, including every nmap invocation. It carries the argument vector, the timings, the artefact path, the terminal status and the real exit code, plus the signal where one was received.
+- `probe` — one per in-process HTTP or HTTPS detection probe. These spawn no process, so they appear nowhere in the process table; without an entry they would be the one class of action reaching the target that leaves no local trace.
+
+`argv` is recorded verbatim and is explicitly `null` for a probe, so a consumer can see that the action had no command line rather than inferring a gap. For nmap it is the vector taken from the library that builds it rather than a reconstruction, with the `-oX` pair the library appends at run time absent. A skipped tool records its reason and omits `exit_code` entirely, because nothing ran.
+
+`status` and `exit_code` can legitimately disagree. Enumeraga treats `nikto`, `fping` and `ssh-audit` as completed despite their non-zero exits, because those tools do not exit cleanly by design; the record reports the status enumeraga acted on and the exit code the process actually returned, without normalising either to match the other. A `failed` status with no `exit_code` beside it means the launch never produced one — a refused exec rather than a tool that ran and failed.
+
+If the file cannot be written the scan continues with recording disabled, after one warning on stderr. A scan abandoned because a log file could not be opened is a worse outcome than a scan with no log, so the absence of `run.jsonl` means recording was disabled, not that nothing ran.
+
+**The limit.** The record is self-reported. It is trustworthy because something else constrains it — a packet capture, if the caller has one. From the record alone, a scanner reporting honestly and a scanner reporting what it wants believed are indistinguishable.
+
 For why these bounds exist, and the trade-offs taken to get there, see [the bounded scanning rationale](docs/bounded-scanning-rationale.md).
 
 ### Enumeraga Cloud
@@ -304,15 +322,17 @@ docker build -t gagarter/enumeraga_infra .
 docker pull gagarter/enumeraga_infra
 
 # Run against a single target
-docker run --network host --cap-add NET_RAW --cap-add NET_ADMIN -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99
+docker run --network host --cap-add NET_RAW -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99
 
 # Run with bruteforce enabled
-docker run --network host --cap-add NET_RAW --cap-add NET_ADMIN -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 -b
+docker run --network host --cap-add NET_RAW -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 -b
 
 # Run against targets from a file
-docker run --network host --cap-add NET_RAW --cap-add NET_ADMIN -v ./output:/tmp/enumeraga_output -v ./targets.txt:/targets.txt gagarter/enumeraga_infra -t /targets.txt
+docker run --network host --cap-add NET_RAW -v ./output:/tmp/enumeraga_output -v ./targets.txt:/targets.txt gagarter/enumeraga_infra -t /targets.txt
 ```
-**Note:** Use `--network host --cap-add NET_RAW --cap-add NET_ADMIN` for nmap privileged scans to work correctly in Docker.
+**Note:** `--cap-add NET_RAW` is what nmap's privileged scans need. `NET_ADMIN` used to be granted alongside it and no longer is: it confers netfilter administration, which no scan performs, and withholding it means a container sharing another container's network namespace cannot alter the firewall rules confining it. The image strips nmap's own file capabilities to make that possible, so an image older than that change fails with exit 126 under these arguments rather than scanning less.
+
+`--network host` is the **default**, not a requirement — it is simply the simplest way for a scan to reach a target on the local network. A scan whose traffic must cross a recording proxy or gateway instead joins that container's network namespace; through the MCP server that is the `network_mode` argument, and directly it is `--network container:<name-or-id>`.
 
 #### M-series MacOS (ARM64)!
 
