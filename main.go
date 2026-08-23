@@ -12,6 +12,7 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator"
+	"github.com/0x5ubt13/enumeraga/internal/runrecord"
 	"github.com/0x5ubt13/enumeraga/internal/scans"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/Ullaakut/nmap/v3"
@@ -38,6 +39,24 @@ func main() {
 	// Apply the run's wall-clock budget now the flags have been parsed. Signal
 	// handling was installed at start-up; this narrows the same context.
 	utils.SetRunDeadline(bounds.Active.MaxRuntime)
+
+	// The record goes in the output root rather than a per-target directory:
+	// utils.BaseDir is reassigned per target below, so a per-target file would
+	// fragment a multi-target run into several partial records with no single
+	// view of the invocation.
+	runrecord.Active = runrecord.Open(*checks.OptOutput)
+	defer runrecord.Active.Close()
+
+	runStart := time.Now()
+	runrecord.Active.Write(runrecord.Entry{
+		Kind:    runrecord.KindRun,
+		Version: utils.Version,
+		// The target as it was given, which for a multi-target run is the file:
+		// utils.Target is not set until a target is actually being scanned.
+		Target:    *checks.OptTarget,
+		Bounds:    bounds.Active.SummaryLine(),
+		StartedAt: &runStart,
+	})
 
 	// Initialize worker pool for concurrent tool execution (limits goroutines)
 	workers := utils.MaxWorkersForMode()
@@ -74,10 +93,27 @@ func main() {
 	// A run stopped by its own wall-clock budget is not a failure: the artefacts
 	// produced so far are complete and valid. Exit 124 (the GNU timeout
 	// convention) so the caller can tell the two apart.
-	if utils.RunDeadlineExceeded() {
+	deadlineHit := utils.RunDeadlineExceeded()
+	exitCode := 0
+	if deadlineHit {
+		exitCode = 124
+	}
+	runEnd := time.Now()
+	runrecord.Active.Write(runrecord.Entry{
+		Kind:        runrecord.KindRun,
+		EndedAt:     &runEnd,
+		DeadlineHit: &deadlineHit,
+		ProcessExit: &exitCode,
+	})
+
+	if deadlineHit {
 		utils.PrintCustomBiColourMsg("yellow", "red",
 			"[!] Wall-clock limit of ", bounds.Active.MaxRuntime.String(),
 			" reached. Results above are partial but valid.")
+		// os.Exit skips deferred calls, so the record is flushed explicitly.
+		// Without this the flagship bounded case would be the one run with no
+		// closing line.
+		runrecord.Active.Close()
 		os.Exit(124)
 	}
 }
