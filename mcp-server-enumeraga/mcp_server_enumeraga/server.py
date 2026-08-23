@@ -157,6 +157,19 @@ TOOLS: list[Tool] = [
                     "description": "Permit a targets file under a bounded run, which otherwise refuses more than one target.",
                     "default": False,
                 },
+                "network_mode": {
+                    "type": "string",
+                    "description": (
+                        "Docker network mode for the scan container. Defaults to 'host', which "
+                        "is what a standalone scan on a LAN wants. Pass 'container:<name-or-id>' "
+                        "to run inside another container's network namespace, so that container's "
+                        "firewall rules and packet capture cover this scan; note that takes a "
+                        "container name or ID, not a Compose service name, which is "
+                        "project-prefixed. A named Docker network is also accepted. Joining a "
+                        "namespace inherits that container's interfaces, DNS and lifetime: if it "
+                        "stops, this scan loses its networking."
+                    ),
+                },
                 "allow_unthrottled_tools": {
                     "type": "boolean",
                     "description": (
@@ -409,6 +422,7 @@ _INFRA_IDENTITY_ARGS = (
     "nmap_only",
     "gentle",
     "brute",
+    "network_mode",
 )
 
 
@@ -449,7 +463,13 @@ def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
         # the kernel refuses the exec if it is outside the bounding set, so an older
         # image run with these arguments fails at exit 126 rather than scanning less.
         "--cap-add=NET_RAW",
-        "--network", "host",  # Required for nmap to work properly
+        # host is the default, not a requirement. nmap needs to reach the target, and
+        # host networking is the simplest way to do that for a standalone scan on a
+        # LAN. A caller whose traffic must cross a recording mediator instead passes
+        # network_mode="container:<id>" to join that container's network namespace,
+        # which is how the confining rules and the packet capture come to cover this
+        # scan by construction rather than by configuration.
+        "--network", args.get("network_mode") or "host",
         "-v", f"{resolve_output_source(args)}:/tmp/enumeraga_output",
         *host_owner_env(),
         *forwarded_env(),

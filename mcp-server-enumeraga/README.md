@@ -180,6 +180,11 @@ Run infrastructure enumeration using Docker container.
 - `nmap_only` (optional, boolean): Run nmap scans only and skip the tool suite
 - `gentle` (optional, boolean): Throttle scans and tools. Cannot be combined with `rate` or `concurrency`
 - `timeout` (optional, integer): Maximum minutes for any single long-running tool (default 10)
+- `network_mode` (optional, string): Docker network mode. Defaults to `host`. Pass `container:<name-or-id>` to run inside another container's network namespace, or a named Docker network
+
+**Running inside another container's network namespace.** `network_mode: "container:<name-or-id>"` puts the scan in that container's namespace, so its firewall rules and any packet capture cover the scan by construction rather than by configuration. Three things to know: it takes a container name or ID, not a Compose service name, which is project-prefixed; the scan inherits that container's interfaces, DNS and lifetime, so if it stops the scan loses its networking; and this is mutually exclusive with host networking, which is why it is a parameter rather than an addition.
+
+The container is granted `CAP_NET_RAW` and nothing else, which is what makes joining a mediator's namespace safe: without `CAP_NET_ADMIN` in its bounding set, the scan cannot alter the rules confining it. This requires an image built from the current Dockerfile, which strips nmap's file capabilities; an older image run against these arguments fails loudly with exit 126 rather than scanning less.
 
 **Bounding parameters.** Any one of `ports`, `rate`, `concurrency` or `max_runtime` implies `bounded`, so bounds never need pairing with a mode flag:
 

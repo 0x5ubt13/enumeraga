@@ -275,3 +275,53 @@ def test_infra_command_grants_net_raw_but_not_net_admin():
     cmd = build_docker_infra_command({"target": "192.168.1.100"})
     assert "--cap-add=NET_RAW" in cmd
     assert not any("NET_ADMIN" in part for part in cmd)
+
+
+def _network_args(cmd):
+    """The --network flag and its value, asserting it appears exactly once."""
+    idx = [i for i, part in enumerate(cmd) if part == "--network"]
+    assert len(idx) == 1, f"--network must appear exactly once, found {len(idx)}: {cmd}"
+    return cmd[idx[0] + 1]
+
+
+def test_network_mode_defaults_to_host():
+    """An existing caller that passes nothing must get exactly what it got before."""
+    assert _network_args(build_docker_infra_command({"target": "192.168.1.100"})) == "host"
+
+
+def test_network_mode_host_is_explicitly_accepted():
+    """Passing the default explicitly is the same as omitting it."""
+    cmd = build_docker_infra_command({"target": "192.168.1.100", "network_mode": "host"})
+    assert _network_args(cmd) == "host"
+
+
+def test_network_mode_joins_a_container_namespace():
+    """The point of the parameter: join a mediator's network namespace.
+
+    `container:` takes a container name or ID, not a compose service name, and under
+    compose that name is project-prefixed. The caller passes the resolved identifier.
+    """
+    cmd = build_docker_infra_command(
+        {"target": "192.168.1.100", "network_mode": "container:target-gateway"}
+    )
+    assert _network_args(cmd) == "container:target-gateway"
+    assert "host" not in cmd, "host networking must not survive alongside a namespace join"
+
+
+def test_network_mode_accepts_a_named_network():
+    cmd = build_docker_infra_command({"target": "192.168.1.100", "network_mode": "proxy-net"})
+    assert _network_args(cmd) == "proxy-net"
+
+
+def test_infra_tool_schema_declares_network_mode():
+    infra = next(t for t in TOOLS if t.name == "enumeraga_infra_scan")
+    assert "network_mode" in infra.inputSchema["properties"]
+
+
+def test_scan_key_distinguishes_network_modes():
+    """A scan through a mediator and a scan on host networking are not the same work."""
+    base = {"target": "192.168.1.100", "ports": "8080"}
+    assert scan_key("infra", base) != scan_key(
+        "infra", {**base, "network_mode": "container:target-gateway"}
+    )
+
