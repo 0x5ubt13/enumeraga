@@ -9,6 +9,7 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
+	"github.com/0x5ubt13/enumeraga/internal/runrecord"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
@@ -21,19 +22,25 @@ func IsHTTPService(url string) bool {
 		},
         }
 
+	startedAt := time.Now()
+	found := false
+	attempts := 0
 	for attempt := 1; attempt <= 3; attempt++ {
+		attempts = attempt
 		resp, err := client.Get(url)
 		if err == nil && resp != nil {
 			defer resp.Body.Close()
 
 			// Check for any status code
 			if resp.StatusCode > 0 {
-				return true
+				found = true
+				break
 			}
 		}
 
 	}
-        return false
+	recordProbe("http probe", url, startedAt, attempts, found)
+	return found
 }
 
 func IsHTTPSService(url string) bool {
@@ -55,19 +62,25 @@ func IsHTTPSService(url string) bool {
 		},
 	}
 
+	startedAt := time.Now()
+	found := false
+	attempts := 0
 	for attempt := 1; attempt <= 3; attempt++ {
+		attempts = attempt
 		resp, err := client.Get(url)
 		if err == nil && resp != nil {
 			defer resp.Body.Close()
 
 			// Check for any status code
 			if resp.StatusCode > 0 {
-				return true
+				found = true
+				break
 			}
 		}
 
 	}
-        return false
+	recordProbe("https probe", url, startedAt, attempts, found)
+	return found
 }
 
 
@@ -147,3 +160,22 @@ func HTTP(port string, scheme string) {
 
 
 
+
+// recordProbe writes the run record entry for an in-process probe.
+//
+// One entry per call rather than per attempt: the retries are one decision about
+// one URL, and the attempt count says how hard it tried. Argv is left nil so the
+// record carries an explicit null, which is how a consumer sees that this action
+// had no command line rather than inferring a gap.
+func recordProbe(name, url string, startedAt time.Time, attempts int, found bool) {
+	runrecord.Active.Write(runrecord.Entry{
+		Kind:      runrecord.KindProbe,
+		Name:      name,
+		Target:    utils.Target,
+		URL:       url,
+		StartedAt: &startedAt,
+		Attempts:  attempts,
+		Found:     &found,
+		Status:    runrecord.StatusCompleted,
+	})
+}
