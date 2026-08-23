@@ -16,11 +16,13 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/config"
 	"github.com/0x5ubt13/enumeraga/internal/installer"
+	"github.com/0x5ubt13/enumeraga/internal/runrecord"
 	"github.com/0x5ubt13/enumeraga/internal/scans"
 	"github.com/0x5ubt13/enumeraga/internal/types"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
@@ -247,17 +249,36 @@ func runToolAs(name string, args []string, filePath string, port string, OptVVer
 		return fmt.Errorf("runToolAs called with no arguments")
 	}
 
+	startedAt := time.Now()
+	entry := runrecord.Entry{
+		Kind:      runrecord.KindTool,
+		Name:      name,
+		Argv:      args,
+		Target:    utils.Target,
+		Ports:     port,
+		Artefact:  filePath,
+		StartedAt: &startedAt,
+	}
+
 	// A shutdown already under way (a Ctrl+C the user sent before this tool
 	// acquired its worker slot) means it will never start. Recording it as a
 	// skip rather than returning a bare nil error stops the caller from
 	// treating "never ran" as "ran and succeeded".
 	if utils.IsShuttingDown() {
 		utils.ToolRegistry.SkipTool(name, "scan shutting down before this tool could start")
+		entry.Status = runrecord.StatusSkipped
+		entry.SkipReason = "scan shutting down before this tool could start"
+		entry.RateNote = utils.ToolRegistry.RateNoteFor(name)
+		runrecord.Active.Write(entry)
 		return errToolSkipped
 	}
 
 	active := activeBounds()
 	result := active.ApplyRate(args)
+	// The record must show the vector as it would have run, throttling flags and
+	// all, so it is taken after ApplyRate rather than before -- including on the
+	// skip path below, where the vector is the evidence of what was held back.
+	entry.Argv = result.Args
 	// The note says how the rate cap applied, so it is only meaningful when a rate
 	// cap was asked for. Recording it unconditionally made a run bounded only by
 	// --ports report its tools as "rate-capped" when no rate was ever requested.
@@ -270,6 +291,10 @@ func runToolAs(name string, args []string, filePath string, port string, OptVVer
 		utils.ToolRegistry.SkipTool(name, result.Reason)
 		utils.PrintCustomBiColourMsg("yellow", "cyan",
 			fmt.Sprintf("[!] Skipping '%s': %s", name, result.Reason))
+		entry.Status = runrecord.StatusSkipped
+		entry.SkipReason = result.Reason
+		entry.RateNote = utils.ToolRegistry.RateNoteFor(name)
+		runrecord.Active.Write(entry)
 		return errToolSkipped
 	}
 	args = result.Args
@@ -312,12 +337,14 @@ func runToolAs(name string, args []string, filePath string, port string, OptVVer
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating stdout pipe: %s", err))
+		recordToolFailure(entry, name, err)
 		return err
 	}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating stderr pipe: %s", err))
+		recordToolFailure(entry, name, err)
 		return err
 	}
 
@@ -325,6 +352,7 @@ func runToolAs(name string, args []string, filePath string, port string, OptVVer
 	file, err := os.Create(filePath)
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating output file: %s", err))
+		recordToolFailure(entry, name, err)
 		return err
 	}
 
@@ -338,6 +366,7 @@ func runToolAs(name string, args []string, filePath string, port string, OptVVer
 	// Start the command asynchronously in a goroutine
 	if err := cmd.Start(); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error starting command %s: %v", tool, err))
+		recordToolFailure(entry, name, err)
 		return err
 	}
 
@@ -375,24 +404,75 @@ func runToolAs(name string, args []string, filePath string, port string, OptVVer
 		// Check if the error was due to context cancellation (shutdown)
 		if ctx.Err() == context.Canceled {
 			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Tool '", tool, "' terminated due to shutdown")
+			recordToolOutcome(entry, name, err, false)
 			return err
 		}
 		// Check if the error was due to the per-tool wall-clock deadline
 		if ctx.Err() == context.DeadlineExceeded {
 			utils.PrintCustomBiColourMsg("yellow", "red", "[!] Tool '", tool, fmt.Sprintf("' exceeded the %d-minute timeout and was terminated", utils.ToolTimeout))
+			recordToolOutcome(entry, name, err, false)
 			return err
 		}
 		if tool == "nikto" || tool == "fping" || tool == "ssh-audit" {
 			// Nikto and fping don't have a clean exit
 			// We return nil as success for these tools
+			recordToolOutcome(entry, name, err, true)
 			return nil
 		} else {
 			utils.PrintSafe("%s %s %s %s\n", utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
+			recordToolOutcome(entry, name, err, false)
 			return err
 		}
 	}
 
+	recordToolOutcome(entry, name, nil, false)
 	return nil
+}
+
+// recordToolOutcome writes the tool entry, deriving the exit status from err.
+//
+// status and exitCode are allowed to disagree. runToolAs returns nil for nikto,
+// fping and ssh-audit because they do not exit cleanly, so those runs are
+// completed as far as the rest of enumeraga is concerned while still carrying a
+// non-zero status here. That divergence is information: normalising either field
+// to match the other would destroy exactly what the record exists to preserve.
+func recordToolOutcome(entry runrecord.Entry, name string, waitErr error, tolerated bool) {
+	var exitErr *exec.ExitError
+	if errors.As(waitErr, &exitErr) {
+		code := exitErr.ExitCode()
+		entry.ExitCode = &code
+		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+			entry.Signal = status.Signal().String()
+		}
+	} else if waitErr == nil {
+		code := 0
+		entry.ExitCode = &code
+	}
+
+	if waitErr == nil || tolerated {
+		entry.Status = runrecord.StatusCompleted
+	} else {
+		entry.Status = runrecord.StatusFailed
+	}
+	if waitErr != nil {
+		entry.Error = waitErr.Error()
+	}
+	entry.RateNote = utils.ToolRegistry.RateNoteFor(name)
+	runrecord.Active.Write(entry)
+}
+
+// recordToolFailure writes the entry for a tool that never reached a wait: a pipe
+// that could not be opened, an output file that could not be created, or an exec
+// that was refused.
+//
+// There is no exit status to record, because no process produced one. A failed
+// status with no exit_code beside it is itself the signal that nothing ran, and
+// is what distinguishes a tool that refused to exec from one that ran and failed.
+func recordToolFailure(entry runrecord.Entry, name string, err error) {
+	entry.Status = runrecord.StatusFailed
+	entry.Error = err.Error()
+	entry.RateNote = utils.ToolRegistry.RateNoteFor(name)
+	runrecord.Active.Write(entry)
 }
 
 // RunRangeTools enumerates a whole CIDR range using specific range tools
