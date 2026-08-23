@@ -27,6 +27,7 @@ func IndividualPortScanner(target, port, outFile string, OptVVerbose *bool) erro
 		nmap.WithVerbosity(2),
 	}
 	options = append(options, common.RateOptions(common.DefaultMinRate)...)
+	startedAt := time.Now()
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualPortScanner: %s %s %s %w", target, port, outFile, err)
@@ -38,7 +39,17 @@ func IndividualPortScanner(target, port, outFile string, OptVVerbose *bool) erro
 		defer tracker.Stop()
 	}
 
-	_, _, err = scanner.Run()
+	result, warnings, err := scanner.Run()
+	// The error is deliberately swallowed here, as it always has been; the call
+	// is for the warning output and the run record.
+	_ = common.HandleScanResult(common.ScanRecord{
+		Name:      "nmap on port " + port,
+		Target:    target,
+		Ports:     port,
+		Artefact:  outFile,
+		StartedAt: startedAt,
+		Scanner:   scanner,
+	}, result, warnings, err, OptVVerbose)
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("unable to run nmap scan individualPortScanner: %s %s %s %v", target, port, outFile, err))
 	}
@@ -65,6 +76,7 @@ func FullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) error 
 		nmap.WithVerbosity(2),
 	}
 	options = append(options, common.RateOptions(common.DefaultMinRate)...)
+	startedAt := time.Now()
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner fullAggressiveScan: %w", err)
@@ -76,7 +88,17 @@ func FullAggressiveScan(target, ports, outFile string, OptVVerbose *bool) error 
 		defer tracker.Stop()
 	}
 
-	_, _, err = scanner.Run()
+	result, warnings, err := scanner.Run()
+	// The error is deliberately swallowed here, as it always has been; the call
+	// is for the warning output and the run record.
+	_ = common.HandleScanResult(common.ScanRecord{
+		Name:      "nmap aggressive scan",
+		Target:    target,
+		Ports:     ports,
+		Artefact:  outFile,
+		StartedAt: startedAt,
+		Scanner:   scanner,
+	}, result, warnings, err, OptVVerbose)
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("unable to run nmap scan fullAggressiveScan: %s %s %s %v", target, ports, outFile, err))
 	}

@@ -2,10 +2,16 @@ package sweeps
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/scans/common"
 	"github.com/Ullaakut/nmap/v3"
 )
+
+// udpSweepPorts is the fixed list both unbounded UDP sweeps probe. It is named so
+// the run record reports what was actually requested rather than a second copy of
+// the string that can drift from it.
+const udpSweepPorts = "53,67,69,111,161,162,10161,10162,623,500,123,5060,514"
 
 // UdpPortSweep runs a quick port sweep on UDP
 func UdpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
@@ -16,17 +22,25 @@ func UdpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithUDPScan(),
-		nmap.WithPorts("53,67,69,111,161,162,10161,10162,623,500,123,5060,514"),
+		nmap.WithPorts(udpSweepPorts),
 		nmap.WithPrivileged(),
 	}
 	options = append(options, common.RateOptions(common.FastMinRate)...)
+	startedAt := time.Now()
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner udpPortSweep: %s %w", target, err)
 	}
 
 	result, warnings, err := scanner.Run()
-	if err := common.HandleScanResult(result, warnings, err, optVVerbose); err != nil {
+	if err := common.HandleScanResult(common.ScanRecord{
+		Name:      "nmap UDP sweep",
+		Target:    target,
+		Ports:     udpSweepPorts,
+		UDP:       true,
+		StartedAt: startedAt,
+		Scanner:   scanner,
+	}, result, warnings, err, optVVerbose); err != nil {
 		return nil, fmt.Errorf("unable to run nmap scan udpPortSweep: %w", err)
 	}
 
@@ -42,17 +56,25 @@ func SlowerUdpPortSweep(target string, optVVerbose *bool) ([]nmap.Host, error) {
 	options := []nmap.Option{
 		nmap.WithTargets(target),
 		nmap.WithUDPScan(),
-		nmap.WithPorts("53,67,69,111,161,162,10161,10162,623,500,123,5060,514"),
+		nmap.WithPorts(udpSweepPorts),
 		nmap.WithPrivileged(),
 	}
 	options = append(options, common.RateOptions(common.DefaultMinRate)...)
+	startedAt := time.Now()
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner udpPortSweep: %s %w", target, err)
 	}
 
 	result, warnings, err := scanner.Run()
-	if err := common.HandleScanResult(result, warnings, err, optVVerbose); err != nil {
+	if err := common.HandleScanResult(common.ScanRecord{
+		Name:      "nmap slower UDP sweep",
+		Target:    target,
+		Ports:     udpSweepPorts,
+		UDP:       true,
+		StartedAt: startedAt,
+		Scanner:   scanner,
+	}, result, warnings, err, optVVerbose); err != nil {
 		return nil, fmt.Errorf("unable to run nmap scan udpPortSweep: %w", err)
 	}
 

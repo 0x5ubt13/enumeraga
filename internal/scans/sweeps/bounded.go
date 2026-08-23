@@ -2,6 +2,7 @@ package sweeps
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/scans/common"
 	"github.com/Ullaakut/nmap/v3"
@@ -55,13 +56,21 @@ func boundedScan(target, ports string, udp bool, optVVerbose *bool) ([]nmap.Host
 	}
 	options = append(options, common.RateOptions(common.FastMinRate)...)
 
+	startedAt := time.Now()
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create nmap scanner: %w", err)
 	}
 
 	result, warnings, err := scanner.Run()
-	if err := common.HandleScanResult(result, warnings, err, optVVerbose); err != nil {
+	if err := common.HandleScanResult(common.ScanRecord{
+		Name:      "nmap bounded sweep",
+		Target:    target,
+		Ports:     ports,
+		UDP:       udp,
+		StartedAt: startedAt,
+		Scanner:   scanner,
+	}, result, warnings, err, optVVerbose); err != nil {
 		return nil, fmt.Errorf("unable to run nmap scan: %w", err)
 	}
 

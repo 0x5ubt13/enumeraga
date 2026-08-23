@@ -30,6 +30,7 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string, 
 		nmap.WithVerbosity(2),
 	}
 	options = append(options, common.RateOptions(common.DefaultMinRate)...)
+	startedAt := time.Now()
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualPortScannerWithNSEScripts: %s %s %s %w", target, port, outFile, err)
@@ -42,7 +43,14 @@ func IndividualPortScannerWithNSEScripts(target, port, outFile, scripts string, 
 	}
 
 	_, warnings, err := scanner.Run()
-	if err := common.HandleScanResult(nil, warnings, err, OptVVerbose); err != nil {
+	if err := common.HandleScanResult(common.ScanRecord{
+		Name:      "nmap NSE on port " + port,
+		Target:    target,
+		Ports:     port,
+		Artefact:  outFile,
+		StartedAt: startedAt,
+		Scanner:   scanner,
+	}, nil, warnings, err, OptVVerbose); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("unable to run nmap scan individualPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err))
 	}
 
@@ -74,6 +82,7 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 		nmap.WithVerbosity(2),
 	}
 	options = append(options, common.RateOptions(common.DefaultMinRate)...)
+	startedAt := time.Now()
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualPortScannerWithNSEScriptsAndScriptArgs: %s %s %s %w", target, port, outFile, err)
@@ -86,7 +95,14 @@ func IndividualPortScannerWithNSEScriptsAndScriptArgs(target, port, outFile, scr
 	}
 
 	_, warnings, err := scanner.Run()
-	if err := common.HandleScanResult(nil, warnings, err, OptVVerbose); err != nil {
+	if err := common.HandleScanResult(common.ScanRecord{
+		Name:      "nmap NSE with args on port " + port,
+		Target:    target,
+		Ports:     port,
+		Artefact:  outFile,
+		StartedAt: startedAt,
+		Scanner:   scanner,
+	}, nil, warnings, err, OptVVerbose); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("unable to run nmap scan individualPortScannerWithNSEScriptsAndScriptArgs: %s %s %s %v", target, port, outFile, err))
 	}
 
@@ -118,6 +134,7 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 		nmap.WithVerbosity(2),
 	}
 	options = append(options, common.RateOptions(common.DefaultMinRate)...)
+	startedAt := time.Now()
 	scanner, err := nmap.NewScanner(ctx, options...)
 	if err != nil {
 		return fmt.Errorf("unable to create nmap scanner individualUDPPortScannerWithNSEScripts: %s %s %s %w", target, port, outFile, err)
@@ -130,7 +147,15 @@ func IndividualUDPPortScannerWithNSEScripts(target, port, outFile, scripts strin
 	}
 
 	_, warnings, err := scanner.Run()
-	if err := common.HandleScanResult(nil, warnings, err, OptVVerbose); err != nil {
+	if err := common.HandleScanResult(common.ScanRecord{
+		Name:      "nmap UDP on port " + port,
+		Target:    target,
+		Ports:     port,
+		UDP:       true,
+		Artefact:  outFile,
+		StartedAt: startedAt,
+		Scanner:   scanner,
+	}, nil, warnings, err, OptVVerbose); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("unable to run nmap scan individualUDPPortScannerWithNSEScripts: %s %s %s %v", target, port, outFile, err))
 	}
 
