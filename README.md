@@ -84,6 +84,13 @@ Give `enumeraga infra` either a single IP address or a file containing a list of
     -t, --target TARGET  Specify target single IP / List of IPs file (required)
     -T, --timeout MINS   Maximum time in minutes for long-running tools (default: 10)
     -V, --vv             Flood your terminal with plenty of verbosity!
+        --bounded        Enforce a strict scan contract: single target, no port widening, no re-sweeps
+        --ports SPEC     Scan exactly these ports, e.g. '80,443' or '80,U:53' (implies --bounded)
+        --rate N         Cap requests/packets per second (implies --bounded)
+        --concurrency N  Maximum simultaneous tool processes (implies --bounded)
+        --max-runtime N  Wall-clock limit in seconds for the whole run (implies --bounded)
+        --allow-multi-target       Permit a targets file or CIDR range under --bounded
+        --allow-unthrottled-tools  Run tools that have no rate control instead of skipping them
 
 
     Examples:
@@ -121,6 +128,88 @@ sudo enumeraga infra -t targets.txt
 # Quiet mode (minimal output)
 sudo enumeraga infra -t 192.168.1.100 -q
 ```
+
+### Bounded scans
+
+`--bounded` enforces a strict scan contract for callers that must guarantee what
+their traffic did. It is implied by any of `--ports`, `--rate`, `--concurrency`
+or `--max-runtime`, so bounds never have to be paired with a mode flag.
+
+```bash
+enumeraga infra -t ptp.ninja --ports 80,443 --rate 5 --concurrency 2 --max-runtime 900
+```
+
+Under `--bounded`:
+
+- A targets file or a `-r` CIDR range is refused unless `--allow-multi-target` is passed.
+- There is no second re-sweep, and the extra port normally added for OS fingerprinting
+  is suppressed.
+- Without `U:` entries in `--ports`, no UDP scan runs at all.
+- The run stops at `--max-runtime` and exits **124**, having printed the results
+  produced so far. Partial results are valid; they are not discarded.
+- `--gentle` cannot be combined with `--rate` or `--concurrency`: it is itself a
+  rate/concurrency preset, and passing it alongside either is rejected at startup
+  with an error naming both flags.
+
+`--rate` is requests per second for HTTP tools and packets per second for nmap.
+Tools differ in what they can honour, and the end-of-run summary says which was
+which rather than implying the cap applied uniformly:
+
+| Behaviour | Tools |
+|-----------|-------|
+| Rate-capped directly | `nmap`, `ffuf`, `nikto`, `onesixtyone`, `fping`, `nuclei` |
+| Thread-capped only (not a true rate) | `gobuster`, `dirsearch`, `hydra`, `wpscan`, `whatweb`, `netexec`, `crackmapexec`, `gowitness` |
+| Roughly one request, run uncapped | `ldapsearch`, `showmount`, `nmblookup`, `nc`, `openssl`, `impacket-rpcdump`, `ssh-audit`, `rusers`, `rwho`, `ident-user-enum` |
+| No throttle available — skipped under `--rate` | `cmseek`, `braa`, `snmpwalk`, `smbmap`, `enum4linux-ng`, `odat`, `cewl`, `wafw00f`, `msfconsole`, `nbtscan-unixwiz`, `responder-RunFinger`, `sippts`, `testssl` (also as `testssl.sh`) |
+
+Pass `--allow-unthrottled-tools` to run the last group anyway. A tool with no
+table entry is treated as unthrottled, so a newly added tool is skipped and
+reported rather than quietly running uncapped. `testssl` is worth calling out: a
+full TLS sweep is many hundreds of handshakes with no rate or delay control, so
+under `--rate` it is skipped and the summary says so. A caller who wants TLS
+coverage under a rate cap has to pass `--allow-unthrottled-tools`.
+
+**What `--ports` does and does not guarantee.** Every nmap scan, and every tool
+that takes a port as an argument, is confined to the ports named in `--ports`.
+The port clusters that protocol handlers used to scan wholesale — SMB's
+137/138/139/445, MSRPC's 135/593, R-services' 512/513/514, SNMP's
+161/162/10161/10162 — are filtered down to whichever of those ports were
+actually authorised, and `impacket-rpcdump` and `nuclei` (its SMB templates
+target 445 specifically) only run against a port that is in scope.
+
+Nmap scans are confined by protocol as well as by port number: a `T:`/`U:` prefix
+is honoured, so `--ports U:53` produces no TCP probe of port 53 and the aggressive
+scan, which is TCP, omits any port authorised only for UDP. Tools other than nmap
+are held to the port numbers but not to the protocol, since most of them speak one
+protocol by construction and take no protocol argument to constrain. Some tools
+take no port argument at all, though — they connect to whatever port their
+protocol implies, and `--ports` cannot constrain them. `nmblookup`,
+`enum4linux-ng`, `netexec`, `smbmap`, `snmpwalk`, `showmount` and `ssh-audit`
+all behave this way, and the list should not be assumed complete. So with
+`--ports 445` the SMB tool suite may still reach port 139. A caller who needs
+an absolute guarantee that nothing beyond the named ports is touched should
+combine `--ports` with `-n`/`--nmap-only`, which runs nmap alone and skips the
+tool suite entirely.
+
+#### The run record
+
+Every run writes `run.jsonl` into the output root — one JSON object per line, appended as the scan proceeds, so it can be read while a scan is still running. It exists for callers that must account for their own traffic: a scanner invoked as one approved executable makes many connections, so a record of what it launched is the only thing that lets an outer audit log and a packet capture be reconciled against each other.
+
+Three kinds of line appear:
+
+- `run` — exactly twice. The opening line carries the version, the target as given and the bounds verbatim, and is what a caller hashes against the request it approved. The closing line carries the end timestamp, whether the wall-clock budget expired and the exit code the process is about to use.
+- `tool` — one per external command launch, including every nmap invocation. It carries the argument vector, the timings, the artefact path, the terminal status and the real exit code, plus the signal where one was received.
+- `probe` — one per in-process HTTP or HTTPS detection probe. These spawn no process, so they appear nowhere in the process table; without an entry they would be the one class of action reaching the target that leaves no local trace.
+
+`argv` is recorded verbatim and is explicitly `null` for a probe, so a consumer can see that the action had no command line rather than inferring a gap. For nmap it is the vector taken from the library that builds it rather than a reconstruction, with the `-oX` pair the library appends at run time absent. A skipped tool records its reason and omits `exit_code` entirely, because nothing ran.
+
+`status` and `exit_code` can legitimately disagree. Enumeraga treats `nikto`, `fping` and `ssh-audit` as completed despite their non-zero exits, because those tools do not exit cleanly by design; the record reports the status enumeraga acted on and the exit code the process actually returned, without normalising either to match the other. A `failed` status with no `exit_code` beside it means the launch never produced one — a refused exec rather than a tool that ran and failed.
+
+If the file cannot be written the scan continues with recording disabled, after one warning on stderr. A scan abandoned because a log file could not be opened is a worse outcome than a scan with no log, so the absence of `run.jsonl` means recording was disabled, not that nothing ran.
+
+**The limit.** The record is self-reported. It is trustworthy because something else constrains it — a packet capture, if the caller has one. From the record alone, a scanner reporting honestly and a scanner reporting what it wants believed are indistinguishable.
+
+For why these bounds exist, and the trade-offs taken to get there, see [the bounded scanning rationale](docs/bounded-scanning-rationale.md).
 
 ### Enumeraga Cloud
 
@@ -233,15 +322,17 @@ docker build -t gagarter/enumeraga_infra .
 docker pull gagarter/enumeraga_infra
 
 # Run against a single target
-docker run --network host --cap-add NET_RAW --cap-add NET_ADMIN -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99
+docker run --network host --cap-add NET_RAW -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99
 
 # Run with bruteforce enabled
-docker run --network host --cap-add NET_RAW --cap-add NET_ADMIN -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 -b
+docker run --network host --cap-add NET_RAW -v ./output:/tmp/enumeraga_output gagarter/enumeraga_infra -t 192.168.1.99 -b
 
 # Run against targets from a file
-docker run --network host --cap-add NET_RAW --cap-add NET_ADMIN -v ./output:/tmp/enumeraga_output -v ./targets.txt:/targets.txt gagarter/enumeraga_infra -t /targets.txt
+docker run --network host --cap-add NET_RAW -v ./output:/tmp/enumeraga_output -v ./targets.txt:/targets.txt gagarter/enumeraga_infra -t /targets.txt
 ```
-**Note:** Use `--network host --cap-add NET_RAW --cap-add NET_ADMIN` for nmap privileged scans to work correctly in Docker.
+**Note:** `--cap-add NET_RAW` is what nmap's privileged scans need. `NET_ADMIN` used to be granted alongside it and no longer is: it confers netfilter administration, which no scan performs, and withholding it means a container sharing another container's network namespace cannot alter the firewall rules confining it. The image strips nmap's own file capabilities to make that possible, so an image older than that change fails with exit 126 under these arguments rather than scanning less.
+
+`--network host` is the **default**, not a requirement — it is simply the simplest way for a scan to reach a target on the local network. A scan whose traffic must cross a recording proxy or gateway instead joins that container's network namespace; through the MCP server that is the `network_mode` argument, and directly it is `--network container:<name-or-id>`.
 
 #### M-series MacOS (ARM64)!
 

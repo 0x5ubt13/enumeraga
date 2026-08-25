@@ -250,6 +250,16 @@ func IsShuttingDown() bool {
 	return utilscontext.IsShuttingDown()
 }
 
+// SetRunDeadline bounds the whole run to d. See utilscontext.SetRunDeadline.
+func SetRunDeadline(d time.Duration) {
+	utilscontext.SetRunDeadline(d)
+}
+
+// RunDeadlineExceeded reports whether the run's wall-clock budget expired.
+func RunDeadlineExceeded() bool {
+	return utilscontext.RunDeadlineExceeded()
+}
+
 func CancelGlobalContext() {
 	utilscontext.CancelGlobalContext()
 }

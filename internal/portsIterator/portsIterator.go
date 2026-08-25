@@ -3,6 +3,7 @@ package portsIterator
 import (
 	"fmt"
 
+	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/protocols"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
@@ -14,6 +15,22 @@ func Run(openPortsSlice []string) {
 	for _, port := range openPortsSlice {
 		routePort(port, openPortsSlice)
 	}
+}
+
+// tcpDetectionInScope reports whether a TCP service-detection probe of port is
+// authorised.
+//
+// The open-port list this dispatcher iterates merges the TCP and UDP sweep results
+// with no protocol tag, so a port found open over UDP is routed by its number
+// alone. The HTTP and HTTPS detection probes below open a TCP connection, and a
+// positive answer commits the whole web tool suite to that port, so the probe is
+// the earliest point at which an unauthorised protocol could be touched. Gating
+// the suite without gating the probe that triggers it would be theatre.
+//
+// Without an explicit port list this is always true, so nothing changes for a
+// caller who passed no bounds.
+func tcpDetectionInScope(port string) bool {
+	return bounds.Active.PortInScope(port, false)
 }
 
 // routePort routes a port to its appropriate protocol handler
@@ -47,11 +64,11 @@ func routePort(port string, openPortsSlice []string) {
 
 	// Web
 	case "80", "8080":
-		if protocols.IsHTTPService( fmt.Sprintf("http://%s:%s", utils.Target, port)) { 
+		if tcpDetectionInScope(port) && protocols.IsHTTPService( fmt.Sprintf("http://%s:%s", utils.Target, port)) { 
 			protocols.HTTP(port,"http")
 		}
 	case "443":
-		if protocols.IsHTTPSService( fmt.Sprintf("https://%s:%s", utils.Target, port)) {
+		if tcpDetectionInScope(port) && protocols.IsHTTPSService( fmt.Sprintf("https://%s:%s", utils.Target, port)) {
 			protocols.HTTP(port,"https")
 		}
 
@@ -109,6 +126,13 @@ func routePort(port string, openPortsSlice []string) {
 		// Detection Failed
 		if *checks.OptVVerbose {
 			utils.PrintSafe("%s %s %s", utils.Yellow("[*] Port"), utils.Green(port), utils.Yellow("is open, but there is no protocol handler. Trying service autodetection"))
+		}
+
+		// Everything from here is TCP: both detection probes, and the default
+		// handler they fall through to. A port authorised only over UDP gets none
+		// of it, and there is no UDP action in this branch to lose by returning.
+		if !tcpDetectionInScope(port) {
+			return
 		}
 
 		// check for HTTP/HTTPS service

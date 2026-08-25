@@ -8,9 +8,11 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator"
+	"github.com/0x5ubt13/enumeraga/internal/runrecord"
 	"github.com/0x5ubt13/enumeraga/internal/scans"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/Ullaakut/nmap/v3"
@@ -34,8 +36,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Apply the run's wall-clock budget now the flags have been parsed. Signal
+	// handling was installed at start-up; this narrows the same context.
+	utils.SetRunDeadline(bounds.Active.MaxRuntime)
+
+	// The record goes in the output root rather than a per-target directory:
+	// utils.BaseDir is reassigned per target below, so a per-target file would
+	// fragment a multi-target run into several partial records with no single
+	// view of the invocation.
+	runrecord.Active = runrecord.Open(*checks.OptOutput)
+	defer runrecord.Active.Close()
+
+	runStart := time.Now()
+	runrecord.Active.Write(runrecord.Entry{
+		Kind:    runrecord.KindRun,
+		Version: utils.Version,
+		// The target as it was given, which for a multi-target run is the file:
+		// utils.Target is not set until a target is actually being scanned.
+		Target:    *checks.OptTarget,
+		Bounds:    bounds.Active.SummaryLine(),
+		StartedAt: &runStart,
+	})
+
 	// Initialize worker pool for concurrent tool execution (limits goroutines)
-	utils.InitWorkerPool(utils.MaxWorkersForMode())
+	workers := utils.MaxWorkersForMode()
+	if bounds.Active.Concurrency > 0 {
+		workers = bounds.Active.Concurrency
+	}
+	utils.InitWorkerPool(workers)
 
 	// Timing the execution
 	start := time.Now()
@@ -60,7 +88,34 @@ func main() {
 	utils.Wg.Wait()
 
 	// Print final tool execution summary
-	utils.ToolRegistry.PrintFinalSummary()
+	utils.ToolRegistry.PrintFinalSummary(bounds.Active.SummaryLine())
+
+	// A run stopped by its own wall-clock budget is not a failure: the artefacts
+	// produced so far are complete and valid. Exit 124 (the GNU timeout
+	// convention) so the caller can tell the two apart.
+	deadlineHit := utils.RunDeadlineExceeded()
+	exitCode := 0
+	if deadlineHit {
+		exitCode = 124
+	}
+	runEnd := time.Now()
+	runrecord.Active.Write(runrecord.Entry{
+		Kind:        runrecord.KindRun,
+		EndedAt:     &runEnd,
+		DeadlineHit: &deadlineHit,
+		ProcessExit: &exitCode,
+	})
+
+	if deadlineHit {
+		utils.PrintCustomBiColourMsg("yellow", "red",
+			"[!] Wall-clock limit of ", bounds.Active.MaxRuntime.String(),
+			" reached. Results above are partial but valid.")
+		// os.Exit skips deferred calls, so the record is flushed explicitly.
+		// Without this the flagship bounded case would be the one run with no
+		// closing line.
+		runrecord.Active.Close()
+		os.Exit(124)
+	}
 }
 
 // Check whether a target CIDR range has been passed to Enumeraga
@@ -105,6 +160,12 @@ func targetInit(totalLines int) error {
 }
 
 func sweepPorts() ([]nmap.Host, []nmap.Host, error) {
+	// An explicit port list replaces discovery entirely: exactly these ports are
+	// probed, so no full sweep and no hardcoded UDP list are involved.
+	if bounds.Active.HasPortList() {
+		return scans.BoundedPortSweep(utils.Target, bounds.Active.TCPPorts, bounds.Active.UDPPorts, checks.OptVVerbose)
+	}
+
 	var tcpHosts, udpHosts []nmap.Host
 	var tcpErr, udpErr error
 
@@ -172,8 +233,9 @@ func singleTarget(target string, baseFilePath string) error {
 	openPorts := utils.RemoveDuplicates(strings.Join(openPortsSlice, ","))
 
 	// Introducing a control to repeat the scan in case there are no ports or there is only one port open
-	// Do it only once
-	if len(openPorts) <= 1 && utils.TimesSwept == 1 {
+	// Do it only once. A bounded run skips this: re-sweeping is enumeraga widening
+	// the scan on its own initiative, which is what the caller ruled out.
+	if len(openPorts) <= 1 && utils.TimesSwept == 1 && !bounds.Active.Enabled {
 		sweptHostTcpSecond, sweptHostUdpSecond, secondSweepErr := sweepPorts()
 		if secondSweepErr != nil {
 			utils.ErrorMsg(fmt.Sprintf("Second port sweep failed: %v", secondSweepErr))

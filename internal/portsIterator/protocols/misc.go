@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
@@ -22,6 +23,13 @@ func safeMsfRHost(target string) bool {
 // DNS enumerates Domain Name System (53/TCP)
 func DNS(port string) {
 	dir := utils.ProtocolDetected2("DNS", port, utils.BaseDir)
+
+	// The scan below is TCP, while DNS is commonly discovered on UDP 53, so the
+	// scope check is against the authorised TCP ports specifically: --ports U:53
+	// authorises UDP 53 and nothing on TCP.
+	if !bounds.Active.PortInScope("53", false) {
+		return
+	}
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "53", dir+"dns_scan", "*dns*", checks.OptVVerbose)
 }
 
@@ -62,15 +70,24 @@ func Ident(port string, openPortsSlice []string) {
 func MSRPC(port string) {
 	dir := utils.ProtocolDetected2("MSRPC", port, utils.BaseDir)
 	nmapOutputFile := dir + "msrpc_scan"
-	commands.CallIndividualPortScanner(utils.Target, "135,593", nmapOutputFile, checks.OptVVerbose)
 
-	rpcDump135Args := []string{"impacket-rpcdump", "135"}
-	rpcDump135Path := fmt.Sprintf("%srpcdump_135.out", dir)
-	commands.CallRunTool(rpcDump135Args, rpcDump135Path, checks.OptVVerbose)
+	// MSRPC is dispatched on either 135 or 593, so a caller who named only one of
+	// them via --ports must not have the other touched too.
+	if ports := bounds.Active.PortsInScope("135,593", false); ports != "" {
+		commands.CallIndividualPortScanner(utils.Target, ports, nmapOutputFile, checks.OptVVerbose)
+	}
 
-	rpcDump593Args := []string{"impacket-rpcdump", "593"}
-	rpcDump593Path := fmt.Sprintf("%srpcdump_593.out", dir)
-	commands.CallRunTool(rpcDump593Args, rpcDump593Path, checks.OptVVerbose)
+	if bounds.Active.PortInScope("135", false) {
+		rpcDump135Args := []string{"impacket-rpcdump", "135"}
+		rpcDump135Path := fmt.Sprintf("%srpcdump_135.out", dir)
+		commands.CallRunTool(rpcDump135Args, rpcDump135Path, checks.OptVVerbose)
+	}
+
+	if bounds.Active.PortInScope("593", false) {
+		rpcDump593Args := []string{"impacket-rpcdump", "593"}
+		rpcDump593Path := fmt.Sprintf("%srpcdump_593.out", dir)
+		commands.CallRunTool(rpcDump593Args, rpcDump593Path, checks.OptVVerbose)
+	}
 }
 
 // RServices enumerates Berkeley R-services (512-514/TCP)
@@ -82,7 +99,12 @@ func RServices(port string) {
 
 	// Nmap
 	nmapOutputFile := dir + "rservices_scan"
-	commands.CallIndividualPortScanner(utils.Target, "512,513,514", nmapOutputFile, checks.OptVVerbose)
+
+	// RServices is dispatched on any one of 512,513,514, so a caller who named
+	// only one of them via --ports must not have the rest of the cluster touched too.
+	if ports := bounds.Active.PortsInScope("512,513,514", false); ports != "" {
+		commands.CallIndividualPortScanner(utils.Target, ports, nmapOutputFile, checks.OptVVerbose)
+	}
 
 	// Rwho
 	rwhoArgs := []string{"rwho", "-a", utils.Target}
@@ -109,9 +131,12 @@ func IPMI(port string) {
 	dir := utils.ProtocolDetected2("IPMI", port, utils.BaseDir)
 	nmapOutputFile := dir + "ipmi_scan"
 
-	// Nmap
+	// Nmap. IPMI is dispatched on port 623 however it was discovered, and the scan
+	// is UDP, so it runs only when UDP 623 is one of the ports the caller authorised.
 	nmapNSEScripts := "ipmi*"
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "623", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	if bounds.Active.PortInScope("623", true) {
+		commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "623", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	}
 
 	// Metasploit
 	if !safeMsfRHost(utils.Target) {
@@ -131,34 +156,83 @@ func Port10000(port string) {
 	commands.CallIndividualPortScanner(utils.Target, "10000", nmapOutputFile, checks.OptVVerbose)
 }
 
-// SIP enumerates Session Initiation Protocol (5060/TCP, 5060/UDP)
-func SIP(port string) {
+// sipptsScanArgs builds the argument vector for a sippts service scan.
+//
+// -cve makes sippts probe for known SIP vulnerabilities, which is a different
+// activity from enumerating what is there, and closer to what the brute-force
+// tools do. It is therefore held behind -b rather than running by default.
+//
+// The scan itself is unaffected by the choice: -cve is an independent flag, and
+// without it sippts still performs its service scan and reports what it finds.
+func sipptsScanArgs(transport, ports, target string) []string {
+	sipptsArgs := []string{"sippts", "scan", "-p", transport, "-r", ports, "-fp"}
+	if *checks.OptBrute {
+		sipptsArgs = append(sipptsArgs, "-cve")
+	}
+	return append(sipptsArgs, "-i", target)
+}
 
+// SIP enumerates Session Initiation Protocol (5060/TCP, 5060/UDP)
+//
+// The dispatcher routes on the port number alone and keeps no record of which
+// sweep found it, so each half of this handler is gated on the protocol it
+// actually speaks: a 5060 found open over UDP must not pull in a TCP scan, and a
+// TCP-only finding must not pull in a UDP one.
+//
+// sippts scan sweeps a range wider than the dispatching port. Under an explicit
+// port list that range collapses to the authorised port, since a caller who named
+// 5060 did not thereby authorise 5061 to 5070.
+func SIP(port string) {
 	if utils.IsVisited("sip") {
 		return
 	}
+
+	tcpInScope := bounds.Active.PortInScope(port, false)
+	udpInScope := bounds.Active.PortInScope(port, true)
+	if !tcpInScope && !udpInScope {
+		return
+	}
+
 	dir := utils.ProtocolDetected2("SIP", port, utils.BaseDir)
 	nmapNSEScripts := "sip-methods,sip-enum-users"
 
-	// Nmap
-	nmapOutputFile := dir + "sip_scan_5060_udp"
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "5060", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-	nmapOutputFile = dir + "sip_scan_5060_tcp"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "5060", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	// Nmap. Both wrappers confine themselves to the authorised ports for the
+	// protocol they scan, so these need no gate of their own.
+	nmapOutputFile := fmt.Sprintf("%ssip_scan_%s_udp", dir, port)
+	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	nmapOutputFile = fmt.Sprintf("%ssip_scan_%s_tcp", dir, port)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
 
-	// sippts scan
-        sipptsArgs1 := []string{"sippts", "scan", "-p", "all", "-r", "5060-5070", "-fp", "-cve", "-i",  utils.Target}
-        sipptsPath1 := fmt.Sprintf("%ssippts_scan.out", dir)
-        commands.CallRunTool(sipptsArgs1, sipptsPath1, checks.OptVVerbose)
+	// sippts scan probes a spread of candidate SIP ports for a service. Left
+	// unbounded that spread is the usual 5060-5070; under a port list it is
+	// narrowed to the one port that was authorised.
+	scanRange := "5060-5070"
+	if bounds.Active.HasPortList() {
+		scanRange = port
+	}
 
-	// sippts enum
-        sipptsArgs2 := []string{"sippts", "enumerate", "-p", "tcp", "-r", "5060", "-i",  utils.Target}
-        sipptsPath2 := fmt.Sprintf("%ssippts_enumerate_tcp.out", dir)
-        commands.CallRunTool(sipptsArgs2, sipptsPath2, checks.OptVVerbose)
+	// -p selects which transports are probed, so it follows the same protocol
+	// split as the nmap calls above rather than always asking for all of them.
+	sipptsTransport := "all"
+	switch {
+	case !udpInScope:
+		sipptsTransport = "tcp"
+	case !tcpInScope:
+		sipptsTransport = "udp"
+	}
 
-	sipptsArgs3 := []string{"sippts", "enumerate", "-p", "udp", "-r", "5060", "-i",  utils.Target}
-        sipptsPath3 := fmt.Sprintf("%ssippts_enumerate_udp.out", dir)
-        commands.CallRunTool(sipptsArgs3, sipptsPath3, checks.OptVVerbose)
+	sipptsScanPath := fmt.Sprintf("%ssippts_scan.out", dir)
+	commands.CallRunTool(sipptsScanArgs(sipptsTransport, scanRange, utils.Target), sipptsScanPath, checks.OptVVerbose)
 
+	// sippts enumerate
+	if tcpInScope {
+		sipptsEnumTCPArgs := []string{"sippts", "enumerate", "-p", "tcp", "-r", port, "-i", utils.Target}
+		sipptsEnumTCPPath := fmt.Sprintf("%ssippts_enumerate_tcp.out", dir)
+		commands.CallRunTool(sipptsEnumTCPArgs, sipptsEnumTCPPath, checks.OptVVerbose)
+	}
+	if udpInScope {
+		sipptsEnumUDPArgs := []string{"sippts", "enumerate", "-p", "udp", "-r", port, "-i", utils.Target}
+		sipptsEnumUDPPath := fmt.Sprintf("%ssippts_enumerate_udp.out", dir)
+		commands.CallRunTool(sipptsEnumUDPArgs, sipptsEnumUDPPath, checks.OptVVerbose)
+	}
 }
-

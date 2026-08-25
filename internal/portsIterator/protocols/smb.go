@@ -3,6 +3,7 @@ package protocols
 import (
 	"fmt"
 
+	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
@@ -20,9 +21,16 @@ func SMB(port string) {
 	nmapOutputFile := dir + "nmap_tcp_scan"
 	nmapUDPOutputFile := dir + "nmap_udp_scan"
 	nmapNSEScripts := "smb* and not brute"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "137,138,139,445", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose) // TCP
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "137", nmapUDPOutputFile, "nbstat.nse", checks.OptVVerbose)         // UDP
- 
+
+	// SMB is dispatched on any one of 137,138,139,445, so a caller who named only
+	// one of them via --ports must not have the rest of the cluster touched too.
+	if tcpPorts := bounds.Active.PortsInScope("137,138,139,445", false); tcpPorts != "" {
+		commands.CallIndividualPortScannerWithNSEScripts(utils.Target, tcpPorts, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose) // TCP
+	}
+	if bounds.Active.PortInScope("137", true) {
+		commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, "137", nmapUDPOutputFile, "nbstat.nse", checks.OptVVerbose) // UDP
+	}
+
 	// netexec
 	cmeArgs := []string{"netexec", "smb", utils.Target, "--shares", "--pass-pol"}
 	cmePath := fmt.Sprintf("%snetexec_anon.out", dir)
@@ -43,15 +51,18 @@ func SMB(port string) {
 	enum4linuxNgPath := fmt.Sprintf("%senum4linux_ng.out", dir)
 	commands.CallRunTool(enum4linuxNgArgs, enum4linuxNgPath, checks.OptVVerbose)
 
-        // Nuclei
-        nucleiArgs := []string{
-                "nuclei",
-                "-target", fmt.Sprintf("%s:445", utils.Target),
-                "-tags", "smb",
-                "-timeout", common.GetTimeoutSeconds(),
-        }
-        nucleiPath := fmt.Sprintf("%snuclei.out", dir)
-        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	// Nuclei targets 445 specifically, so it only runs when that port is one
+	// the caller authorised.
+	if bounds.Active.PortInScope("445", false) {
+		nucleiArgs := []string{
+			"nuclei",
+			"-target", fmt.Sprintf("%s:445", utils.Target),
+			"-tags", "smb",
+			"-timeout", common.GetTimeoutSeconds(),
+		}
+		nucleiPath := fmt.Sprintf("%snuclei.out", dir)
+		commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	}
 
 	// netexec BruteForcing
 	if *checks.OptBrute {

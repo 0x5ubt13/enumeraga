@@ -90,6 +90,94 @@ TOOLS: list[Tool] = [
                     "description": "Run in background (detached mode) to avoid timeouts. Returns Container ID.",
                     "default": False,
                 },
+                "nmap_only": {
+                    "type": "boolean",
+                    "description": (
+                        "Run nmap scans only and skip the tool suite. This is the only way to "
+                        "guarantee that nothing outside 'ports' is touched: several tools take "
+                        "no port argument and connect to whatever their protocol implies."
+                    ),
+                    "default": False,
+                },
+                "gentle": {
+                    "type": "boolean",
+                    "description": (
+                        "Throttle scans and tools for a gentler profile. Cannot be combined with "
+                        "'rate' or 'concurrency', which the scan rejects at startup, because it is "
+                        "itself a rate and concurrency preset."
+                    ),
+                    "default": False,
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Maximum minutes for any single long-running tool (default 10).",
+                },
+                "bounded": {
+                    "type": "boolean",
+                    "description": (
+                        "Enforce a strict scan contract: a single target, no port widening, no "
+                        "re-sweeps. Implied by 'ports', 'rate', 'concurrency' or 'max_runtime', so "
+                        "it only needs passing on its own."
+                    ),
+                    "default": False,
+                },
+                "ports": {
+                    "type": "string",
+                    "description": (
+                        "Scan exactly these ports and enumerate whichever are open, e.g. '80,443' "
+                        "or '80,U:53'. A 'U:' prefix means UDP and 'T:' means TCP; without any 'U:' "
+                        "entry no UDP scan runs at all. No discovery sweep, no re-sweep and no extra "
+                        "port for OS fingerprinting. Mutually exclusive with 'top_ports'."
+                    ),
+                },
+                "rate": {
+                    "type": "integer",
+                    "description": (
+                        "Cap requests per second for HTTP tools and packets per second for nmap. "
+                        "Tools differ in what they can honour: some have a true rate control, some "
+                        "expose only a thread count, and some have no throttle at all and are "
+                        "skipped unless 'allow_unthrottled_tools' is set. The end-of-run summary "
+                        "says which was which."
+                    ),
+                },
+                "concurrency": {
+                    "type": "integer",
+                    "description": "Maximum simultaneous tool processes, also applied to nmap's parallelism.",
+                },
+                "max_runtime": {
+                    "type": "integer",
+                    "description": (
+                        "Wall-clock limit in seconds for the whole run. On expiry the scan and its "
+                        "child processes are killed and it exits 124, having printed the results "
+                        "produced so far. Partial results are valid and are not discarded."
+                    ),
+                },
+                "allow_multi_target": {
+                    "type": "boolean",
+                    "description": "Permit a targets file under a bounded run, which otherwise refuses more than one target.",
+                    "default": False,
+                },
+                "network_mode": {
+                    "type": "string",
+                    "description": (
+                        "Docker network mode for the scan container. Defaults to 'host', which "
+                        "is what a standalone scan on a LAN wants. Pass 'container:<name-or-id>' "
+                        "to run inside another container's network namespace, so that container's "
+                        "firewall rules and packet capture cover this scan; note that takes a "
+                        "container name or ID, not a Compose service name, which is "
+                        "project-prefixed. A named Docker network is also accepted. Joining a "
+                        "namespace inherits that container's interfaces, DNS and lifetime: if it "
+                        "stops, this scan loses its networking."
+                    ),
+                },
+                "allow_unthrottled_tools": {
+                    "type": "boolean",
+                    "description": (
+                        "Run tools that have no rate control instead of skipping them. Without this, "
+                        "a rate-capped run skips them and reports each skip with its reason."
+                    ),
+                    "default": False,
+                },
             },
             "required": ["target"],
         },
@@ -318,16 +406,43 @@ def forwarded_env() -> list[str]:
     return env_args
 
 
+# Every argument that changes which traffic a scan produces. Two scans that differ
+# in any of these are different work, however similar their targets look, so each
+# has to enter the identity or a bounded retry would be discarded as a duplicate of
+# an unrelated scan.
+_INFRA_IDENTITY_ARGS = (
+    "ports",
+    "top_ports",
+    "rate",
+    "concurrency",
+    "max_runtime",
+    "allow_multi_target",
+    "allow_unthrottled_tools",
+    "bounded",
+    "nmap_only",
+    "gentle",
+    "brute",
+    "network_mode",
+)
+
+
 def scan_key(kind: str, args: dict[str, Any]) -> str:
     """Identity of a scan, used as a docker label so duplicate runs can be detected.
 
     A retry storm (the client call times out, the agent re-invokes the tool while the
     first scan is still running) would otherwise spawn racing containers writing the same
     output and re-hammering the target/cloud API. Two scans share a key when they would
-    do the same work: same target for infra, same provider+subscription for cloud.
+    do the same work: same target and same bounds for infra, same provider+subscription
+    for cloud.
     """
     if kind == "infra":
-        return f"infra:{args.get('target', '')}"
+        # Falsy is treated as unset, so a client that spells out the defaults produces
+        # the same identity as one that omits them.
+        bounding = ";".join(
+            f"{name}={args[name]}" for name in _INFRA_IDENTITY_ARGS if args.get(name)
+        )
+        target = args.get("target", "")
+        return f"infra:{target}" if not bounding else f"infra:{target};{bounding}"
     return f"cloud:{args.get('provider', '')}:{args.get('subscription') or 'all'}"
 
 
@@ -335,9 +450,26 @@ def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
     """Build Docker command for infrastructure scan."""
     cmd = [
         "docker", "run", "--rm",
-        # These capabilities replace --privileged for nmap raw-socket SYN scans
-        "--cap-add=NET_RAW", "--cap-add=NET_ADMIN",
-        "--network", "host",  # Required for nmap to work properly
+        # NET_RAW replaces --privileged. It is all the scanners need: nmap's SYN and
+        # UDP scans, OS fingerprinting and fping's ICMP were all verified against a
+        # fixture with this capability alone. NET_ADMIN was granted here too and has
+        # been dropped -- it confers netfilter administration, so under host
+        # networking it would let a scan flush the host firewall, and inside a
+        # mediator's network namespace it would let a scan tear down the rules
+        # confining it.
+        #
+        # This requires the image built by the repository Dockerfile, which strips
+        # nmap's file capabilities. Kali's nmap requests cap_net_admin via those, and
+        # the kernel refuses the exec if it is outside the bounding set, so an older
+        # image run with these arguments fails at exit 126 rather than scanning less.
+        "--cap-add=NET_RAW",
+        # host is the default, not a requirement. nmap needs to reach the target, and
+        # host networking is the simplest way to do that for a standalone scan on a
+        # LAN. A caller whose traffic must cross a recording mediator instead passes
+        # network_mode="container:<id>" to join that container's network namespace,
+        # which is how the confining rules and the packet capture come to cover this
+        # scan by construction rather than by configuration.
+        "--network", args.get("network_mode") or "host",
         "-v", f"{resolve_output_source(args)}:/tmp/enumeraga_output",
         *host_owner_env(),
         *forwarded_env(),
@@ -354,6 +486,30 @@ def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
         cmd.append("-q")
     if args.get("verbose"):
         cmd.append("-V")
+    if args.get("nmap_only"):
+        cmd.append("-n")
+    if args.get("gentle"):
+        cmd.append("-g")
+    if args.get("timeout"):
+        cmd.extend(["-T", str(args["timeout"])])
+
+    # Bounding flags. Each of --ports, --rate, --concurrency and --max-runtime
+    # implies --bounded in the binary, so --bounded only has to be passed when it
+    # is the only thing asked for.
+    if args.get("bounded"):
+        cmd.append("--bounded")
+    if args.get("ports"):
+        cmd.extend(["--ports", str(args["ports"])])
+    if args.get("rate"):
+        cmd.extend(["--rate", str(args["rate"])])
+    if args.get("concurrency"):
+        cmd.extend(["--concurrency", str(args["concurrency"])])
+    if args.get("max_runtime"):
+        cmd.extend(["--max-runtime", str(args["max_runtime"])])
+    if args.get("allow_multi_target"):
+        cmd.append("--allow-multi-target")
+    if args.get("allow_unthrottled_tools"):
+        cmd.append("--allow-unthrottled-tools")
 
     return cmd
 

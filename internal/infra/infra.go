@@ -10,10 +10,30 @@ import (
 	"github.com/pborman/getopt/v2"
 )
 
-func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutput, OptTarget *string) (int, error) {
+// Run performs the infra pre-flight checks and returns the number of targets when
+// the target is a file of them.
+//
+// validateBounds is called immediately after the flags are parsed and before any
+// other work. It carries the bound-flag validation, which lives in the caller
+// because that is where the flags are declared; running it here rather than on
+// return means a malformed --ports fails within milliseconds instead of after a
+// tool-installation phase that can take minutes. It may be nil, in which case no
+// bound validation is performed.
+func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutput, OptTarget *string, validateBounds func() error) (int, error) {
 	// Parse optional infra arguments, getting rid of the 'infra' arg
 	os.Args = os.Args[1:]
 	getopt.Parse()
+
+	// Bounds are validated before anything else happens: this is the parse that
+	// actually populates the infra flags, so it is the earliest point at which
+	// they can be read, and a startup error should be immediate for an automated
+	// caller rather than arriving after tools have been installed.
+	if validateBounds != nil {
+		if err := validateBounds(); err != nil {
+			utils.ErrorMsg(err.Error())
+			return 0, err
+		}
+	}
 
 	// Check 0: banner!
 	if !*OptQuiet {
@@ -100,6 +120,13 @@ func printInfraUsage() {
 	fmt.Println("  -t, --target TARGET  Specify target single IP / List of IPs file (required)")
 	fmt.Println("  -T, --timeout MINS   Maximum time in minutes for long-running tools (default: 10)")
 	fmt.Println("  -V, --vv             Flood your terminal with plenty of verbosity!")
+	fmt.Println("      --bounded        Enforce a strict scan contract: single target, no port widening, no re-sweeps")
+	fmt.Println("      --ports SPEC     Scan exactly these ports, e.g. '80,443' or '80,U:53' (implies --bounded)")
+	fmt.Println("      --rate N         Cap requests/packets per second (implies --bounded)")
+	fmt.Println("      --concurrency N  Maximum simultaneous tool processes (implies --bounded)")
+	fmt.Println("      --max-runtime N  Wall-clock limit in seconds for the whole run (implies --bounded)")
+	fmt.Println("      --allow-multi-target       Permit a targets file or CIDR range under --bounded")
+	fmt.Println("      --allow-unthrottled-tools  Run tools that have no rate control instead of skipping them")
 	fmt.Println()
 }
 
