@@ -5,9 +5,11 @@ import asyncio
 import contextlib
 import json
 import os
+import socket
+import stat
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, NamedTuple
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -882,6 +884,170 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
         ]
 
 
+# --- unix-socket transport ---------------------------------------------------
+#
+# WHY A THIRD TRANSPORT EXISTS. This server has no authentication and mounts the
+# Docker socket, so reaching it is equivalent to host root -- the compose file
+# says so, and the `--network` argument below defaults to `host`, which is what
+# makes that concrete. `sse` binds a TCP port, and a TCP port is reachable by
+# everything that shares a network with it. That is a problem specifically for
+# the mediator arrangement `network_mode="container:<id>"` exists to serve: the
+# caller (a runner) and the scan container deliberately share ONE network
+# namespace, so any port the caller can reach, the scan container can reach too
+# -- and the scan container is third-party tools pointed at a hostile target.
+# They both run as root in that namespace, so nothing at the network or uid
+# layer tells them apart.
+#
+# A unix socket does. It is a filesystem object, so it is visible to whoever has
+# it mounted and to nobody else, and a mediator can mount it into the caller
+# without mounting it into the scan container. That is the whole point of this
+# mode: the boundary moves from the network, where the two are indistinguishable,
+# to the filesystem, where they are not.
+#
+# The socket carries the same Starlette app as `sse`, so the same two HTTP
+# transports are spoken over it and no client-side protocol change is needed --
+# only the address.
+
+DEFAULT_UDS_PATH = "/run/mcp-enumeraga/enumeraga.sock"
+DEFAULT_UDS_MODE = 0o600
+DEFAULT_UDS_DIR_MODE = 0o700
+
+
+class UdsSettings(NamedTuple):
+    path: str
+    mode: int
+    dir_mode: int
+
+
+def _octal(source: Mapping[str, str], name: str, default: int) -> int:
+    """Read an environment variable as an octal file mode.
+
+    Octal whether or not it carries an ``0o`` prefix, because every other place
+    a mode is written -- chmod, umask, docker-compose -- writes it octal, and a
+    mode silently read as decimal would be a quietly different socket. `600`
+    read as decimal is 0o1130.
+    """
+    raw = source.get(name)
+    if not raw:
+        return default
+    try:
+        mode = int(raw, 8)
+    except ValueError:
+        raise RuntimeError(
+            f"{name} is {raw!r}, which is not an octal mode such as 0600"
+        ) from None
+    if not 0 <= mode <= 0o777:
+        raise RuntimeError(f"{name} is {raw!r}, which is out of range")
+    return mode
+
+
+def uds_settings(env: Mapping[str, str] | None = None) -> UdsSettings:
+    """Resolve where the socket goes and how tightly it is shut."""
+    source = os.environ if env is None else env
+    return UdsSettings(
+        path=source.get("MCP_UDS_PATH") or DEFAULT_UDS_PATH,
+        mode=_octal(source, "MCP_UDS_MODE", DEFAULT_UDS_MODE),
+        dir_mode=_octal(source, "MCP_UDS_DIR_MODE", DEFAULT_UDS_DIR_MODE),
+    )
+
+
+def prepare_uds_path(
+    path: str,
+    mode: int = DEFAULT_UDS_MODE,
+    dir_mode: int = DEFAULT_UDS_DIR_MODE,
+) -> str:
+    """Make ``path`` bindable at the right permissions, or refuse and say why.
+
+    TWO LAYERS, AND THAT THERE ARE TWO IS A MEASUREMENT RATHER THAN A PREFERENCE.
+
+    uvicorn does not leave a unix socket where you put it. Its
+    ``elif config.uds is not None`` branch sets ``uds_perms = 0o666`` and chmods
+    the socket to that after binding, and it does so after any umask has been
+    applied -- so a umask, which was the first thing tried here, narrows nothing.
+    Measured 06-09-2026: umask 0o177, socket still 0o666.
+
+    But that same branch reads ``os.stat(config.uds).st_mode`` FIRST when the
+    path already exists, and asyncio's ``create_unix_server`` unlinks an existing
+    socket before binding its own. So a socket file pre-created here at the mode
+    we want is the mode uvicorn then restores it to. That is why this function
+    binds a throwaway socket and immediately closes it: the placeholder is not a
+    leftover, it is how the permission survives startup.
+
+    The DIRECTORY is the layer that carries the guarantee, because it is the only
+    one with no window at all. A directory with no search permission cannot be
+    traversed whatever the mode on the socket inside it says, and it is set
+    before any socket exists. The socket's own mode is briefly wide during
+    uvicorn's unlink-and-rebind -- behind that already-closed door.
+
+    bind(2) on an existing path fails with EADDRINUSE whether or not anything is
+    listening, so an unclean shutdown would otherwise stop every later start.
+    Removing the leftover blindly is the wrong fix twice over: it would silently
+    displace a server that IS running, and -- since the path is configurable --
+    it would turn a stray environment variable into an arbitrary-unlink
+    primitive in a process holding the Docker socket. So the file is removed
+    only when it is genuinely a socket AND nothing answers on it.
+    """
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    # Separately from makedirs, whose `mode` argument is masked by the umask and
+    # which does nothing at all when the directory already exists -- and it
+    # usually does exist, being a mount point.
+    os.chmod(parent, dir_mode)
+
+    if os.path.lexists(path):
+        # lstat, not stat: a symlink here would be followed by a naive check, and
+        # the unlink below would remove the LINK while the check described its
+        # target.
+        if not stat.S_ISSOCK(os.lstat(path).st_mode):
+            raise RuntimeError(
+                f"{path} already exists and is not a socket; refusing to remove it. "
+                "Point MCP_UDS_PATH somewhere else, or clear that path by hand"
+            )
+
+        probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            probe.settimeout(1)
+            probe.connect(path)
+        except (ConnectionRefusedError, FileNotFoundError):
+            # Nothing is listening: the file outlived its server. Safe to clear.
+            os.unlink(path)
+        else:
+            raise RuntimeError(
+                f"another server is already listening on {path}; refusing to displace it"
+            )
+        finally:
+            probe.close()
+
+    placeholder = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        placeholder.bind(path)
+    finally:
+        placeholder.close()
+    # Explicit rather than trusting bind() to have honoured a umask. Nothing can
+    # connect to a socket that was bound and never listened on, so the moment
+    # between the two is not a window onto anything.
+    os.chmod(path, mode)
+    return path
+
+
+def uvicorn_config(app, **address):
+    """Build the uvicorn config, with the timeouts shared by every HTTP transport.
+
+    Both network transports go through here so their timeouts cannot drift. A
+    scan runs for minutes with nothing on the wire, so the keep-alive is
+    deliberately far longer than any default.
+    """
+    import uvicorn
+
+    return uvicorn.Config(
+        app,
+        timeout_keep_alive=3600,  # 1 hour keep-alive
+        timeout_notify=300,       # 5 minutes notify
+        log_level="info",
+        **address,
+    )
+
+
 def create_app(server: Server) -> Starlette:
     """Create the Starlette app exposing two HTTP transports.
 
@@ -962,18 +1128,20 @@ async def run_server():
         port = int(os.environ.get("PORT", 8000))
         print(f"Starting SSE server on 0.0.0.0:{port}...", file=sys.stderr)
         import uvicorn
-        app = create_app(server)
-        
-        # Configure generous timeouts for long-running scans
-        config = uvicorn.Config(
-            app, 
-            host="0.0.0.0", 
-            port=port,
-            timeout_keep_alive=3600, # 1 hour keep-alive
-            timeout_notify=300,      # 5 minutes notify
-            log_level="info"
-        )
+        config = uvicorn_config(create_app(server), host="0.0.0.0", port=port)
         server_instance = uvicorn.Server(config)
+        await server_instance.serve()
+    elif mode == "uds":
+        import uvicorn
+
+        settings = uds_settings()
+        prepare_uds_path(settings.path, settings.mode, settings.dir_mode)
+        print(
+            f"Starting server on unix socket {settings.path} "
+            f"(socket {settings.mode:04o} in a {settings.dir_mode:04o} directory)...",
+            file=sys.stderr,
+        )
+        server_instance = uvicorn.Server(uvicorn_config(create_app(server), uds=settings.path))
         await server_instance.serve()
     else:
         # Run stdio server

@@ -31,13 +31,13 @@ The MCP server orchestrates Docker containers that have all tools pre-installed,
 |------|--------|-----------|
 | `Dockerfile` (repo root) | `gagarter/enumeraga_infra` scan image | **Yes** — the server runs scans by launching this |
 | `internal/cloud/Dockerfile` | `gagarter/enumeraga_cloud` scan image | **Yes** — same, for cloud scans |
-| `mcp-server-enumeraga/Dockerfile` + `docker-compose.yml` | The MCP **server** as an HTTP/SSE container | **Optional** — only for HTTP deployment (mode B below) |
+| `mcp-server-enumeraga/Dockerfile` + `docker-compose.yml` | The MCP **server** as a container, over HTTP/SSE or a unix socket | **Optional** — only for containerised deployment (modes B and C below) |
 
 The MCP server *orchestrates* scan containers; it never scans on the host. So the scan images are always needed. The server's own image is needed only if you deploy the server itself as a container.
 
 ## Deployment
 
-Pick one of two modes.
+Pick one of three modes.
 
 ### Mode A — stdio (recommended for a local CLI/desktop agent)
 
@@ -89,6 +89,32 @@ Notes for mode B:
 - `docker-compose.yml` identity-mounts `ENUMERAGA_HOST_OUTPUT_DIR` and `ENUMERAGA_HOST_AZURE_DIR` into the server container at the same paths, so the sibling scan containers (spawned via the mounted Docker socket) can resolve them on the host daemon.
 - A request's `output_dir` becomes a **sub-folder of** `ENUMERAGA_HOST_OUTPUT_DIR` (absolute paths and `..` are stripped), so output never escapes the mounted tree.
 - An `enumeraga-image-refresher` sidecar periodically `docker pull`s the `:latest` scan images. Stop it (`docker compose stop enumeraga-image-refresher`) while testing a locally built image, or it will overwrite your build.
+
+### Mode C — unix socket (for a mediator that shares a network namespace with the scan)
+
+Same server and the same two HTTP transports as mode B, over a unix domain socket instead of a TCP port.
+
+```bash
+export MCP_MODE=uds
+export MCP_UDS_PATH=/run/mcp-enumeraga/enumeraga.sock   # default
+```
+
+**Use this when the caller and the scan container share a network namespace.** That is the arrangement `network_mode="container:<id>"` exists to serve: a mediator confines the scan by putting it in a namespace whose egress is filtered and captured, and the mediator's own client sits in that same namespace. A TCP port cannot separate the two — they share one loopback, and both run as root, so nothing at the network or uid layer tells them apart.
+
+That matters here more than it would for most servers, because **reaching this server is equivalent to host root**: it has no authentication, it mounts the Docker socket, and `network_mode` is a caller-supplied argument that defaults to `host`. A scan container that could reach it could ask for a sibling with host networking, outside every rule confining it.
+
+A unix socket is a filesystem object, so the mediator mounts it into its client and not into the scan container. The boundary moves from the network, where the two are identical, to the filesystem, where they are not.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `MCP_UDS_PATH` | `/run/mcp-enumeraga/enumeraga.sock` | Mount the **directory**, not the file: the socket is recreated at each start, and a bind mount of the file itself would pin the old inode. |
+| `MCP_UDS_MODE` | `0600` | Read as octal with or without an `0o` prefix. |
+| `MCP_UDS_DIR_MODE` | `0700` | The socket's directory. |
+
+Notes for mode C:
+- **The directory carries the guarantee, not the socket's mode.** uvicorn chmods a unix socket to `0666` right after binding it, after any umask has been applied — so a umask narrows nothing (measured: umask `0177`, socket still `0666`). The server works around it by pre-creating the socket file at `MCP_UDS_MODE`, which uvicorn then preserves; but a directory with no search permission is the layer with no window at all, and that is where the confinement actually lives. Do not "tidy away" either one.
+- A leftover socket from an unclean shutdown is cleared automatically. A path that exists and is **not** a socket, or one something is still listening on, refuses to start rather than being removed — `MCP_UDS_PATH` is operator-supplied and this process holds the Docker socket, so an unconditional unlink would be an arbitrary-delete primitive.
+- The server still needs no network of its own in this mode. `network_mode: none` is a reasonable thing for a mediator's compose file to give it.
 
 ## Configuration
 
