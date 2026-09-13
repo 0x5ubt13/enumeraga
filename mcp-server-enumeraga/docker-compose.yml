@@ -58,7 +58,7 @@ services:
   # needs no host cron/systemd (neither is reliably available under WSL). A pull when
   # the digest is unchanged is just a cheap manifest check, so a short interval is fine.
   enumeraga-image-refresher:
-    image: docker:cli
+    image: docker:29.8.0-cli
     container_name: enumeraga-image-refresher
     restart: unless-stopped
     volumes:

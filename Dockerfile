@@ -24,7 +24,10 @@ RUN go build -ldflags="-s -w \
 
 # Stage 2: Final image - Kali rolling without Go toolchain
 # Removing Go + module cache saves 400-600MB from the final image
-FROM kalilinux/kali-rolling
+# kali-rolling is rebuilt daily. This is the multi-arch index digest as of
+# 13-09-2026; refresh by replacing the digest when a tool package is missing
+# or a CVE in the base needs the newer snapshot.
+FROM kalilinux/kali-rolling@sha256:49d174981a2a211e76acdde22a2e4978ea19bc0433487292cd9ad865da24ee42
 LABEL authors="0x5ubt13"
 LABEL description="Enumeraga Infrastructure Scanner - Automated penetration testing enumeration"
 

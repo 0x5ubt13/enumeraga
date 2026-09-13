@@ -3,6 +3,7 @@ package dockerhygiene
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -96,5 +97,34 @@ func TestMCPComposeAddsDockerSocketGroup(t *testing.T) {
 	}
 	if !strings.Contains(body, "DOCKER_GID") {
 		t.Error("group_add does not take DOCKER_GID, so the operator cannot match the host socket's group")
+	}
+}
+
+func TestFloatingImageAndToolPins(t *testing.T) {
+	infra := readRepoFile(t, "Dockerfile")
+	if strings.Contains(infra, "FROM kalilinux/kali-rolling") && !strings.Contains(infra, "FROM kalilinux/kali-rolling@sha256:") {
+		t.Error("infra Dockerfile FROM kali-rolling is unpinned; pin the multi-arch digest")
+	}
+
+	cloud := readRepoFile(t, "internal/cloud/Dockerfile")
+	if strings.Contains(cloud, "aws-enumerator@latest") {
+		t.Error("cloud Dockerfile installs aws-enumerator@latest; pin a commit")
+	}
+	if !regexp.MustCompile(`PMapper\.git@[0-9a-f]{40}`).MatchString(cloud) {
+		t.Error("cloud Dockerfile installs PMapper from floating git HEAD; pin a commit")
+	}
+
+	if strings.Contains(readRepoFile(t, "internal/commands/commands.go"), "aws-enumerator@latest") {
+		t.Error("commands.go installs aws-enumerator@latest; pin a commit")
+	}
+
+	mcp := readRepoFile(t, "mcp-server-enumeraga/Dockerfile")
+	if regexp.MustCompile(`(?m)^FROM python:3\.11-slim\s*$`).MatchString(mcp) {
+		t.Error("MCP Dockerfile FROM python:3.11-slim floats the patch; pin 3.11.x-slim-bookworm")
+	}
+
+	compose := readRepoFile(t, "mcp-server-enumeraga/docker-compose.yml")
+	if regexp.MustCompile(`(?m)^\s*image:\s*docker:cli\s*$`).MatchString(compose) {
+		t.Error("compose image docker:cli floats; pin docker:<version>-cli")
 	}
 }

@@ -1449,7 +1449,7 @@ func prepAWSEnumerator(cfg *config.CloudConfig) ([]string, error) {
 	}
 	if !utils.CheckToolExists("aws-enumerator") {
 		utils.PrintCustomBiColourMsg("red", "yellow", "[-] aws-enumerator ", "not found. Installing via go install...")
-		cmd := exec.Command("go", "install", "-v", "github.com/confused-binary/aws-enumerator@latest")
+		cmd := exec.Command("go", "install", "-v", "github.com/confused-binary/aws-enumerator@9ff69764751da55315d11c8e05637722c9a456fd")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {

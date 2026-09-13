@@ -29,7 +29,7 @@ RUN go build -ldflags="-s -w \
     -o enumeraga main.go
 
 # Install aws-enumerator (Go tool — built here, copied to final image)
-RUN go install -v github.com/confused-binary/aws-enumerator@latest
+RUN go install -v github.com/confused-binary/aws-enumerator@9ff69764751da55315d11c8e05637722c9a456fd
 
 # Final image - debian:bookworm-slim is ~30MB compressed vs ubuntu:latest ~77MB
 FROM debian:bookworm-slim
@@ -150,7 +150,8 @@ RUN /root/.local/pipx/venvs/scoutsuite/bin/python -m pip install --force-reinsta
 
 # Install PMapper (mosesrenegade fork) for AWS IAM privilege escalation graph analysis
 # https://github.com/mosesrenegade/PMapper
-RUN pipx install "git+https://github.com/mosesrenegade/PMapper.git"
+# Pin is mosesrenegade/PMapper@352df673 (06-11-2023), the tip of master.
+RUN pipx install "git+https://github.com/mosesrenegade/PMapper.git@352df673c91a17780c1b70b3b63f4ef6a2eefc0b"
 
 # Newer gcp-scanner PyPI releases install as "gcp-scanner" (hyphen); older ones as "gcp_scanner".
 # Symlink both names so enumeraga finds the binary regardless of which version is installed.
