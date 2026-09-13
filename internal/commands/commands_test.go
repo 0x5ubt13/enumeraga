@@ -3,6 +3,8 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -473,5 +475,192 @@ func TestResolveGCPIAMBruteEmailFromCredsFile(t *testing.T) {
 	}
 	if email != "sa@my-project.iam.gserviceaccount.com" {
 		t.Errorf("expected email from creds file, got %q", email)
+	}
+}
+
+// putStubOnPath drops empty executables named after each tool onto PATH so
+// prep functions that check for a binary do not try to install one.
+func putStubOnPath(t *testing.T, tools ...string) {
+	t.Helper()
+	dir := t.TempDir()
+	for _, tool := range tools {
+		name := tool
+		body := []byte("#!/bin/sh\n")
+		if runtime.GOOS == "windows" {
+			name += ".cmd"
+			body = []byte("@echo off\r\n")
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o755); err != nil {
+			t.Fatalf("failed to create stub %s: %v", tool, err)
+		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestPrepScoutsuiteKeepsSpacedPathsAsSingleArgs(t *testing.T) {
+	putStubOnPath(t, "scout")
+	reportDir := filepath.Join(t.TempDir(), "scout report")
+	creds := filepath.Join(t.TempDir(), "my creds.json")
+	got, err := prepScoutsuite(&config.CloudConfig{
+		Provider:  "gcp",
+		CredsFile: creds,
+	}, reportDir)
+	if err != nil {
+		t.Fatalf("prepScoutsuite() error = %v", err)
+	}
+	want := []string{"scout", "gcp", "--force", "--no-browser", "--report-dir", reportDir, "--service-account", creds}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("prepScoutsuite() = %#v, want %#v", got, want)
+	}
+}
+
+func TestPrepProwlerKeepsSpacedPathsAsSingleArgs(t *testing.T) {
+	putStubOnPath(t, "prowler")
+	outDir := filepath.Join(t.TempDir(), "prowler out")
+	creds := filepath.Join(t.TempDir(), "adc file.json")
+	got, err := prepProwler(&config.CloudConfig{
+		Provider:  "gcp",
+		CredsFile: creds,
+	}, outDir)
+	if err != nil {
+		t.Fatalf("prepProwler() error = %v", err)
+	}
+	want := []string{"prowler", "gcp", "-o", outDir, "--credentials-file", creds}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("prepProwler() = %#v, want %#v", got, want)
+	}
+}
+
+func TestPrepProwlerAzureCLIKeepsSubscriptionAsSingleArg(t *testing.T) {
+	putStubOnPath(t, "prowler")
+	outDir := filepath.Join(t.TempDir(), "prowler out")
+	got, err := prepProwler(&config.CloudConfig{
+		Provider:          "azure",
+		AzureSubscription: "sub with spaces",
+	}, outDir)
+	if err != nil {
+		t.Fatalf("prepProwler() error = %v", err)
+	}
+	want := []string{"prowler", "azure", "-o", outDir, "--az-cli-auth", "--subscription-ids", "sub with spaces"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("prepProwler() = %#v, want %#v", got, want)
+	}
+}
+
+func TestPrepCloudfoxKeepsSpacedPathsAsSingleArgs(t *testing.T) {
+	putStubOnPath(t, "cloudfox")
+	outDir := filepath.Join(t.TempDir(), "fox out")
+	pmapper := filepath.Join(t.TempDir(), "pmapper data")
+	got, err := prepCloudfox(&config.CloudConfig{
+		Provider:   "aws",
+		AWSProfile: "lab profile",
+		PMapperDir: pmapper,
+	}, outDir)
+	if err != nil {
+		t.Fatalf("prepCloudfox() error = %v", err)
+	}
+	want := []string{"cloudfox", "aws", "all-checks", "--outdir", outDir, "--profile", "lab profile", "--pmapper-data-basepath", pmapper}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("prepCloudfox() = %#v, want %#v", got, want)
+	}
+}
+
+func TestPrepKubenumerateKeepsSpacedOutputAsSingleArg(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "k8s out")
+	got, err := prepKubenumerate(&config.CloudConfig{Provider: "k8s"}, outDir)
+	if err != nil {
+		t.Fatalf("prepKubenumerate() error = %v", err)
+	}
+	want := []string{"python3", "kubenumerate.py", "-o", outDir}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("prepKubenumerate() = %#v, want %#v", got, want)
+	}
+}
+
+func TestPrepGcpScannerKeepsSpacedPathsAsSingleArgs(t *testing.T) {
+	putStubOnPath(t, "gcp-scanner")
+	outDir := filepath.Join(t.TempDir(), "scanner out")
+	creds := filepath.Join(t.TempDir(), "sa key.json")
+	got, err := prepGcpScanner(&config.CloudConfig{
+		Provider:   "gcp",
+		GCPProject: "my project",
+		CredsFile:  creds,
+	}, outDir)
+	if err != nil {
+		t.Fatalf("prepGcpScanner() error = %v", err)
+	}
+	want := []string{"gcp-scanner", "-o", outDir, "-p", "my project", "-k", creds}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("prepGcpScanner() = %#v, want %#v", got, want)
+	}
+}
+
+func TestPrepNucleiKeepsSpacedURLAsSingleArg(t *testing.T) {
+	putStubOnPath(t, "nuclei")
+	got, err := prepNuclei(&config.CloudConfig{
+		Provider:        "aws",
+		NucleiEnabled:   true,
+		NucleiTargetURL: "https://example.com/path with space",
+	})
+	if err != nil {
+		t.Fatalf("prepNuclei() error = %v", err)
+	}
+	want := []string{"nuclei", "-u", "https://example.com/path with space", "-t", "cloud/aws/", "-silent", "-no-interactivity", "-no-color"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("prepNuclei() = %#v, want %#v", got, want)
+	}
+}
+
+func TestPrepAWSEnumeratorKeepsSpacedProfileAsSingleArg(t *testing.T) {
+	putStubOnPath(t, "aws-enumerator")
+	got, err := prepAWSEnumerator(&config.CloudConfig{
+		Provider:             "aws",
+		AWSEnumeratorEnabled: true,
+		AWSProfile:           "lab profile",
+	})
+	if err != nil {
+		t.Fatalf("prepAWSEnumerator() error = %v", err)
+	}
+	want := []string{"aws-enumerator", "enum", "-services", "all", "-profile", "lab profile"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("prepAWSEnumerator() = %#v, want %#v", got, want)
+	}
+}
+
+func TestPrepPmapperReturnsArgvNotShellString(t *testing.T) {
+	got, err := prepPmapper(&config.CloudConfig{Provider: "aws"}, t.TempDir())
+	if err != nil {
+		t.Fatalf("prepPmapper() error = %v", err)
+	}
+	want := []string{"pmapper", "graph", "create"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("prepPmapper() = %#v, want %#v", got, want)
+	}
+}
+
+func TestScoutAzureCLIArgsKeepsSpacedPathsAsSingleArgs(t *testing.T) {
+	reportDir := filepath.Join(t.TempDir(), "azure report")
+	got := scoutAzureCLIArgs(reportDir, "sub with spaces")
+	want := []string{"scout", "azure", "--cli", "--force", "--no-browser", "--report-dir", reportDir, "--subscriptions", "sub with spaces"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("scoutAzureCLIArgs() = %#v, want %#v", got, want)
+	}
+}
+
+func TestScoutAzureFileAuthArgsKeepsSpacedPathsAsSingleArgs(t *testing.T) {
+	auth := filepath.Join(t.TempDir(), "auth file.json")
+	reportDir := filepath.Join(t.TempDir(), "azure report")
+	got := scoutAzureFileAuthArgs(auth, reportDir, "sub with spaces")
+	want := []string{"scout", "azure", "--file-auth", auth, "--force", "--no-browser", "--report-dir", reportDir, "--subscriptions", "sub with spaces"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("scoutAzureFileAuthArgs() = %#v, want %#v", got, want)
+	}
+}
+
+func TestGcpIAMBruteCommandKeepsSpacedValuesAsSingleArgs(t *testing.T) {
+	got := gcpIAMBruteCommand("ya29.token with space", "my project", "sa name@x.com")
+	want := []string{"gcp-iam-brute", "--access-token", "ya29.token with space", "--project-id", "my project", "--service-account-email", "sa name@x.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("gcpIAMBruteCommand() = %#v, want %#v", got, want)
 	}
 }

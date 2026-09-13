@@ -128,8 +128,9 @@ func (t *ToolTracker) progressLocked() (completed, total int) {
 }
 
 // SkipTool records that a tool was deliberately not run, with the reason.
-// The tool is registered if it was not already: some tools are launched without
-// going through CallRunTool, and their skips must still be counted.
+// The tool is registered if it was not already, so a skip is still counted
+// when a launch path forgot to register. Production launches go through
+// CallRunTool or runRegisteredTool; this remains the backstop.
 func (t *ToolTracker) SkipTool(name, reason string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

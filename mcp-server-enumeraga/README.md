@@ -76,6 +76,7 @@ cd mcp-server-enumeraga
 # Optional overrides (defaults shown):
 export ENUMERAGA_HOST_OUTPUT_DIR=/tmp/enumeraga_scan_results   # where results are written
 export ENUMERAGA_HOST_AZURE_DIR="$HOME/.azure"                 # az-login reuse for Azure
+export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)         # socket group; default 999
 docker compose up -d --build
 ```
 
@@ -86,6 +87,7 @@ Clients then use an HTTP entry instead of a command:
 ```
 
 Notes for mode B:
+- The server runs as uid 1000, not root. `DOCKER_GID` must match the host docker socket's group (`stat -c '%g' /var/run/docker.sock`) or `docker` calls fail with permission denied. Compose defaults to 999.
 - `docker-compose.yml` identity-mounts `ENUMERAGA_HOST_OUTPUT_DIR` and `ENUMERAGA_HOST_AZURE_DIR` into the server container at the same paths, so the sibling scan containers (spawned via the mounted Docker socket) can resolve them on the host daemon.
 - A request's `output_dir` becomes a **sub-folder of** `ENUMERAGA_HOST_OUTPUT_DIR` (absolute paths and `..` are stripped), so output never escapes the mounted tree.
 - An `enumeraga-image-refresher` sidecar periodically `docker pull`s the `:latest` scan images. Stop it (`docker compose stop enumeraga-image-refresher`) while testing a locally built image, or it will overwrite your build.

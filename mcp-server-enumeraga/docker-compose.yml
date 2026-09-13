@@ -40,6 +40,13 @@ services:
       # localhost. To share it with another host, put an authenticating reverse proxy in
       # front rather than widening this binding.
       - "127.0.0.1:9000:9000"
+    # The image runs as uid 1000 (enumeraga). The host docker socket is typically
+    # 660 root:docker, so this process can talk to the daemon only if it holds the
+    # socket's group. Default 999 is the usual docker GID on Debian/Ubuntu; override
+    # when `stat -c '%g' /var/run/docker.sock` prints something else:
+    #   export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+    group_add:
+      - "${DOCKER_GID:-999}"
     restart: unless-stopped
     # Use host networking mode if possible, otherwise rely on mapped ports
     # network_mode: host
@@ -51,7 +58,7 @@ services:
   # needs no host cron/systemd (neither is reliably available under WSL). A pull when
   # the digest is unchanged is just a cheap manifest check, so a short interval is fine.
   enumeraga-image-refresher:
-    image: docker:cli
+    image: docker:29.8.0-cli
     container_name: enumeraga-image-refresher
     restart: unless-stopped
     volumes:

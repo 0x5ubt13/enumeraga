@@ -316,10 +316,11 @@ TOOLS: list[Tool] = [
 def _chown_host_tree(path: Path) -> None:
     """Best-effort chown of a created output dir (and the results base) to the host user.
 
-    The server container runs as root, so directories it creates under the identity-mounted
-    results tree are root-owned on the host. Chowning the base too means the operator can
-    `mv` a whole results sub-folder out (removing the source needs write on its parent).
-    Silently ignored when no host UID is configured or chown is not permitted.
+    The server container runs as uid 1000, which matches the compose default for
+    ENUMERAGA_HOST_UID, so new directories are already owned by the typical host user.
+    This chown still runs when the configured host UID differs; it is silently ignored
+    when no host UID is set or when the process lacks permission (non-root cannot
+    chown to another user).
     """
     uid = os.environ.get("ENUMERAGA_HOST_UID")
     if not uid:
