@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Stage 1: Go builder - compiles enumeraga only
 # ProjectDiscovery tools are downloaded as pre-built binaries in the final stage
 # to avoid CGO/libpcap build dependency issues in CI
@@ -9,10 +10,6 @@ WORKDIR /build
 # Cache dependency downloads separately from source changes
 COPY go.mod go.sum ./
 RUN go mod download
-
-# GITHUB_TOKEN is optional but strongly recommended in CI to avoid API rate limits
-# Pass via: --build-arg GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-ARG GITHUB_TOKEN=""
 
 # Copy source and build - -s -w strips debug symbols (30-50% smaller binary)
 COPY . .
@@ -127,7 +124,12 @@ COPY --chmod=755 --from=builder /build/enumeraga /opt/enumeraga/enumeraga
 # Download ProjectDiscovery pre-built binaries - avoids CGO/libpcap build issues
 # Release zip naming: tag=v{VER}, filename={tool}_{VER}_linux_{arch}.zip
 # Architecture-aware: detects build platform and downloads correct binaries for amd64 or arm64
-RUN ARCH=$(uname -m); \
+# Optional GitHub token is a BuildKit secret, not an ARG: `docker history` would
+# otherwise recover it. Local: --secret id=github_token,env=GITHUB_TOKEN
+RUN --mount=type=secret,id=github_token,required=false \
+    GITHUB_TOKEN=""; \
+    if [ -f /run/secrets/github_token ]; then GITHUB_TOKEN=$(cat /run/secrets/github_token); fi; \
+    ARCH=$(uname -m); \
     case "$ARCH" in \
         x86_64)  PD_ARCH="amd64" ;; \
         aarch64) PD_ARCH="arm64" ;; \

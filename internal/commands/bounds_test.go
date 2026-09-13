@@ -281,8 +281,9 @@ func TestUnboundedRunFiguresAreUnaffected(t *testing.T) {
 	utils.ToolRegistry.CompleteTool("nmap on port 80", true)
 	utils.ToolRegistry.CompleteTool("nikto on port 80", true)
 
-	// The two unregistered launches from runCewlAndFfuf, exactly as the -b path
-	// makes them.
+	// Direct runTool calls, the way an unbounded launch that nobody registered
+	// used to look. Production now goes through runRegisteredTool; this guards
+	// the low-level helper so it still does not invent tracker entries.
 	_ = runTool([]string{"cewl", "-m7", "--lowercase", "-w", "/dev/null", "http://example.invalid"},
 		"/nonexistent/cewl_80.out", "80", boolPtr(false))
 	_ = runTool([]string{"ffuf", "-w", "/dev/null", "-u", "http://example.invalid/FUZZ"},
@@ -392,5 +393,65 @@ func TestNoRateNoteWithoutARateCap(t *testing.T) {
 
 	if got := utils.ToolRegistry.RateNoteFor(name); got != "" {
 		t.Errorf("RateNoteFor() = %q, want an empty string: no --rate was supplied, so nothing was rate-capped", got)
+	}
+}
+
+func TestRunRegisteredToolCreatesTrackerEntry(t *testing.T) {
+	putStubOnPath(t, "cewl")
+	utils.ToolRegistry = utils.NewToolTracker()
+
+	out := filepath.Join(t.TempDir(), "cewl_80.out")
+	_ = runRegisteredTool([]string{"cewl", "-m7", "http://example.invalid"}, out, "80", boolPtr(false))
+
+	if got := utils.ToolRegistry.GetTotal(); got != 1 {
+		t.Errorf("GetTotal() = %d, want 1: runRegisteredTool must register the tool it launches", got)
+	}
+	finished := utils.ToolRegistry.CountByStatus(utils.ToolCompleted) + utils.ToolRegistry.CountByStatus(utils.ToolFailed)
+	if finished != 1 {
+		t.Errorf("terminal count = %d, want 1", finished)
+	}
+}
+
+func TestRunRegisteredToolDoesNotTakeAWorkerSlot(t *testing.T) {
+	putStubOnPath(t, "cewl")
+	utils.ToolRegistry = utils.NewToolTracker()
+
+	pool := utils.GetWorkerPool()
+	slots := pool.GetMaxWorkers()
+	for i := 0; i < slots; i++ {
+		if !pool.Acquire() {
+			t.Fatalf("could not fill the worker pool at slot %d of %d", i, slots)
+		}
+	}
+	defer func() {
+		for i := 0; i < slots; i++ {
+			pool.Release()
+		}
+	}()
+
+	out := filepath.Join(t.TempDir(), "cewl_80.out")
+	done := make(chan error, 1)
+	go func() {
+		done <- runRegisteredTool([]string{"cewl", "-m7", "http://example.invalid"}, out, "80", boolPtr(false))
+	}()
+
+	select {
+	case err := <-done:
+		if errors.Is(err, errToolSkipped) {
+			t.Fatal("runRegisteredTool skipped for want of a worker slot; it must not Acquire, because its caller already holds one")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("runRegisteredTool blocked on the worker pool; it must not Acquire")
+	}
+}
+
+func TestRunCewlAndFfufRegistersBothTools(t *testing.T) {
+	putStubOnPath(t, "cewl", "ffuf")
+	utils.ToolRegistry = utils.NewToolTracker()
+
+	runCewlAndFfuf("example.invalid", t.TempDir()+string(filepath.Separator), "80", "http", boolPtr(false))
+
+	if got := utils.ToolRegistry.GetTotal(); got != 2 {
+		t.Errorf("GetTotal() = %d, want 2 (cewl and ffuf)", got)
 	}
 }

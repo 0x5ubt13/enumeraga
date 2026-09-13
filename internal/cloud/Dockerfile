@@ -1,9 +1,12 @@
+# syntax=docker/dockerfile:1
 # Enumeraga Cloud Scanner
 # Multi-stage build for smaller final image
 #
 # BUILD INSTRUCTIONS:
 # Must be built from the repository root directory:
 #   docker build -f internal/cloud/Dockerfile -t gagarter/enumeraga_cloud .
+# Optional GitHub token (avoids API rate limits) is a BuildKit secret, not an ARG:
+#   docker build --secret id=github_token,env=GITHUB_TOKEN -f internal/cloud/Dockerfile ...
 #
 FROM golang:1.26.2-bookworm AS builder
 LABEL authors="0x5ubt13"
@@ -13,10 +16,6 @@ WORKDIR /build
 # Cache dependency downloads separately from source changes
 COPY go.mod go.sum ./
 RUN go mod download
-
-# GITHUB_TOKEN is optional but strongly recommended in CI to avoid API rate limits
-# Pass via: --build-arg GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-ARG GITHUB_TOKEN=""
 
 # Copy source and build - -s -w strips debug symbols (30-50% smaller binary)
 COPY . .
@@ -81,8 +80,10 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor
 # Install cloudfox from pre-built ZIP archive (architecture-aware).
 # BishopFox ships cloudfox-linux-amd64.zip / cloudfox-linux-arm64.zip — not bare binaries.
 # Soft-fail: if GitHub rate-limits the build, prepCloudfox() will download it at runtime instead.
-# Pass --build-arg GITHUB_TOKEN=<token> on CI to avoid rate limits.
-RUN ARCH=$(uname -m); \
+RUN --mount=type=secret,id=github_token,required=false \
+    GITHUB_TOKEN=""; \
+    if [ -f /run/secrets/github_token ]; then GITHUB_TOKEN=$(cat /run/secrets/github_token); fi; \
+    ARCH=$(uname -m); \
     case "$ARCH" in \
         x86_64)  CF_ARCH="amd64" ;; \
         aarch64) CF_ARCH="arm64" ;; \
