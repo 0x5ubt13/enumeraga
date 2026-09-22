@@ -325,3 +325,141 @@ def test_scan_key_distinguishes_network_modes():
         "infra", {**base, "network_mode": "container:target-gateway"}
     )
 
+
+
+def _call_tool_failing(monkeypatch, name, args, error="Command failed with code 1\nscan output here"):
+    """Invoke handle_tool_call with the docker run raising, as a non-zero exit does."""
+
+    async def failing_run_command(cmd, timeout=3600, extra_env=None):
+        raise RuntimeError(error)
+
+    async def no_duplicate(key):
+        return None
+
+    monkeypatch.setattr(server, "run_command", failing_run_command)
+    monkeypatch.setattr(server, "running_scan_name", no_duplicate)
+    result = asyncio.run(server.handle_tool_call(name, args))
+    return result[0].text
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("enumeraga_infra_scan", {"target": "192.168.1.100"}),
+        ("enumeraga_cloud_scan", {"provider": "azure", "subscription": "sub-1"}),
+    ],
+)
+def test_failed_scan_still_reports_where_the_results_are(monkeypatch, name, args):
+    """A scan that exits non-zero must still say where its artefacts are.
+
+    The tools that ran before the failure wrote real reports, and a cloud scanner
+    routinely exits non-zero simply because it found problems. Returning only the
+    error left the caller with container-local paths that vanish with the
+    container, which is indistinguishable from losing the scan.
+    """
+    text = _call_tool_failing(monkeypatch, name, args)
+
+    assert "Results saved to:" in text, (
+        "the failure path does not report the host output directory, so the results cannot be collected"
+    )
+    # The collection policy has to travel with it, exactly as on the success path.
+    assert "MOVE" in text and "`mv`" in text
+    assert "do not copy" in text
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("enumeraga_infra_scan", {"target": "192.168.1.100"}),
+        ("enumeraga_cloud_scan", {"provider": "azure", "subscription": "sub-1"}),
+    ],
+)
+def test_failed_scan_preserves_the_underlying_error(monkeypatch, name, args):
+    """Reporting the path must not swallow what actually went wrong."""
+    text = _call_tool_failing(monkeypatch, name, args, error="Command failed with code 3\nprowler found failures")
+
+    assert "code 3" in text
+    assert "prowler found failures" in text
+    assert "did NOT complete cleanly" in text
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("enumeraga_infra_scan", {"target": "192.168.1.100"}),
+        ("enumeraga_cloud_scan", {"provider": "azure", "subscription": "sub-1"}),
+    ],
+)
+def test_failed_scan_does_not_claim_nothing_was_produced(monkeypatch, name, args):
+    """A non-zero exit is not evidence that the scan produced nothing.
+
+    Prowler exits 3 when its checks failed and ScoutSuite 200 when a permission was
+    denied; both have already written their reports by then.
+    """
+    text = _call_tool_failing(monkeypatch, name, args)
+
+    assert "still wrote its reports" in text
+    assert "before concluding the scan failed" in text
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("enumeraga_infra_scan", {"target": "192.168.1.100"}),
+        ("enumeraga_cloud_scan", {"provider": "azure", "subscription": "sub-1"}),
+    ],
+)
+def test_results_message_warns_against_reporting_container_paths(monkeypatch, name, args):
+    """The tools print container-local paths; those are not the deliverable.
+
+    An operator told only "/tmp/enumeraga_output/azure/..." has been told where the
+    files were inside a container that has since been removed.
+    """
+    for text in (_call_tool(monkeypatch, name, args), _call_tool_failing(monkeypatch, name, args)):
+        assert "HOST path" in text
+        assert "/tmp/enumeraga_output" in text
+        assert "removed when" in text
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("enumeraga_infra_scan", {"target": "192.168.1.100"}),
+        ("enumeraga_cloud_scan", {"provider": "azure", "subscription": "sub-1"}),
+    ],
+)
+def test_results_are_named_as_the_deliverable(monkeypatch, name, args):
+    """Collecting the output is the job, not an optional tidy-up afterwards."""
+    text = _call_tool(monkeypatch, name, args)
+
+    assert "deliverable" in text
+    assert "COLLECT THE RESULTS NOW" in text
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("enumeraga_infra_scan", {"target": "192.168.1.100"}),
+        ("enumeraga_infra_scan", {"target": "192.168.1.100", "detach": True}),
+        ("enumeraga_cloud_scan", {"provider": "azure", "subscription": "sub-1"}),
+        ("enumeraga_cloud_scan", {"provider": "azure", "subscription": "sub-1", "detach": True}),
+    ],
+)
+def test_every_response_uses_one_results_path_phrase(monkeypatch, name, args):
+    """Clean, detached and failed responses must all say "Results saved to:".
+
+    Whatever collects the output keys off that exact phrase, so a variant wording
+    on one path is a path whose results are silently never collected. The detached
+    reply said "Results will be saved to:" and so matched nothing.
+    """
+    clean = _call_tool(monkeypatch, name, args)
+    assert "Results saved to:" in clean
+    assert "Results will be saved to:" not in clean, (
+        "a variant of the results-path phrase will not be matched by whatever collects the output"
+    )
+
+    # The failure path has no detached variant, but it must agree on the phrase too.
+    if not args.get("detach"):
+        failed = _call_tool_failing(monkeypatch, name, args)
+        assert "Results saved to:" in failed
+        assert "Results will be saved to:" not in failed
