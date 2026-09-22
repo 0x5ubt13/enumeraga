@@ -1090,6 +1090,14 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 		return err
 	}
 	if len(args) == 0 {
+		// A prep function returning no arguments has declined to run the tool.
+		// That is a coverage gap, so it is recorded rather than passed over in
+		// silence -- unless the prep function already recorded a better reason.
+		if !cloudSkipAlreadyRecorded(tool) {
+			RecordCloudSkip(tool, fmt.Sprintf(
+				"not run for provider %q: it does not support this provider, is disabled, or needed configuration that was not supplied",
+				cfg.Provider))
+		}
 		return nil
 	}
 
@@ -1328,7 +1336,27 @@ func prepCloudfox(cfg *config.CloudConfig, filePath string) ([]string, error) {
 		}
 		return args, nil
 	case "azure":
-		return []string{binary, "azure", "inventory", "--outdir", filePath}, nil
+		// cloudfox's Azure modules require a scope: "azure inventory" with neither
+		// --subscription nor --tenant prints "Please enter a valid input with a
+		// valid flag" and then exits 0, so a missing scope reads as a clean run
+		// unless it is caught before the command is built.
+		//
+		// The subscription is preferred over the tenant because it is the narrower
+		// scope, and an engagement is scoped to a subscription rather than to
+		// everything the signed-in identity can enumerate.
+		args := []string{binary, "azure", "inventory", "--outdir", filePath}
+		switch {
+		case cfg.AzureSubscription != "":
+			return append(args, "--subscription", cfg.AzureSubscription), nil
+		case cfg.AzureTenantID != "":
+			return append(args, "--tenant", cfg.AzureTenantID), nil
+		default:
+			reason := "CloudFox Azure inventory needs a scope: pass a subscription " +
+				"(AZURE_SUBSCRIPTION_ID, or the MCP server's 'subscription' argument) or a tenant"
+			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Skipping ", "cloudfox", ": ", reason)
+			RecordCloudSkip("cloudfox", reason)
+			return nil, nil
+		}
 	default:
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] CloudFox ", "does not support provider '", cfg.Provider, "'. Skipping...")
 		return nil, nil
@@ -1722,19 +1750,41 @@ func stallTiming(tool string) (warmup, stallTimeout time.Duration) {
 	return warmup, stallTimeout
 }
 
-// runCloudTool is a new version of runTool for cloud - Announce cloud tool and run it
-func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
-	// Check if shutdown is in progress before starting
-	if utils.IsShuttingDown() {
-		return
-	}
-
+// runCloudTool announces a cloud tool, runs it, and classifies how it finished.
+//
+// The returned result is the run's evidence for that tool. It is deliberately
+// richer than the exit status: a scanner that completed and found problems, a
+// scanner whose coverage was cut short by a missing permission, and a scanner
+// that never ran all exit non-zero, and the caller has to tell them apart.
+func runCloudTool(args []string, filePath string, OptVVerbose *bool) CloudToolResult {
 	tool := args[0]
 	cmdArgs := args[1:]
 	command := strings.Join(cmdArgs, " ")
 
+	result := CloudToolResult{Tool: toolKey(tool), ExitCode: -1, Artefact: filePath}
+
+	// Check if shutdown is in progress before starting
+	if utils.IsShuttingDown() {
+		result.Outcome = OutcomeNotApplicable
+		result.Detail = "scan shutting down before this tool could start"
+		recordCloudResult(result)
+		return result
+	}
+
 	utils.PrintCustomBiColourMsg("magenta", "yellow", "[?] Debug -> Running: ", strings.Join(args, " "))
 	announceCloudTool(tool)
+
+	startedAt := time.Now()
+
+	// fail records a launch that never produced an exit status, so the reason is
+	// kept rather than reduced to a bare non-zero.
+	fail := func(outcome CloudToolOutcome, detail string) CloudToolResult {
+		result.Outcome = outcome
+		result.Detail = detail
+		recordCloudResult(result)
+		writeCloudRunRecord(result, args, startedAt)
+		return result
+	}
 
 	// Use CommandContext to allow cancellation via global context
 	ctx := utils.GetGlobalContext()
@@ -1744,20 +1794,20 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating stdout pipe: %s", err))
-		return
+		return fail(OutcomeFailed, fmt.Sprintf("could not create a stdout pipe: %v", err))
 	}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("failed to get stderr pipe: %v", err))
-		return
+		return fail(OutcomeFailed, fmt.Sprintf("could not create a stderr pipe: %v", err))
 	}
 
 	// Create a file to write the output to
 	file, err := os.Create(filePath)
 	if err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating output file: %s", err))
-		return
+		return fail(OutcomeFailed, fmt.Sprintf("could not create the output file: %v", err))
 	}
 
 	defer func(file *os.File) {
@@ -1772,7 +1822,11 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	// Start the command asynchronously in a goroutine
 	if err := cmd.Start(); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error starting command %s: %v", tool, err))
-		return
+		outcome := OutcomeFailed
+		if errors.Is(err, exec.ErrNotFound) || os.IsNotExist(err) {
+			outcome = OutcomeUnavailable
+		}
+		return fail(outcome, fmt.Sprintf("could not be started: %v", err))
 	}
 
 	// Kill the process only if it shows no sign of life — no output and no file growth —
@@ -1785,18 +1839,28 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	stopWatchdog := stallWatchdog(cmd, filepath.Dir(filePath), &lastActivity, warmup, stallTimeout)
 	defer stopWatchdog()
 
+	// Both streams are kept: a tool's complaint about its own command line can
+	// land on either, and stderr was previously shown but never retained, so the
+	// artefact lost the one line that explained a failure. The capture buffer is
+	// bounded because some tools emit thousands of lines.
+	capture := newCloudOutputCapture()
+
 	// gcp-iam-brute emits thousands of lines of verbose progress; send it to file only.
 	var stdoutDst io.Writer
 	var stderrDst io.Writer
 	if tool == "gcp-iam-brute" {
-		stdoutDst = activityWriter{file, &lastActivity}
-		stderrDst = activityWriter{file, &lastActivity}
+		stdoutDst = activityWriter{io.MultiWriter(file, capture), &lastActivity}
+		stderrDst = activityWriter{io.MultiWriter(file, capture), &lastActivity}
 	} else {
-		stdoutDst = activityWriter{io.MultiWriter(os.Stdout, file), &lastActivity}
-		stderrDst = activityWriter{os.Stderr, &lastActivity}
+		stdoutDst = activityWriter{io.MultiWriter(os.Stdout, file, capture), &lastActivity}
+		stderrDst = activityWriter{io.MultiWriter(os.Stderr, file, capture), &lastActivity}
 	}
 
+	var copiers sync.WaitGroup
+	copiers.Add(2)
+
 	go func() {
+		defer copiers.Done()
 		_, err := io.Copy(stdoutDst, stdout)
 		if err != nil {
 			if *OptVVerbose {
@@ -1806,6 +1870,7 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 	}()
 
 	go func() {
+		defer copiers.Done()
 		_, err := io.Copy(stderrDst, stderr)
 		if err != nil {
 			if *OptVVerbose {
@@ -1814,27 +1879,75 @@ func runCloudTool(args []string, filePath string, OptVVerbose *bool) {
 		}
 	}()
 
-	// Wait for the command to complete
-	if err := cmd.Wait(); err != nil {
-		// Check if the error was due to context cancellation (shutdown)
-		if ctx.Err() == context.Canceled {
-			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Cloud tool '", tool, "' terminated due to shutdown")
-			return
-		}
-		if tool == "nikto" || tool == "fping" {
-			// Nikto and fping don't have a clean exit
-			utils.PrintCustomBiColourMsg("green", "cyan", "[+] Done! '", tool, "' finished successfully")
-			if filePath != "/dev/null" {
-				utils.PrintCustomBiColourMsg("yellow", "cyan", "\tShortcut: less -R '", filePath, "'")
-			}
-			return
-		} else {
-			utils.PrintSafe("%s %s %s %s\n", utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(err))
-			return
-		}
+	// Both streams must be drained before the output is classified, or the marker
+	// that explains a failure may not have been read yet.
+	copiers.Wait()
+
+	waitErr := cmd.Wait()
+	if ctx.Err() == context.Canceled {
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Cloud tool '", tool, "' terminated due to shutdown")
+		return fail(OutcomeNotApplicable, "terminated because the scan was shutting down")
 	}
 
-	printToolSuccess(command, tool, filePath, -1, -1, OptVVerbose)
+	exitCode := 0
+	var exitErr *exec.ExitError
+	switch {
+	case waitErr == nil:
+		exitCode = 0
+	case errors.As(waitErr, &exitErr):
+		exitCode = exitErr.ExitCode()
+	default:
+		exitCode = -1
+	}
+	result.ExitCode = exitCode
+
+	outcome, detail := classifyCloudToolExit(tool, exitCode, capture.String())
+	result.Outcome = outcome
+	result.Detail = detail
+
+	// nikto and fping never exit cleanly, and enumeraga has always treated their
+	// non-zero status as success. That stays true, but the real code is still
+	// recorded rather than rewritten to zero.
+	if (tool == "nikto" || tool == "fping") && outcome == OutcomeFailed {
+		result.Outcome = OutcomeCompleted
+		result.Detail = fmt.Sprintf("exited %d, which this tool does on a normal run", exitCode)
+	}
+
+	recordCloudResult(result)
+	writeCloudRunRecord(result, args, startedAt)
+	reportCloudToolOutcome(command, tool, filePath, result, waitErr, OptVVerbose)
+	return result
+}
+
+// reportCloudToolOutcome prints the one-line verdict for a finished cloud tool.
+//
+// A scanner that completed and found problems is reported as a success with its
+// findings noted, not as a command that "finished with error": the reports it
+// wrote are valid, and calling that a failure is what drives an operator to
+// discard good output.
+func reportCloudToolOutcome(command, tool, filePath string, result CloudToolResult, waitErr error, OptVVerbose *bool) {
+	switch result.Outcome {
+	case OutcomeCompleted:
+		printToolSuccess(command, tool, filePath, -1, -1, OptVVerbose)
+	case OutcomeFindings, OutcomePartial:
+		printToolSuccess(command, tool, filePath, -1, -1, OptVVerbose)
+		utils.PrintCustomBiColourMsg("yellow", "cyan",
+			"[!] ", tool, " ", result.Detail)
+		if result.Outcome == OutcomePartial {
+			utils.PrintCustomBiColourMsg("yellow", "cyan",
+				"    Its results are valid but incomplete. ",
+				"Check the output for the underlying errors rather than treating this as a clean run.")
+		}
+	case OutcomeInvalidInvocation:
+		utils.PrintCustomBiColourMsg("red", "yellow",
+			"[-] ", tool, " rejected its command line, so it scanned nothing. ",
+			"This is an enumeraga defect, not a target or permission problem.")
+		utils.PrintCustomBiColourMsg("yellow", "cyan", "    Output kept at: ", filePath)
+	case OutcomeUnavailable:
+		utils.PrintCustomBiColourMsg("red", "yellow", "[-] ", tool, " ", result.Detail)
+	default:
+		utils.PrintSafe("%s %s %s %s\n", utils.Red("Command"), tool, utils.Red("finished with error:"), utils.Red(waitErr))
+	}
 }
 
 // RunCloudScan orchestrates the cloud security scanning

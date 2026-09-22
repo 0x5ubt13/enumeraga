@@ -17,6 +17,7 @@ import (
 
 	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
 	"github.com/0x5ubt13/enumeraga/internal/config"
+	"github.com/0x5ubt13/enumeraga/internal/runrecord"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/pborman/getopt/v2"
 )
@@ -40,13 +41,13 @@ func firstNonEmpty(a, b string) string {
 }
 
 // Azure service principal flags — used by monkey365, ScoutSuite and Prowler.
-var optAzureTenantID     = getopt.StringLong("tenant", 0, "", "Azure Tenant ID (for service principal auth)")
-var optAzureClientID     = getopt.StringLong("client-id", 0, "", "Azure Client ID / App ID (for service principal auth)")
+var optAzureTenantID = getopt.StringLong("tenant", 0, "", "Azure Tenant ID (for service principal auth)")
+var optAzureClientID = getopt.StringLong("client-id", 0, "", "Azure Client ID / App ID (for service principal auth)")
 var optAzureClientSecret = getopt.StringLong("client-secret", 0, "", "Azure Client Secret (for service principal auth)")
 
 // GCP IAM brute-force flags
 var optGCPIAMBruteEmail = getopt.StringLong("iam-brute-email", 0, "", "Override service account email for gcp-iam-brute (GCP only)")
-var optNoIAMBrute       = getopt.BoolLong("no-iam-brute", 0, "Disable gcp-iam-brute permission enumeration (GCP only)")
+var optNoIAMBrute = getopt.BoolLong("no-iam-brute", 0, "Disable gcp-iam-brute permission enumeration (GCP only)")
 
 // optGCPToken accepts a file containing a raw GCP access token (ya29.xxx).
 // The token is injected into GOOGLE_OAUTH_ACCESS_TOKEN / CLOUDSDK_AUTH_ACCESS_TOKEN so
@@ -322,7 +323,27 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	cfg.GCPIAMBruteEmail = *optGCPIAMBruteEmail
 	cfg.GCPProject = *optGCPProject
 	cfg.NucleiTargetURL = *optNucleiURL
+	// The run record covers cloud scans as well as infra ones: it is where a
+	// caller reads the argument vector and exit status of every tool that ran.
+	// main opens it only on the infra path, which returns before reaching here.
+	runrecord.Active = runrecord.Open(*OptOutput)
+	defer runrecord.Active.Close()
+
+	runStart := time.Now()
+	runrecord.Active.Write(runrecord.Entry{
+		Kind:      runrecord.KindRun,
+		Version:   utils.Version,
+		Target:    provider,
+		StartedAt: &runStart,
+	})
+
 	cloudScanner.Run(cfg, OptVVerbose)
+
+	runEnd := time.Now()
+	runrecord.Active.Write(runrecord.Entry{
+		Kind:    runrecord.KindRun,
+		EndedAt: &runEnd,
+	})
 
 	// Finish and show elapsed time
 	utils.FinishLine(start, utils.Interrupted)

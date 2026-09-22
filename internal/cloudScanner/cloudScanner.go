@@ -87,6 +87,11 @@ func Run(cfg *config.CloudConfig, OptVVerbose *bool) {
 	// commands.GCPwn()
 	// if AWS:
 	// commands.Pacu()???
+
+	// State plainly what was and was not covered. A scan that produced results
+	// from some tools and lost others is a partial scan, and presenting it as a
+	// clean one is what lets a silent gap reach a report.
+	commands.PrintCloudCoverageSummary()
 }
 
 // runTool runs the specified tool
