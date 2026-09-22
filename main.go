@@ -31,8 +31,17 @@ func main() {
 	}
 
 	// Perform pre-flight checks and get number of lines if cloud logic hasn't kicked off.
+	//
+	// A cloud scan, a help request and an install all finish inside checks.Run and
+	// report that by returning a sentinel. Those are successful exits: treating
+	// every non-nil error as a failure made a completed cloud scan exit 1, which
+	// the MCP server surfaces to its caller as "Command failed with code 1" and
+	// which hides valid reports behind an apparent crash.
 	totalLines, err := checks.Run()
 	if err != nil {
+		if utils.IsExitSuccess(err) {
+			os.Exit(0)
+		}
 		os.Exit(1)
 	}
 

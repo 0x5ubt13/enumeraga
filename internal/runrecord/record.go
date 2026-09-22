@@ -59,7 +59,12 @@ type Entry struct {
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	EndedAt   *time.Time `json:"ended_at,omitempty"`
 
-	Status     Status `json:"status,omitempty"`
+	Status Status `json:"status,omitempty"`
+	// Outcome refines Status for a tool whose exit code cannot carry the
+	// distinction on its own: a scanner that completed and found problems, one
+	// whose coverage was cut short by a missing permission, and one that rejected
+	// its own command line all exit non-zero and all mean different things.
+	Outcome    string `json:"outcome,omitempty"`
 	ExitCode   *int   `json:"exit_code,omitempty"`
 	Signal     string `json:"signal,omitempty"`
 	SkipReason string `json:"skip_reason,omitempty"`

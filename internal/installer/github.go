@@ -40,6 +40,16 @@ var HostOS = Host{
 	Arch: runtime.GOARCH,
 }
 
+// CloudfoxPinnedVersion is the cloudfox release enumeraga is built against.
+//
+// It is pinned because cloudfox's Azure modules take their scope from the
+// command line, and a release that changes those flags turns every Azure
+// inventory run into a no-op that still exits zero. internal/cloud/Dockerfile
+// installs this same tag, and a test asserts the two agree; raise both together
+// after checking "cloudfox azure inventory --help" still accepts --subscription
+// and --tenant.
+const CloudfoxPinnedVersion = "v2.0.5"
+
 // cloudfoxAssets maps a "os-arch" key to the expected cloudfox release asset filename.
 var cloudfoxAssets = map[string]string{
 	"linux-amd64":   "cloudfox-linux-amd64.zip",
@@ -48,7 +58,6 @@ var cloudfoxAssets = map[string]string{
 	"darwin-arm64":  "cloudfox-macos-arm64.zip",
 	"windows-amd64": "cloudfox-windows-amd64.zip",
 }
-
 
 // GetDownloadURL returns the download URL for the tool matching the host platform.
 func GetDownloadURL(tool string, latest Release) (string, error) {
@@ -111,16 +120,26 @@ func FetchAndDownloadLatestVersionFromGitHub(tool string) (string, string, error
 		return "", "", fmt.Errorf("error while creating tmp dir: %v", err)
 	}
 
-	var repo, toolFullPath string
+	var repo, toolFullPath, pinnedVersion string
 	switch tool {
 	case "cloudfox":
 		repo = "BishopFox/cloudfox"
 		toolFullPath = filepath.Join(toolTmpDir, tool+".zip")
-}
+		pinnedVersion = CloudfoxPinnedVersion
+	}
 
-	assetResp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)) //nolint:gosec // URL is constructed from a hardcoded trusted constant
+	// A pinned tool is fetched by tag. Taking the latest release here would undo
+	// the pin in internal/cloud/Dockerfile the moment the image's copy is missing
+	// and this runtime fallback steps in -- which is how a CLI syntax change
+	// reaches a scan without anyone choosing to upgrade.
+	releasePath := "latest"
+	if pinnedVersion != "" {
+		releasePath = "tags/" + pinnedVersion
+	}
+
+	assetResp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/releases/%s", repo, releasePath)) //nolint:gosec // URL is constructed from hardcoded trusted constants
 	if err != nil {
-		return "", "", fmt.Errorf("error while fetching latest release: %v", err)
+		return "", "", fmt.Errorf("error while fetching release %s: %v", releasePath, err)
 	}
 	defer assetResp.Body.Close()
 
@@ -271,7 +290,7 @@ func expectedBinaryName(tool string) (string, error) {
 			return "cloudfox.exe", nil
 		}
 		return "cloudfox", nil
-default:
+	default:
 		return "", fmt.Errorf("unsupported tool to install binary for: %s", tool)
 	}
 }

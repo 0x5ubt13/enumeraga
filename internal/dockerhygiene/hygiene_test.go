@@ -114,6 +114,16 @@ func TestFloatingImageAndToolPins(t *testing.T) {
 		t.Error("cloud Dockerfile installs PMapper from floating git HEAD; pin a commit")
 	}
 
+	// cloudfox reads its Azure scope from the command line, so a release that
+	// renames those flags makes every Azure inventory run a no-op that still
+	// exits 0. Tracking "latest" is what let that happen unnoticed.
+	if strings.Contains(cloud, "cloudfox/releases/latest") {
+		t.Error("cloud Dockerfile resolves cloudfox from releases/latest; pin a tag")
+	}
+	if !regexp.MustCompile(`CLOUDFOX_VERSION="v[0-9]+\.[0-9]+\.[0-9]+"`).MatchString(cloud) {
+		t.Error("cloud Dockerfile does not pin CLOUDFOX_VERSION to an exact tag")
+	}
+
 	if strings.Contains(readRepoFile(t, "internal/commands/commands.go"), "aws-enumerator@latest") {
 		t.Error("commands.go installs aws-enumerator@latest; pin a commit")
 	}
@@ -126,5 +136,39 @@ func TestFloatingImageAndToolPins(t *testing.T) {
 	compose := readRepoFile(t, "mcp-server-enumeraga/docker-compose.yml")
 	if regexp.MustCompile(`(?m)^\s*image:\s*docker:cli\s*$`).MatchString(compose) {
 		t.Error("compose image docker:cli floats; pin docker:<version>-cli")
+	}
+}
+
+// TestCloudfoxPinsAgreeAcrossImageAndRuntime keeps the two places that install
+// cloudfox on the same release.
+//
+// The image installs it at build time and internal/installer downloads it at run
+// time when the image's copy is missing. If only the Dockerfile were pinned, that
+// fallback would quietly fetch a newer cloudfox mid-scan and reintroduce exactly
+// the drift the pin exists to stop.
+func TestCloudfoxPinsAgreeAcrossImageAndRuntime(t *testing.T) {
+	goSource := readRepoFile(t, "internal/installer/github.go")
+	goPin := regexp.MustCompile(`CloudfoxPinnedVersion = "(v[0-9]+\.[0-9]+\.[0-9]+)"`).FindStringSubmatch(goSource)
+	if goPin == nil {
+		t.Fatal("internal/installer/github.go does not declare CloudfoxPinnedVersion as an exact tag")
+	}
+
+	dockerfile := readRepoFile(t, "internal/cloud/Dockerfile")
+	dockerPin := regexp.MustCompile(`CLOUDFOX_VERSION="(v[0-9]+\.[0-9]+\.[0-9]+)"`).FindStringSubmatch(dockerfile)
+	if dockerPin == nil {
+		t.Fatal("internal/cloud/Dockerfile does not pin CLOUDFOX_VERSION to an exact tag")
+	}
+
+	if goPin[1] != dockerPin[1] {
+		t.Errorf("cloudfox pins disagree: Dockerfile installs %s, runtime fallback downloads %s; raise both together",
+			dockerPin[1], goPin[1])
+	}
+}
+
+// TestRuntimeCloudfoxDownloadIsNotLatest guards the fallback path specifically.
+func TestRuntimeCloudfoxDownloadIsNotLatest(t *testing.T) {
+	goSource := readRepoFile(t, "internal/installer/github.go")
+	if !strings.Contains(goSource, `releasePath = "tags/" + pinnedVersion`) {
+		t.Error("the runtime GitHub download no longer resolves a pinned tool by tag; a pinned tool must not fall back to releases/latest")
 	}
 }

@@ -79,43 +79,40 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor
 
 # Install cloudfox from pre-built ZIP archive (architecture-aware).
 # BishopFox ships cloudfox-linux-amd64.zip / cloudfox-linux-arm64.zip — not bare binaries.
-# Soft-fail: if GitHub rate-limits the build, prepCloudfox() will download it at runtime instead.
-RUN --mount=type=secret,id=github_token,required=false \
-    GITHUB_TOKEN=""; \
-    if [ -f /run/secrets/github_token ]; then GITHUB_TOKEN=$(cat /run/secrets/github_token); fi; \
+#
+# Pinned to v2.0.5. cloudfox takes its Azure scope from the command line, so a
+# release that changes those flags turns every Azure inventory run into a no-op
+# that still exits 0 — the failure is silent, which is why this is pinned rather
+# than tracked. internal/installer/github.go carries the same tag in
+# CloudfoxPinnedVersion and a test asserts the two agree. Raise both together,
+# after checking "cloudfox azure inventory --help" still accepts --subscription
+# and --tenant.
+#
+# Pinning also removes the GitHub API call this layer used to make, so the build
+# no longer needs a token here and cannot be defeated by API rate limiting.
+# The build fails loudly if the download or extraction fails: a soft-fail would
+# ship an image whose cloudfox is silently absent, and the runtime fallback would
+# then reinstall it on every single scan.
+RUN CLOUDFOX_VERSION="v2.0.5"; \
     ARCH=$(uname -m); \
     case "$ARCH" in \
         x86_64)  CF_ARCH="amd64" ;; \
         aarch64) CF_ARCH="arm64" ;; \
         *)        CF_ARCH="amd64" ;; \
     esac; \
-    CLOUDFOX_VERSION=$(curl -sL \
-        ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
-        https://api.github.com/repos/BishopFox/cloudfox/releases/latest \
-        | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/'); \
-    if [ -z "${CLOUDFOX_VERSION}" ]; then \
-        echo "[!] WARNING: could not resolve cloudfox version (GitHub rate limit?). It will be downloaded at first use." >&2; \
-    else \
-        ZIP_NAME="cloudfox-linux-${CF_ARCH}.zip"; \
-        DOWNLOAD_URL="https://github.com/BishopFox/cloudfox/releases/download/${CLOUDFOX_VERSION}/${ZIP_NAME}"; \
-        echo "[*] Downloading ${DOWNLOAD_URL}"; \
-        if curl -sL "${DOWNLOAD_URL}" -o /tmp/cloudfox.zip \
-            && file /tmp/cloudfox.zip | grep -q 'Zip archive'; then \
-            mkdir -p /tmp/cloudfox_tmp \
-                && unzip -o /tmp/cloudfox.zip -d /tmp/cloudfox_tmp \
-                && CF_BIN=$(find /tmp/cloudfox_tmp -type f -name 'cloudfox' | head -1) \
-                && if [ -n "$CF_BIN" ]; then \
-                    install -m 0755 "$CF_BIN" /usr/local/bin/cloudfox \
-                        && echo "[+] cloudfox ${CLOUDFOX_VERSION} (${CF_ARCH}) installed"; \
-                   else \
-                    echo "[!] WARNING: cloudfox binary not found inside zip." >&2; \
-                   fi; \
-            rm -rf /tmp/cloudfox_tmp /tmp/cloudfox.zip; \
-        else \
-            echo "[!] WARNING: cloudfox download invalid — skipping. It will be downloaded at first use." >&2; \
-            rm -f /tmp/cloudfox.zip /usr/local/bin/cloudfox; \
-        fi; \
-    fi
+    ZIP_NAME="cloudfox-linux-${CF_ARCH}.zip"; \
+    DOWNLOAD_URL="https://github.com/BishopFox/cloudfox/releases/download/${CLOUDFOX_VERSION}/${ZIP_NAME}"; \
+    echo "[*] Downloading ${DOWNLOAD_URL}"; \
+    curl -fsSL "${DOWNLOAD_URL}" -o /tmp/cloudfox.zip \
+    && file /tmp/cloudfox.zip | grep -q 'Zip archive' \
+    && mkdir -p /tmp/cloudfox_tmp \
+    && unzip -o /tmp/cloudfox.zip -d /tmp/cloudfox_tmp \
+    && CF_BIN=$(find /tmp/cloudfox_tmp -type f -name 'cloudfox' | head -1) \
+    && test -n "$CF_BIN" \
+    && install -m 0755 "$CF_BIN" /usr/local/bin/cloudfox \
+    && rm -rf /tmp/cloudfox_tmp /tmp/cloudfox.zip \
+    && cloudfox --version \
+    && echo "[+] cloudfox ${CLOUDFOX_VERSION} (${CF_ARCH}) installed"
 
 # Install PowerShell Core (required for monkey365)
 # Using curl + debian/12 package - no wget or lsb_release needed

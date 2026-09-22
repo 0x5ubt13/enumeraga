@@ -391,6 +391,32 @@ docker run -v ./sa-key.json:/creds/sa-key.json -v ./output:/tmp/enumeraga_output
 - **GCP — ADC (mounted gcloud config):** before running, execute `gcloud auth application-default login` on your host. This writes `~/.config/gcloud/application_default_credentials.json`, which ScoutSuite, Prowler, and CloudFox all require. `gcloud auth login` alone is **not** sufficient — the scan will abort at the auth pre-flight if the ADC file is missing.
 - **GCP — service account key:** pass `--creds /path/to/sa-key.json`; no ADC file needed.
 - **GCP:** [gcp-iam-brute](https://github.com/hac01/gcp-iam-brute) runs automatically after `gcp_scanner` to actively test IAM permissions via the `testIamPermissions` API; use `--no-iam-brute` to disable it or `--iam-brute-email` to override the detected service account email
+- **Azure — subscription scope reaches CloudFox as well as Prowler.** Set `AZURE_SUBSCRIPTION_ID` (the MCP server's `subscription` argument does this for you). CloudFox's Azure modules take their scope from the command line and refuse to run without one, so with no subscription and no `--tenant` the CloudFox step is skipped explicitly and named in the coverage summary rather than being attempted and lost.
+
+#### How cloud tool results are reported
+
+Cloud scanners are independent: one failing never stops the ones after it, and its failure never invalidates the output the others produced. Every tool's disposition is recorded and printed as a coverage summary at the end of the run, and written to the run record (`run.jsonl`) with its exact argument vector and exit code.
+
+A tool's exit code alone cannot say what happened, so each is classified:
+
+| Outcome | Meaning | Full coverage? |
+|---|---|---|
+| `completed` | ran cleanly | yes |
+| `completed_with_findings` | ran fully and found problems — Prowler exits **3** for this | yes |
+| `completed_partial_coverage` | ran and saved its report, but some checks could not be made — ScoutSuite exits **200** for this | no |
+| `invalid_invocation` | the tool rejected its command line and scanned nothing | no |
+| `unavailable` | the binary could not be executed | no |
+| `not_applicable` | deliberately not run for this provider, or required scope was absent | no |
+| `failed` | crashed, or ended before producing its report | no |
+
+Two consequences worth knowing:
+
+- **A non-zero exit code does not mean the reports are invalid.** Prowler exits 3 when its checks found failures; its JSON, CSV and HTML reports are already written and are kept. The scan is not a crash.
+- **Azure read permissions limit ScoutSuite's coverage.** When the assessment identity cannot perform an action such as `Microsoft.Web/sites/config/list/action`, ScoutSuite records the error, still saves its report, and exits 200. Enumeraga reports this as partial coverage and preserves the underlying `AuthorizationFailed` messages in the tool's output file. It is a coverage limitation to resolve on the Azure side, not something enumeraga suppresses — and it is never reported as a clean run.
+
+A scan in which any tool fell short is labelled **PARTIAL COVERAGE** in the summary, naming the tools involved. Full results from the other tools remain valid and are kept.
+
+**CloudFox version.** The cloud image pins CloudFox to **v2.0.5** (`internal/cloud/Dockerfile`, mirrored by `CloudfoxPinnedVersion` in `internal/installer/github.go`; a test asserts the two agree). The pin exists because CloudFox takes its Azure scope from the command line: a release that renames those flags makes every Azure inventory run a no-op that still exits 0. Before raising it, check that `cloudfox azure inventory --help` still accepts `--subscription` and `--tenant`.
 
 ## Flow chart
 

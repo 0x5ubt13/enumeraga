@@ -48,7 +48,8 @@ TOOLS: list[Tool] = [
         description=(
             "Run infrastructure enumeration scan against a target IP, hostname, or targets file "
             "using Docker container. Performs comprehensive port scanning and service enumeration "
-            "using nmap and various specialised tools. No root privileges required - runs in container."
+            "using nmap and various specialised tools. No root privileges required - runs in container. "
+            "The scan's output files are its deliverable: when this returns, move the directory it names under 'Results saved to:' into your working directory before doing anything else. It reports that path whether or not the scan exited cleanly, and a non-zero exit does not mean nothing was produced."
         ),
         inputSchema={
             "type": "object",
@@ -190,6 +191,7 @@ TOOLS: list[Tool] = [
             "Run cloud security assessment against AWS, Azure, GCP, OCI, Alibaba Cloud, or DigitalOcean "
             "using Docker container. Uses tools like ScoutSuite, Prowler, CloudFox, and PMapper to identify "
             "misconfigurations. Requires cloud credentials to be mounted into container. "
+            "The scan's output files are its deliverable: when this returns, move the directory it names under 'Results saved to:' into your working directory before doing anything else. It reports that path whether or not the scan exited cleanly, and a non-zero exit does not mean nothing was produced. "
             "AWS/GCP/OCI/Alibaba/DigitalOcean read mounted credentials automatically. "
             "AZURE runs unattended as the user's signed-in Azure CLI session by default: if the "
             "user has run 'az login', scan with just provider='azure' — do NOT ask for 'tenant', "
@@ -709,12 +711,42 @@ async def check_docker() -> dict[str, Any]:
 
 # Engagement policy that cannot be inferred from the results path alone, so it travels with it.
 RESULTS_HANDLING = (
-    "\n\nCollecting these results: MOVE them (`mv`) into your working directory — do not copy. "
+    "\n\nCOLLECT THE RESULTS NOW — this is the deliverable. The report files are the entire "
+    "point of the scan; a scan whose output is left behind has produced nothing. Do this before "
+    "summarising, analysing or answering anything else.\n"
+    "Collecting these results: MOVE them (`mv`) into your working directory — do not copy. "
     "This is a shared results directory and must not retain client data once a scan is collected. "
     "Move them into a NEW subdirectory, and never overwrite anything already present: scan output "
     "uses generic names (az_subscriptions.json, findings/) that can silently clobber an operator's "
-    "hand-written engagement files."
+    "hand-written engagement files.\n"
+    "The path above is a HOST path and is the only one that can be collected. Paths printed by the "
+    "tools themselves (/tmp/enumeraga_output/...) are inside the container, which is removed when "
+    "the scan ends — do not report those as the location of the results."
 )
+
+
+def scan_outcome_message(info_msg: str, scan_kind: str, body: str, output_dir: str,
+                         *, clean: bool) -> str:
+    """Render a finished scan, whether or not it exited cleanly.
+
+    The host output path is reported on BOTH paths deliberately. A scan that fails
+    partway has still written whatever its earlier tools produced, and those files
+    are the deliverable: reporting only the error leaves the operator with a
+    container-local path that no longer exists, which is the same as losing the
+    scan. The wording of the path line is identical in both cases so that whatever
+    collects it does not have to special-case a failure.
+    """
+    if clean:
+        headline = f"{scan_kind} completed successfully!"
+    else:
+        headline = (
+            f"{scan_kind} did NOT complete cleanly.\n\n"
+            "Any tool that ran before the failure still wrote its reports, and a cloud "
+            "scanner commonly exits non-zero simply because it found problems, so treat "
+            "the output below as evidence rather than as proof that nothing was produced. "
+            "Collect the results and inspect them before concluding the scan failed."
+        )
+    return f"{info_msg}{headline}\n\n{body}\n\nResults saved to: {output_dir}{RESULTS_HANDLING}"
 
 
 async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextContent]:
@@ -748,20 +780,33 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
             info_msg += f"Docker command: {' '.join(cmd)}\n\n"
             info_msg += "This may take several minutes depending on the target...\n\n"
 
-            output = await run_command(cmd, timeout=7200)  # 2 hour timeout
+            # A failed scan still has to report where its artefacts are: the tools
+            # that ran before the failure wrote real output, and the only path that
+            # survives the container is this one.
+            try:
+                output = await run_command(cmd, timeout=7200)  # 2 hour timeout
+            except Exception as exc:
+                return [
+                    TextContent(
+                        type="text",
+                        text=scan_outcome_message(
+                            info_msg, "Infrastructure scan", str(exc), output_dir, clean=False),
+                    )
+                ]
 
             if detached:
                  return [
                     TextContent(
                         type="text",
-                        text=f"Scan started in detached mode.\nContainer ID: {output.strip()}\n\nResults will be saved to: {output_dir}\nCheck container logs: docker logs {output.strip()}{RESULTS_HANDLING}",
+                        text=f"Scan started in detached mode.\nContainer ID: {output.strip()}\n\nResults saved to: {output_dir}\nCheck container logs: docker logs {output.strip()}{RESULTS_HANDLING}",
                     )
                 ]
 
             return [
                 TextContent(
                     type="text",
-                    text=f"{info_msg}Scan completed successfully!\n\n{output}\n\nResults saved to: {output_dir}{RESULTS_HANDLING}",
+                    text=scan_outcome_message(
+                        info_msg, "Infrastructure scan", output, output_dir, clean=True),
                 )
             ]
 
@@ -794,20 +839,35 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
             info_msg += f"Docker command: {' '.join(cmd)}\n\n"
             info_msg += "This may take several minutes...\n\n"
 
-            output = await run_command(cmd, timeout=7200, extra_env=extra_env)  # 2 hour timeout
+            # Cloud scanners routinely exit non-zero with their reports already
+            # written -- prowler exits 3 when checks fail, ScoutSuite 200 when a
+            # permission was denied. Raising here without the output path is what
+            # left an operator holding container-local paths for a scan that had in
+            # fact produced its reports.
+            try:
+                output = await run_command(cmd, timeout=7200, extra_env=extra_env)  # 2 hour timeout
+            except Exception as exc:
+                return [
+                    TextContent(
+                        type="text",
+                        text=scan_outcome_message(
+                            info_msg, "Cloud assessment", str(exc), output_dir, clean=False),
+                    )
+                ]
 
             if detached:
                  return [
                     TextContent(
                         type="text",
-                        text=f"Scan started in detached mode.\nContainer ID: {output.strip()}\n\nResults will be saved to: {output_dir}\nCheck container logs: docker logs {output.strip()}{RESULTS_HANDLING}",
+                        text=f"Scan started in detached mode.\nContainer ID: {output.strip()}\n\nResults saved to: {output_dir}\nCheck container logs: docker logs {output.strip()}{RESULTS_HANDLING}",
                     )
                 ]
 
             return [
                 TextContent(
                     type="text",
-                    text=f"{info_msg}Assessment completed!\n\n{output}\n\nResults saved to: {output_dir}{RESULTS_HANDLING}",
+                    text=scan_outcome_message(
+                        info_msg, "Cloud assessment", output, output_dir, clean=True),
                 )
             ]
 

@@ -10,6 +10,10 @@ An MCP server named **`enumeraga`** is configured for this workspace over HTTP a
 
 **After a scan completes: `mv` the results into the current working directory.** Take the path from the tool's `Results saved to: <path>` line and move its contents into the folder you were summoned in (e.g. `mv <path> ./`), then report the new local location. Use `mv`, not `cp` — the shared results directory must not retain client data after the move.
 
+**Collect the results even when the scan reports a failure, and especially then.** The tools write their reports as they go, and a cloud scanner routinely exits non-zero for reasons that are not failures at all: prowler exits 3 when its checks found problems, ScoutSuite exits 200 when an Azure permission was denied mid-collection. Both have already written their reports by that point. The tool reports `Results saved to: <path>` on the failure path too — collect it, look at what is there, and only then say what happened. "The scan failed" is not a conclusion you can reach from an exit code.
+
+**Never report a `/tmp/enumeraga_output/...` path as the location of the results.** That is where the files were *inside the scan container*, which is removed the moment the scan ends. The tools print those paths in their own output; they are not collectable. The only real location is the host path on the `Results saved to:` line. If you did not get one, say so plainly — do not substitute a container path, because an operator following it will find nothing.
+
 The tools:
 
 - **`enumeraga_infra_scan`** — infrastructure enumeration against a target IP, hostname, or targets file (nmap plus specialised tools, run in a container).
