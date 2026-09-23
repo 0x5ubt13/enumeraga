@@ -80,13 +80,68 @@ func lastDockerfileUser(body string) string {
 	return user
 }
 
-func TestMCPServerDockerfileDropsRoot(t *testing.T) {
-	user := lastDockerfileUser(readRepoFile(t, "mcp-server-enumeraga/Dockerfile"))
-	if user == "" {
-		t.Fatal("mcp-server-enumeraga/Dockerfile has no USER; the server would run as root")
+// TestMCPServerDropsRoot asserts the invariant, not the mechanism: the server
+// process must not run as root.
+//
+// There are two legitimate ways to reach that. A USER instruction is the simpler
+// one, but it cannot work here, because the container has to read the group of a
+// bind-mounted Docker socket whose GID is a host fact that differs per distro. So
+// the image starts as root and the entrypoint drops privileges before exec'ing the
+// server. Either satisfies the invariant; neither being present does not.
+func TestMCPServerDropsRoot(t *testing.T) {
+	dockerfile := readRepoFile(t, "mcp-server-enumeraga/Dockerfile")
+
+	if user := lastDockerfileUser(dockerfile); user != "" {
+		if user == "root" || user == "0" || user == "0:0" {
+			t.Errorf("mcp-server-enumeraga/Dockerfile ends on USER %s; the server must not run as root", user)
+		}
+		return
 	}
-	if user == "root" || user == "0" || user == "0:0" {
-		t.Errorf("mcp-server-enumeraga/Dockerfile ends on USER %s; the server must not run as root", user)
+
+	// No USER, so the entrypoint owes us the privilege drop.
+	if !strings.Contains(dockerfile, "ENTRYPOINT") {
+		t.Fatal("mcp-server-enumeraga/Dockerfile has neither a USER nor an ENTRYPOINT; the server would run as root")
+	}
+
+	entrypoint := readRepoFile(t, "mcp-server-enumeraga/entrypoint.sh")
+	if !regexp.MustCompile(`exec\s+setpriv`).MatchString(entrypoint) {
+		t.Error("the entrypoint does not exec through setpriv, so the server keeps whatever privileges it started with")
+	}
+	if !regexp.MustCompile(`--reuid="?\$?\{?RUN_UID`).MatchString(entrypoint) &&
+		!regexp.MustCompile(`--reuid=[1-9]`).MatchString(entrypoint) {
+		t.Error("the entrypoint's setpriv does not set a non-root uid")
+	}
+	if regexp.MustCompile(`--reuid=0\b`).MatchString(entrypoint) {
+		t.Error("the entrypoint execs the server as uid 0")
+	}
+}
+
+// TestMCPEntrypointDiscoversTheSocketGroup guards the fix for the failure this
+// entrypoint exists to remove.
+//
+// The socket's group is 999 on Debian, 998 on Arch, 0 under Docker Desktop and
+// whatever the local package manager chose elsewhere. Hard-coding any of them, or
+// requiring the operator to supply it, is what left the server unable to reach
+// Docker until somebody worked out why -- and the symptom, "Docker daemon not
+// running", points at the wrong thing entirely.
+func TestMCPEntrypointDiscoversTheSocketGroup(t *testing.T) {
+	entrypoint := readRepoFile(t, "mcp-server-enumeraga/entrypoint.sh")
+
+	if !strings.Contains(entrypoint, "stat -c '%g'") {
+		t.Error("the entrypoint does not read the socket's group; it would be back to guessing a GID")
+	}
+	if !strings.Contains(entrypoint, "usermod -aG") {
+		t.Error("the entrypoint never joins the discovered group, so reading it achieves nothing")
+	}
+	// An explicit DOCKER_GID must still win, so an operator can pin the group when
+	// the socket is not present when the container starts.
+	if !strings.Contains(entrypoint, "${DOCKER_GID:-}") {
+		t.Error("the entrypoint ignores DOCKER_GID, removing the operator's override")
+	}
+	// A missing socket must say so plainly rather than surfacing later as a daemon
+	// that appears not to be running.
+	if !strings.Contains(entrypoint, "no Docker socket at") {
+		t.Error("the entrypoint does not report a missing socket, which is the confusing case this replaced")
 	}
 }
 
@@ -97,6 +152,20 @@ func TestMCPComposeAddsDockerSocketGroup(t *testing.T) {
 	}
 	if !strings.Contains(body, "DOCKER_GID") {
 		t.Error("group_add does not take DOCKER_GID, so the operator cannot match the host socket's group")
+	}
+}
+
+// TestMCPComposeForwardsDockerGIDToTheContainer guards a silent no-op.
+//
+// The entrypoint honours DOCKER_GID, but it reads it from its own environment. Using
+// the variable only in group_add looks like it works and does nothing: compose
+// interpolates it on the host, and the entrypoint's setpriv --init-groups rebuilds
+// the supplementary set from /etc/group, discarding whatever the daemon added. The
+// override has to arrive as an environment variable to have any effect at all.
+func TestMCPComposeForwardsDockerGIDToTheContainer(t *testing.T) {
+	compose := readRepoFile(t, "mcp-server-enumeraga/docker-compose.yml")
+	if !regexp.MustCompile(`(?m)^\s*-\s*DOCKER_GID=`).MatchString(compose) {
+		t.Error("docker-compose.yml never passes DOCKER_GID in environment:, so the documented override silently does nothing")
 	}
 }
 
