@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-server-enumeraga"
-version = "0.1.0"
+# Follows the repository release tag, in PEP 440 form: v0.7.0-beta is 0.7.0b0. The server is
+# installed by pinning that tag, so the two numbers must agree for `pipx list` to name it.
+version = "0.7.0b0"
 description = "MCP server for Enumeraga penetration testing automation tool"
 readme = "README.md"
 requires-python = ">=3.10"

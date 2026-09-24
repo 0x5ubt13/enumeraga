@@ -6,6 +6,11 @@ services:
     container_name: enumeraga-mcp
     environment:
       - MCP_MODE=sse
+      # Optional override for the group of /var/run/docker.sock. Leave it unset: the
+      # entrypoint reads the socket's group at start-up, which is the only thing that
+      # works across distros (999 on Debian, 998 on Arch, 0 under Docker Desktop).
+      # Set it only when the socket is not present when the container starts.
+      - DOCKER_GID=${DOCKER_GID:-}
       - ENUMERAGA_HOST_OUTPUT_DIR=${ENUMERAGA_HOST_OUTPUT_DIR:-/tmp/enumeraga_scan_results}
       # Host path to the user's Azure CLI config, so unattended Azure scans reuse a
       # prior `az login` without a service principal. Defaults to the invoking user's
@@ -40,11 +45,14 @@ services:
       # localhost. To share it with another host, put an authenticating reverse proxy in
       # front rather than widening this binding.
       - "127.0.0.1:9000:9000"
-    # The image runs as uid 1000 (enumeraga). The host docker socket is typically
-    # 660 root:docker, so this process can talk to the daemon only if it holds the
-    # socket's group. Default 999 is the usual docker GID on Debian/Ubuntu; override
-    # when `stat -c '%g' /var/run/docker.sock` prints something else:
-    #   export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+    # The server runs as uid 1000 (enumeraga) and reaches the host docker socket by
+    # holding the socket's group. The entrypoint discovers and joins that group at
+    # start-up, so nothing normally has to be set here.
+    #
+    # This stays for the one case the entrypoint cannot serve: if you pin `user:` on
+    # this service, the container starts unprivileged and cannot change its own group
+    # membership, so the group has to be granted by the daemon instead. Set DOCKER_GID
+    # to `stat -c '%g' /var/run/docker.sock` if you do that.
     group_add:
       - "${DOCKER_GID:-999}"
     restart: unless-stopped
