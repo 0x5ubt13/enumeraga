@@ -43,29 +43,35 @@ Pick one of three modes.
 
 The MCP client (Claude Desktop, omp, Gemini CLI, …) launches the server as a stdio subprocess on the host. Because the process **inherits the client's working directory**, scan results land under the directory you summoned the agent in (`<cwd>/enumeraga_output/`, or `<cwd>/<output_dir>` if you pass one).
 
-```bash
-cd mcp-server-enumeraga
-./setup.sh        # creates ./venv and installs the server + deps
+**Recommended: install with pipx.** No clone is needed. Pin a release tag so every machine runs the same server:
 
-# Build the scan images once (or `enumeraga_pull_images` later):
-docker build -t gagarter/enumeraga_infra:latest .                    # from repo root
-docker build -f internal/cloud/Dockerfile -t gagarter/enumeraga_cloud:latest .
+```bash
+pipx install "git+https://github.com/0x5ubt13/enumeraga@v0.7.0-beta#subdirectory=mcp-server-enumeraga"
+
+# Pull the scan images once (or call `enumeraga_pull_images` later):
+docker pull gagarter/enumeraga_infra:latest
+docker pull gagarter/enumeraga_cloud:latest
 ```
 
-Then point your client at the venv's Python (so `mcp` is importable). **Do not set a `cwd`** in the config — that is what lets the server inherit the client's directory:
+`pipx list` then reports the installed release (`mcp-server-enumeraga 0.7.0b0`, the PEP 440 spelling of `v0.7.0-beta`). To move to another release, run the same command with the new tag and `--force`.
+
+Point your client at the `mcp-server-enumeraga` launcher that pipx puts on your `PATH`. **Do not set a `cwd`** in the config — that is what lets the server inherit the client's directory:
 
 ```json
 {
   "mcpServers": {
     "enumeraga": {
-      "command": "/abs/path/to/mcp-server-enumeraga/venv/bin/python",
-      "args": ["/abs/path/to/mcp-server-enumeraga/mcp_server_enumeraga/server.py"]
+      "command": "mcp-server-enumeraga"
     }
   }
 }
 ```
 
-Config file locations are listed under [Configuration](#configuration) below.
+For Claude Code: `claude mcp add enumeraga -- mcp-server-enumeraga`. Config file locations for other clients are listed under [Configuration](#configuration) below.
+
+Some desktop clients start their servers from a fixed directory rather than a project folder (Claude Desktop, for instance). Under such a client, `<cwd>/enumeraga_output/` may not be where you expect, or may not be writable, and `output_dir` cannot help because it is always a sub-folder of that directory. Use mode B there instead.
+
+**From a clone (for development).** `./setup.sh` creates `./venv` and installs the server in editable mode. Point the client at `venv/bin/mcp-server-enumeraga`, again with no `cwd`. To test local changes to the scan images, build them from the repository root with `docker build -t gagarter/enumeraga_infra:latest .` and `docker build -f internal/cloud/Dockerfile -t gagarter/enumeraga_cloud:latest .`.
 
 ### Mode B — HTTP / SSE (for a shared or remote server, e.g. n8n)
 
@@ -76,7 +82,6 @@ cd mcp-server-enumeraga
 # Optional overrides (defaults shown):
 export ENUMERAGA_HOST_OUTPUT_DIR=/tmp/enumeraga_scan_results   # where results are written
 export ENUMERAGA_HOST_AZURE_DIR="$HOME/.azure"                 # az-login reuse for Azure
-export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)         # socket group; default 999
 docker compose up -d --build
 ```
 
@@ -87,7 +92,7 @@ Clients then use an HTTP entry instead of a command:
 ```
 
 Notes for mode B:
-- The server runs as uid 1000, not root. `DOCKER_GID` must match the host docker socket's group (`stat -c '%g' /var/run/docker.sock`) or `docker` calls fail with permission denied. Compose defaults to 999.
+- The server runs as uid 1000, not root. The entrypoint reads the group of the mounted Docker socket at start-up and joins it, so nothing has to be set for the host's docker group. Set `DOCKER_GID` only if the socket is not present when the container starts, or if you pin `user:` on the service.
 - `docker-compose.yml` identity-mounts `ENUMERAGA_HOST_OUTPUT_DIR` and `ENUMERAGA_HOST_AZURE_DIR` into the server container at the same paths, so the sibling scan containers (spawned via the mounted Docker socket) can resolve them on the host daemon.
 - A request's `output_dir` becomes a **sub-folder of** `ENUMERAGA_HOST_OUTPUT_DIR` (absolute paths and `..` are stripped), so output never escapes the mounted tree.
 - An `enumeraga-image-refresher` sidecar periodically `docker pull`s the `:latest` scan images. Stop it (`docker compose stop enumeraga-image-refresher`) while testing a locally built image, or it will overwrite your build.
