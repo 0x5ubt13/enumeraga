@@ -19,10 +19,13 @@ import (
 // return means a malformed --ports fails within milliseconds instead of after a
 // tool-installation phase that can take minutes. It may be nil, in which case no
 // bound validation is performed.
-func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutput, OptTarget *string, validateBounds func() error) (int, error) {
+func Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose *bool, OptOutput, OptTarget *string, OptTimeout *int, validateBounds func() error) (int, error) {
 	// Parse optional infra arguments, getting rid of the 'infra' arg
 	os.Args = os.Args[1:]
 	getopt.Parse()
+	if OptTimeout != nil {
+		utils.ToolTimeout = *OptTimeout
+	}
 
 	// Bounds are validated before anything else happens: this is the parse that
 	// actually populates the infra flags, so it is the earliest point at which
