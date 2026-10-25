@@ -6,12 +6,39 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 )
+
+func TestTerminateProcessGroupEscalatesINTTERMThenKILL(t *testing.T) {
+	signalDir := t.TempDir()
+	signalLog := filepath.Join(signalDir, "signals.log")
+	readyFile := filepath.Join(signalDir, "ready.pid")
+	script := "trap 'echo INT >> " + signalLog + "' INT; trap 'echo TERM >> " + signalLog + "' TERM; echo $$ > " + readyFile + "; while :; do :; done"
+	cmd := exec.Command("sh", "-c", script)
+	setProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("starting command: %v", err)
+	}
+	waitForPID(t, readyFile)
+
+	terminateProcessGroup(cmd.Process.Pid, 25*time.Millisecond, 25*time.Millisecond)
+	if err := cmd.Wait(); err == nil {
+		t.Fatal("process exited successfully; expected escalation to SIGKILL")
+	}
+
+	data, err := os.ReadFile(signalLog)
+	if err != nil {
+		t.Fatalf("reading signal log: %v", err)
+	}
+	if got, want := strings.TrimSpace(string(data)), "INT\nTERM"; got != want {
+		t.Fatalf("received signals = %q, want %q before SIGKILL", got, want)
+	}
+}
 
 // TestKillProcessGroupKillsGrandchildren verifies that cancelling a tool kills
 // the processes it spawned, not just the process enumeraga started directly.
@@ -45,8 +72,7 @@ func TestKillProcessGroupKillsGrandchildren(t *testing.T) {
 
 	grandchildPID := waitForPID(t, pidPath)
 
-	killProcessGroup(cmd)
-	cancel()
+	terminateProcessGroup(cmd.Process.Pid, 50*time.Millisecond, 50*time.Millisecond)
 	_ = cmd.Wait()
 
 	// Give the kernel a moment to reap the group.
@@ -82,5 +108,13 @@ func waitForPID(t *testing.T, path string) int {
 // processAlive reports whether a PID is still running. Signal 0 performs the
 // permission and existence checks without actually sending anything.
 func processAlive(pid int) bool {
+	if stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat"); err == nil {
+		if end := strings.LastIndex(string(stat), ")"); end >= 0 && end+2 < len(stat) {
+			state := stat[end+2]
+			if state == 'Z' || state == 'X' {
+				return false
+			}
+		}
+	}
 	return syscall.Kill(pid, 0) == nil
 }
