@@ -121,7 +121,7 @@ func Run() (int, error) {
 		// after the parse that populates these flags: validating from here beforehand
 		// would read every flag as its zero value, because the parse in this function
 		// stops at the 'infra' subcommand argument.
-		lines, err := infra.Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose, OptOutput, OptTarget, validateBounds)
+		lines, err := infra.Run(OptHelp, OptInstall, OptNmapOnly, OptQuiet, OptVVerbose, OptOutput, OptTarget, OptTimeout, validateBounds)
 		if err != nil {
 			return lines, err
 		}
