@@ -29,8 +29,7 @@ func SSH(port string) {
                 "nuclei",
                 "-target", fmt.Sprintf("%s:%s", utils.Target, port),
 		"-tags", "ssh",
-                "-timeout", common.GetTimeoutSeconds(),
-        }
+	}
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 	}
@@ -53,8 +52,7 @@ func TELNET(port string) {
                 "nuclei",
                 "-target", fmt.Sprintf("%s:%s", utils.Target, port),
 		"-tags", "telnet",
-                "-timeout", common.GetTimeoutSeconds(),
-        }
+	}
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 	}
@@ -78,8 +76,7 @@ func RDP(port string) {
                 "nuclei",
                 "-target", fmt.Sprintf("%s:%s", utils.Target, port),
 		"-tags", "rdp",
-                "-timeout", common.GetTimeoutSeconds(),
-        }
+	}
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 	}

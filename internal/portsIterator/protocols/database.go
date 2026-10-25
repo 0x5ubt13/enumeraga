@@ -24,7 +24,6 @@ func MySQL(port string) {
                 "nuclei",
                 "-target", fmt.Sprintf("%s:%s", utils.Target, port),
                 "-tags", "mysql",
-                "-timeout", common.GetTimeoutSeconds(),
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
@@ -71,7 +70,6 @@ func TNS(port string) {
                 "nuclei",
                 "-target", fmt.Sprintf("%s:%s", utils.Target, port),
                 "-tags", "oracle",
-                "-timeout", common.GetTimeoutSeconds(),
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
