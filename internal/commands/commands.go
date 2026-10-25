@@ -313,8 +313,8 @@ func runToolAs(name string, args []string, filePath string, port string, OptVVer
 
 	// os/exec invokes Cancel when ctx is done, and guarantees it is never called
 	// after the process has been reaped — which a hand-rolled watcher goroutine
-	// cannot promise. Killing the group here rather than letting CommandContext
-	// signal the child alone is what stops a tool's helper processes.
+	// cannot promise. The group terminator escalates INT -> TERM -> KILL so tools
+	// can flush partial results while ensuring their helper processes stop too.
 	cmd.Cancel = func() error {
 		killProcessGroup(cmd)
 		return nil
