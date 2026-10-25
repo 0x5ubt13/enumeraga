@@ -24,7 +24,6 @@ func FTP(port string) {
                 "nuclei",
                 "-target", fmt.Sprintf("%s:%s", utils.Target, port),
                 "-tags", "ftp",
-                "-timeout", common.GetTimeoutSeconds(),
         }
         nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
         commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)

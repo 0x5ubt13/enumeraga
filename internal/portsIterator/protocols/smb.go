@@ -6,7 +6,6 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/bounds"
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
-	"github.com/0x5ubt13/enumeraga/internal/portsIterator/common"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 )
 
@@ -58,7 +57,6 @@ func SMB(port string) {
 			"nuclei",
 			"-target", fmt.Sprintf("%s:445", utils.Target),
 			"-tags", "smb",
-			"-timeout", common.GetTimeoutSeconds(),
 		}
 		nucleiPath := fmt.Sprintf("%snuclei.out", dir)
 		commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
