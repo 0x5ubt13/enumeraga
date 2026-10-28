@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	make build
+
+override_dh_auto_install:
+	mkdir -p debian/enumeraga/usr/bin
+	mv -v enumeraga debian/enumeraga/usr/bin/enumeraga
+
+override_dh_auto_test:
+	:
+
+# dwz does not understand Go's DWARF sections.
+override_dh_dwz:
+	:
+

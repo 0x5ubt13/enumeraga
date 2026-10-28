@@ -88,7 +88,8 @@ build:
 	DATE=$$(date -u '+%Y-%m-%d_%H:%M:%S'); \
 	go build -ldflags="-X github.com/0x5ubt13/enumeraga/internal/utils.Version=$$VERSION \
 		-X github.com/0x5ubt13/enumeraga/internal/utils.GitCommit=$$COMMIT \
-		-X github.com/0x5ubt13/enumeraga/internal/utils.BuildDate=$$DATE" \
+		-X github.com/0x5ubt13/enumeraga/internal/utils.BuildDate=$$DATE \
+		-s -w" \
 		-o enumeraga main.go
 	@echo "Build complete: ./enumeraga (version: $$VERSION)"
 
