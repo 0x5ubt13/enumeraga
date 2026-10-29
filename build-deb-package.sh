@@ -58,6 +58,6 @@ if [[ -z "$DEB_FILE" ]]; then
 fi
 
 dpkg-deb --info "$DEB_FILE" >/dev/null
-dpkg-deb --contents "$DEB_FILE" | grep -qE ' usr/bin/enumeraga$'
+dpkg-deb --contents "$DEB_FILE" | grep -qE '\./usr/bin/enumeraga$'
 printf '[6/6] DEB package verified: %s\n' "$DEB_FILE"
 
