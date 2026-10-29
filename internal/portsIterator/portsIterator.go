@@ -43,6 +43,8 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.Rsync(port)
 	case "2049":
 		protocols.NFS(port)
+	case "3260":
+		protocols.ISCSI(port)
 
 	// Remote Access
 	case "22":
