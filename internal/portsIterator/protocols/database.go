@@ -19,14 +19,14 @@ func MySQL(port string) {
 
 	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
 	if bounds.Active.PortInScope(port, false) {
-	// Nuclei
-        nucleiArgs := []string{
-                "nuclei",
-                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
-                "-tags", "mysql",
-        }
-        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
-        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+		// Nuclei
+		nucleiArgs := []string{
+			"nuclei",
+			"-target", fmt.Sprintf("%s:%s", utils.Target, port),
+			"-tags", "mysql",
+		}
+		nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir, port)
+		commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 	}
 
 	// Hydra
@@ -43,7 +43,7 @@ func PostgreSQL(port string) {
 	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
 	if bounds.Active.PortInScope(port, false) {
 		opensslArgs := []string{
-			"openssl", 
+			"openssl",
 			"s_client", "-starttls", "postgres",
 			"-connect", fmt.Sprintf("%s:%s", utils.Target, port),
 			"-showcerts", "-brief",
@@ -53,7 +53,7 @@ func PostgreSQL(port string) {
 
 		nucleiArgs := []string{
 			"nuclei", "-target", fmt.Sprintf("%s:%s", utils.Target, port),
-			"-tags", "psql",
+			"-tags", "postgresql",
 		}
 		nucleiPath := fmt.Sprintf("%spostgresql_nuclei_%s.out", dir, port)
 		commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
@@ -67,7 +67,7 @@ func PostgreSQL(port string) {
 
 // MSSQL enumerates Microsoft's SQL Server (1433/TCP)
 func MSSQL(port string) {
-	dir := utils.ProtocolDetected2("MSSQL",port ,utils.BaseDir)
+	dir := utils.ProtocolDetected2("MSSQL", port, utils.BaseDir)
 
 	// Nmap with NSE
 	nmapOutputFile := dir + "mssql_scan_" + port
@@ -97,21 +97,21 @@ func TNS(port string) {
 
 	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
 	if bounds.Active.PortInScope(port, false) {
-	// Nuclei
-        nucleiArgs := []string{
-                "nuclei",
-                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
-                "-tags", "oracle",
-        }
-        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
-        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+		// Nuclei
+		nucleiArgs := []string{
+			"nuclei",
+			"-target", fmt.Sprintf("%s:%s", utils.Target, port),
+			"-tags", "oracle",
+		}
+		nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir, port)
+		commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
 	}
 
 	// ODAT takes the port with -p and connects over TCP, so the same check applies.
 	if bounds.Active.PortInScope(port, false) {
-	// ODAT - Oracle Database Attacking Tool
-	odatArgs := []string{"odat", "all", "-s", utils.Target, "-p", port}
-	odatPath := fmt.Sprintf("%sodat_%s.out", dir, port)
-	commands.CallRunTool(odatArgs, odatPath, checks.OptVVerbose)
+		// ODAT - Oracle Database Attacking Tool
+		odatArgs := []string{"odat", "all", "-s", utils.Target, "-p", port}
+		odatPath := fmt.Sprintf("%sodat_%s.out", dir, port)
+		commands.CallRunTool(odatArgs, odatPath, checks.OptVVerbose)
 	}
 }

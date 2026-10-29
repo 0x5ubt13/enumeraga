@@ -55,7 +55,7 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.RDP(port)
 	case "5985", "5986":
 		protocols.WinRM(port)
-	case "5900","5901","5902","5903":
+	case "5900", "5901", "5902", "5903":
 		protocols.VNC(port)
 
 	// Mail
@@ -68,14 +68,13 @@ func routePort(port string, openPortsSlice []string) {
 
 	// Web
 	case "80", "8080":
-		if tcpDetectionInScope(port) && protocols.IsHTTPService( fmt.Sprintf("http://%s:%s", utils.Target, port)) { 
-			protocols.HTTP(port,"http")
+		if tcpDetectionInScope(port) && protocols.IsHTTPService(fmt.Sprintf("http://%s:%s", utils.Target, port)) {
+			protocols.HTTP(port, "http")
 		}
 	case "443":
-		if tcpDetectionInScope(port) && protocols.IsHTTPSService( fmt.Sprintf("https://%s:%s", utils.Target, port)) {
-			protocols.HTTP(port,"https")
+		if tcpDetectionInScope(port) && protocols.IsHTTPSService(fmt.Sprintf("https://%s:%s", utils.Target, port)) {
+			protocols.HTTP(port, "https")
 		}
-
 
 	// SMB/NetBIOS
 	case "137", "138", "139", "445":
@@ -85,14 +84,14 @@ func routePort(port string, openPortsSlice []string) {
 	case "88":
 		protocols.Kerberos(port)
 	case "389", "3268":
-		protocols.LDAP(port,"ldap")
+		protocols.LDAP(port, "ldap")
 	case "636", "3269":
-		protocols.LDAP(port,"ldaps")
+		protocols.LDAP(port, "ldaps")
 
 	// Databases
 	case "3306":
 		protocols.MySQL(port)
-	case "5432","5433":
+	case "5432", "5433":
 		protocols.PostgreSQL(port)
 	case "1433":
 		protocols.MSSQL(port)
@@ -130,11 +129,11 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.NTP(port)
 	case "500":
 		protocols.IPSEC(port)
-	case "194", "6660", "6661", "6662", "6663", "6664", "6665", "6666", "6667", "6668", "6669","7000":
+	case "194", "6660", "6661", "6662", "6663", "6664", "6665", "6666", "6667", "6668", "6669", "7000":
 		protocols.IRC(port)
 	case "631":
 		protocols.IPP(port)
-	case "1098","1099","1050":
+	case "1098", "1099", "1050":
 		protocols.RMI(port)
 
 	// VoiP
@@ -142,7 +141,7 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.SIP(port)
 
 	// RTSP (Stream Protocol)
-	case "554","8554":
+	case "554", "8554":
 		protocols.RTSP(port)
 
 	// Try Detect Service
@@ -160,12 +159,12 @@ func routePort(port string, openPortsSlice []string) {
 		}
 
 		// check for HTTP/HTTPS service
-		if protocols.IsHTTPService( fmt.Sprintf("http://%s:%s", utils.Target, port)) { 
-			protocols.HTTP(port,"http")
+		if protocols.IsHTTPService(fmt.Sprintf("http://%s:%s", utils.Target, port)) {
+			protocols.HTTP(port, "http")
 			return
 		}
-		if protocols.IsHTTPSService( fmt.Sprintf("https://%s:%s", utils.Target, port)) { 
-			protocols.HTTP(port,"https")
+		if protocols.IsHTTPSService(fmt.Sprintf("https://%s:%s", utils.Target, port)) {
+			protocols.HTTP(port, "https")
 			return
 		}
 
@@ -174,4 +173,3 @@ func routePort(port string, openPortsSlice []string) {
 
 	}
 }
-

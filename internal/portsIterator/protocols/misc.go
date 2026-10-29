@@ -242,10 +242,9 @@ func IRC(port string) {
 	dir := utils.ProtocolDetected2("IRC", port, utils.BaseDir)
 
 	// Nmap
-	nmapOutputFile := dir + "irc_scan"
+	nmapOutputFile := dir + "irc_scan_" + port
 	nmapNSEScripts := "irc-botnet-channels,irc-info,irc-unrealircd-backdoor"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
 }
 
 // IPP enumerates Internet Printing Protocol (631/TCP)
@@ -256,7 +255,6 @@ func IPP(port string) {
 	nmapOutputFile := dir + "ipp_scan"
 	nmapNSEScripts := "cups*"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
 }
 
 // RTSP enumerates RTSP streams (554,8554/TCP)
@@ -267,7 +265,6 @@ func RTSP(port string) {
 	nmapOutputFile := dir + "rtsp_scan"
 	nmapNSEScripts := "rtsp-url-brute,rtsp-methods"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
-
 }
 
 // RMI enumerates Java RMI (1099,1099,1050/TCP)
@@ -279,11 +276,8 @@ func RMI(port string) {
 	nmapNSEScripts := "rmi-*"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
 	// https://github.com/qtc-de/remote-method-guesser - not in kali repo
-	// rmg enum 172.17.0.2 9010 
+	// rmg enum 172.17.0.2 9010
 	// rmg guess 172.17.0.2 9010
 
-	// https://github.com/BishopFox/rmiscout - not in kali repo 
-
+	// https://github.com/BishopFox/rmiscout - not in kali repo
 }
-
-
