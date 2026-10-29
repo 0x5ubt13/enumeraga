@@ -248,5 +248,15 @@ func IRC(port string) {
 
 }
 
+// IPP enumerates Internet Printing Protocol (631/TCP)
+func IPP(port string) {
+	dir := utils.ProtocolDetected2("IPP", port, utils.BaseDir)
+
+	// Nmap
+	nmapOutputFile := dir + "ipp_scan"
+	nmapNSEScripts := "cups*"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+}
 
 
