@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -eu
 
 # Build an Enumeraga .deb on Kali Rolling.
 # The script installs only package-build prerequisites; it does not install the
