@@ -88,6 +88,8 @@ func routePort(port string, openPortsSlice []string) {
 	// Databases
 	case "3306":
 		protocols.MySQL(port)
+	case "5432","5433":
+		protocols.PostgreSQL(port)
 	case "1433":
 		protocols.MSSQL(port)
 	case "1521", "1522", "1523", "1524", "1525", "1526", "1527", "1528", "1529":
