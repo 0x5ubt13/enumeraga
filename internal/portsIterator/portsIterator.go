@@ -118,6 +118,8 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.NTP(port)
 	case "500":
 		protocols.IPSEC(port)
+	case "194", "6660", "6661", "6662", "6663", "6664", "6665", "6666", "6667", "6668", "6669","7000":
+		protocols.IRC(port)
 
 	// VoiP
 	case "5060":
