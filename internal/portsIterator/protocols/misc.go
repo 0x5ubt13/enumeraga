@@ -259,4 +259,15 @@ func IPP(port string) {
 
 }
 
+// RTSP enumerates RTSP streams (554,8554/TCP)
+func RTSP(port string) {
+	dir := utils.ProtocolDetected2("RTSP", port, utils.BaseDir)
+
+	// Nmap
+	nmapOutputFile := dir + "rtsp_scan"
+	nmapNSEScripts := "rtsp-url-brute,rtsp-methods"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+}
+
 
