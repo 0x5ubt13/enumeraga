@@ -248,5 +248,42 @@ func IRC(port string) {
 
 }
 
+// IPP enumerates Internet Printing Protocol (631/TCP)
+func IPP(port string) {
+	dir := utils.ProtocolDetected2("IPP", port, utils.BaseDir)
+
+	// Nmap
+	nmapOutputFile := dir + "ipp_scan"
+	nmapNSEScripts := "cups*"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+}
+
+// RTSP enumerates RTSP streams (554,8554/TCP)
+func RTSP(port string) {
+	dir := utils.ProtocolDetected2("RTSP", port, utils.BaseDir)
+
+	// Nmap
+	nmapOutputFile := dir + "rtsp_scan"
+	nmapNSEScripts := "rtsp-url-brute,rtsp-methods"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+}
+
+// RMI enumerates Java RMI (1099,1099,1050/TCP)
+func RMI(port string) {
+	dir := utils.ProtocolDetected2("RMI", port, utils.BaseDir)
+
+	// Nmap
+	nmapOutputFile := dir + "javarmi_scan"
+	nmapNSEScripts := "rmi-*"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	// https://github.com/qtc-de/remote-method-guesser - not in kali repo
+	// rmg enum 172.17.0.2 9010 
+	// rmg guess 172.17.0.2 9010
+
+	// https://github.com/BishopFox/rmiscout - not in kali repo 
+
+}
 
 

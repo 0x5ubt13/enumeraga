@@ -43,6 +43,8 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.Rsync(port)
 	case "2049":
 		protocols.NFS(port)
+	case "3260":
+		protocols.ISCSI(port)
 
 	// Remote Access
 	case "22":
@@ -53,6 +55,8 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.RDP(port)
 	case "5985", "5986":
 		protocols.WinRM(port)
+	case "5900","5901","5902","5903":
+		protocols.VNC(port)
 
 	// Mail
 	case "25", "465", "587":
@@ -128,10 +132,18 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.IPSEC(port)
 	case "194", "6660", "6661", "6662", "6663", "6664", "6665", "6666", "6667", "6668", "6669","7000":
 		protocols.IRC(port)
+	case "631":
+		protocols.IPP(port)
+	case "1098","1099","1050":
+		protocols.RMI(port)
 
 	// VoiP
 	case "5060":
 		protocols.SIP(port)
+
+	// RTSP (Stream Protocol)
+	case "554","8554":
+		protocols.RTSP(port)
 
 	// Try Detect Service
 	default:

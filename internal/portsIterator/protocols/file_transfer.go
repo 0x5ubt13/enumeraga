@@ -37,7 +37,7 @@ func FTP(port string) {
 func Rsync(port string) {
 	dir := utils.ProtocolDetected2("Rsync", port, utils.BaseDir)
 	nmapOutputFile := dir + "rsync_scan"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "873", nmapOutputFile, "rsync-list-modules", checks.OptVVerbose)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, "rsync-list-modules", checks.OptVVerbose)
 
 	// Netcat
 	ncArgs := []string{"nc", "-nv", utils.Target, "873"}
@@ -57,7 +57,7 @@ func NFS(port string) {
 	dir := utils.ProtocolDetected2("NFS", port,  utils.BaseDir)
 	nmapOutputFile := dir + "nfs_scan"
 	nmapNSEScripts := "nfs-ls,nfs-showmount,nfs-statfs"
-	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, "2049", nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
 
 	// Showmount and mount functionality (lines 486-544 from original)
 	// This is a complex function that mounts NFS shares
@@ -70,3 +70,14 @@ func NFS(port string) {
 	// Note: The full NFS mounting logic is preserved but could be extracted
 	// to a separate nfs_mounter.go if needed for further modularity
 }
+
+// ISCSI enumerates Internet Small Computer System Interface Protocol (3260/TCP)
+func ISCSI(port string) {
+	dir := utils.ProtocolDetected2("ISCSI", port,  utils.BaseDir)
+	nmapOutputFile := dir + "iscsi_scan"
+	nmapNSEScripts := "iscsi-*"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port , nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+}
+
+
