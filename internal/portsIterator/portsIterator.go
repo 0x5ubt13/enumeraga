@@ -95,6 +95,14 @@ func routePort(port string, openPortsSlice []string) {
 	case "1521", "1522", "1523", "1524", "1525", "1526", "1527", "1528", "1529":
 		protocols.TNS(port)
 
+	// IT/OT
+	case "502":
+		protocols.MODBUS(port)
+	case "102":
+		protocols.S7(port)
+	case "34964":
+		protocols.PROFINET(port)
+
 	// Miscellaneous
 	case "53":
 		protocols.DNS(port)
