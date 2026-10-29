@@ -130,6 +130,8 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.IRC(port)
 	case "631":
 		protocols.IPP(port)
+	case "1098","1099","1050":
+		protocols.RMI(port)
 
 	// VoiP
 	case "5060":

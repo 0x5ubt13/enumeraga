@@ -270,4 +270,20 @@ func RTSP(port string) {
 
 }
 
+// RMI enumerates Java RMI (1099,1099,1050/TCP)
+func RMI(port string) {
+	dir := utils.ProtocolDetected2("RMI", port, utils.BaseDir)
+
+	// Nmap
+	nmapOutputFile := dir + "javarmi_scan"
+	nmapNSEScripts := "rmi-*"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+	// https://github.com/qtc-de/remote-method-guesser - not in kali repo
+	// rmg enum 172.17.0.2 9010 
+	// rmg guess 172.17.0.2 9010
+
+	// https://github.com/BishopFox/rmiscout - not in kali repo 
+
+}
+
 
