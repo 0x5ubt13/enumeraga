@@ -55,6 +55,8 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.RDP(port)
 	case "5985", "5986":
 		protocols.WinRM(port)
+	case "5900","5901","5902","5903":
+		protocols.VNC(port)
 
 	// Mail
 	case "25", "465", "587":

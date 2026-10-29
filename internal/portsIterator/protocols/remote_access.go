@@ -95,3 +95,29 @@ func WinRM(port string) {
 	nmapOutputFile := dir + "winrm_scan_" + port 
 	commands.CallIndividualPortScanner(utils.Target, port, nmapOutputFile, checks.OptVVerbose)
 }
+
+// VNC enumerates Virtual Network Computing Protocol (5900/TCP)
+func VNC(port string) {
+	dir := utils.ProtocolDetected2("VNC", port, utils.BaseDir)
+
+	// Nmap
+	nmapOutputFile := dir + "vnc_scan"
+	nmapNSEScripts := "vnc-*,realvnc-auth-bypass"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port , nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
+	if bounds.Active.PortInScope(port, false) {
+        // Nuclei
+        nucleiArgs := []string{
+                "nuclei",
+                "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+		"-tags", "vnc",
+	}
+        nucleiPath := fmt.Sprintf("%snuclei_%s.out", dir,port)
+        commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	}
+
+}
+
+
+
