@@ -88,10 +88,20 @@ func routePort(port string, openPortsSlice []string) {
 	// Databases
 	case "3306":
 		protocols.MySQL(port)
+	case "5432","5433":
+		protocols.PostgreSQL(port)
 	case "1433":
 		protocols.MSSQL(port)
 	case "1521", "1522", "1523", "1524", "1525", "1526", "1527", "1528", "1529":
 		protocols.TNS(port)
+
+	// IT/OT
+	case "502":
+		protocols.MODBUS(port)
+	case "102":
+		protocols.S7(port)
+	case "34964":
+		protocols.PROFINET(port)
 
 	// Miscellaneous
 	case "53":
@@ -116,6 +126,8 @@ func routePort(port string, openPortsSlice []string) {
 		protocols.NTP(port)
 	case "500":
 		protocols.IPSEC(port)
+	case "194", "6660", "6661", "6662", "6663", "6664", "6665", "6666", "6667", "6668", "6669","7000":
+		protocols.IRC(port)
 
 	// VoiP
 	case "5060":

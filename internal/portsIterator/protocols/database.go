@@ -33,6 +33,38 @@ func MySQL(port string) {
 	common.RunHydraBrute("mysql", port, dir)
 }
 
+// PostgreSQL enumerates Postgre SQL Server (5432/TCP)
+func PostgreSQL(port string) {
+	dir := utils.ProtocolDetected2("POSTGRESQL", port, utils.BaseDir)
+
+	nmapOutputFile := dir + "Postgresql_scan_" + port
+	commands.CallIndividualPortScanner(utils.Target, port, nmapOutputFile, checks.OptVVerbose)
+
+	// Nuclei targets host:port over TCP, so it runs only when TCP is in scope for it.
+	if bounds.Active.PortInScope(port, false) {
+		opensslArgs := []string{
+			"openssl", 
+			"s_client", "-starttls", "postgres",
+			"-connect", fmt.Sprintf("%s:%s", utils.Target, port),
+			"-showcerts", "-brief",
+		}
+		opensslPath := fmt.Sprintf("%spostgresql_openssl_%s.out", dir, port)
+		commands.CallRunTool(opensslArgs, opensslPath, checks.OptVVerbose)
+
+		nucleiArgs := []string{
+			"nuclei", "-target", fmt.Sprintf("%s:%s", utils.Target, port),
+			"-tags", "psql",
+		}
+		nucleiPath := fmt.Sprintf("%spostgresql_nuclei_%s.out", dir, port)
+		commands.CallRunTool(nucleiArgs, nucleiPath, checks.OptVVerbose)
+	}
+	// pgsql default creds
+	if *checks.OptBrute {
+		nmapOutputFile := dir + "pgsql_default_" + port
+		commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, "pgsql-brute", checks.OptVVerbose)
+	}
+}
+
 // MSSQL enumerates Microsoft's SQL Server (1433/TCP)
 func MSSQL(port string) {
 	dir := utils.ProtocolDetected2("MSSQL",port ,utils.BaseDir)

@@ -236,3 +236,17 @@ func SIP(port string) {
 		commands.CallRunTool(sipptsEnumUDPArgs, sipptsEnumUDPPath, checks.OptVVerbose)
 	}
 }
+
+// IRC enumerates IRC communication protocol (194, 6667, 6660-7000/TCP)
+func IRC(port string) {
+	dir := utils.ProtocolDetected2("IRC", port, utils.BaseDir)
+
+	// Nmap
+	nmapOutputFile := dir + "irc_scan"
+	nmapNSEScripts := "irc-botnet-channels,irc-info,irc-unrealircd-backdoor"
+	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
+
+}
+
+
+
