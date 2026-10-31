@@ -2,8 +2,15 @@ package output
 
 import (
 	"fmt"
+	"strings"
+	"sync"
 
 	"github.com/fatih/color"
+)
+
+var (
+	printMu        sync.Mutex
+	defaultPrinter = NewPrinter()
 )
 
 // Color function variables for terminal output
@@ -53,34 +60,40 @@ func (p *Printer) getColor(name string) func(...interface{}) string {
 	}
 }
 
-// PrintCustomBiColourMsg loops over the necessary colours, printing one at a time
-// This is the optimized version using a color registry instead of nested switches
+// PrintCustomBiColourMsg formats alternating coloured segments and writes them atomically.
 func PrintCustomBiColourMsg(dominantColour, secondaryColour string, text ...string) {
-	printer := NewPrinter()
-
+	var sb strings.Builder
 	for i, str := range text {
 		var colorFunc func(...interface{}) string
-		if i%2 == 0 || i == 0 {
-			colorFunc = printer.getColor(dominantColour)
+		if i%2 == 0 {
+			colorFunc = defaultPrinter.getColor(dominantColour)
 		} else {
-			colorFunc = printer.getColor(secondaryColour)
+			colorFunc = defaultPrinter.getColor(secondaryColour)
 		}
-		fmt.Printf("%s", colorFunc(str))
+		sb.WriteString(colorFunc(str))
 	}
-	fmt.Printf("\n")
+	sb.WriteByte('\n')
+
+	printMu.Lock()
+	defer printMu.Unlock()
+	fmt.Print(sb.String())
 }
-func PrintCustomBiColourMsgNoNL(dominantColour, secondaryColour string, text ...string) {
-	printer := NewPrinter()
 
+func PrintCustomBiColourMsgNoNL(dominantColour, secondaryColour string, text ...string) {
+	var sb strings.Builder
 	for i, str := range text {
 		var colorFunc func(...interface{}) string
-		if i%2 == 0 || i == 0 {
-			colorFunc = printer.getColor(dominantColour)
+		if i%2 == 0 {
+			colorFunc = defaultPrinter.getColor(dominantColour)
 		} else {
-			colorFunc = printer.getColor(secondaryColour)
+			colorFunc = defaultPrinter.getColor(secondaryColour)
 		}
-		fmt.Printf("%s", colorFunc(str))
+		sb.WriteString(colorFunc(str))
 	}
+
+	printMu.Lock()
+	defer printMu.Unlock()
+	fmt.Print(sb.String())
 }
 
 
@@ -97,7 +110,7 @@ func PrintBanner(version string) {
 
 // PrintInfraUsageExamples displays example command line usage for infrastructure scanning mode.
 func PrintInfraUsageExamples() {
-	e := color.WhiteString("enumeraga ")
+	e := color.WhiteString("enumeraga infra ")
 
 	// Print "examples" in white
 	fmt.Printf("\nExamples:\n ")

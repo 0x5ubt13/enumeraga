@@ -81,13 +81,15 @@ RUN setcap -r /usr/lib/nmap/nmap \
 # Download only the specific SecLists wordlists we need instead of full 1.9GB package
 # This reduces image size from ~3GB to ~1GB
 RUN mkdir -p /usr/share/seclists/Discovery/Web-Content \
-    && mkdir -p /usr/share/seclists/Passwords \
+    && mkdir -p /usr/share/seclists/Passwords/Common-Credentials \
     && mkdir -p /usr/share/seclists/Usernames \
     && mkdir -p /usr/share/seclists/Discovery/SNMP \
     && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/raft-medium-directories-lowercase.txt \
         -o /usr/share/seclists/Discovery/Web-Content/raft-medium-directories-lowercase.txt \
     && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/darkweb2017-top1000.txt \
         -o /usr/share/seclists/Passwords/darkweb2017-top1000.txt \
+    && ln -sf /usr/share/seclists/Passwords/darkweb2017-top1000.txt \
+        /usr/share/seclists/Passwords/Common-Credentials/darkweb2017_top-1000.txt \
     && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/web-extensions.txt \
         -o /usr/share/seclists/Discovery/Web-Content/web-extensions.txt \
     && curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Usernames/top-usernames-shortlist.txt \

@@ -208,7 +208,7 @@ func sweepPorts() ([]nmap.Host, []nmap.Host, error) {
 func singleTarget(target string, baseFilePath string) error {
 	// Clean up trailing not alphanumeric characters in target
 	target = strings.TrimFunc(target, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '.' && r != '-'
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '.' && r != '-' && r != ':'
 	})
 
 	// Validate target is not empty after trimming
@@ -244,7 +244,7 @@ func singleTarget(target string, baseFilePath string) error {
 	// Introducing a control to repeat the scan in case there are no ports or there is only one port open
 	// Do it only once. A bounded run skips this: re-sweeping is enumeraga widening
 	// the scan on its own initiative, which is what the caller ruled out.
-	if len(openPorts) <= 1 && utils.TimesSwept == 1 && !bounds.Active.Enabled {
+	if len(openPortsSlice) <= 1 && utils.TimesSwept == 1 && !bounds.Active.Enabled {
 		sweptHostTcpSecond, sweptHostUdpSecond, secondSweepErr := sweepPorts()
 		if secondSweepErr != nil {
 			utils.ErrorMsg(fmt.Sprintf("Second port sweep failed: %v", secondSweepErr))
@@ -252,6 +252,7 @@ func singleTarget(target string, baseFilePath string) error {
 			openPortsSliceSecondTry := utils.GetOpenPortsSlice(sweptHostTcpSecond, sweptHostUdpSecond)
 
 			if len(openPortsSliceSecondTry) > len(openPortsSlice) {
+				openPortsSlice = openPortsSliceSecondTry
 				openPorts = utils.RemoveDuplicates(strings.Join(openPortsSliceSecondTry, ","))
 				utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] More ports found in the second slow run for target '", target, "'.")
 			} else {

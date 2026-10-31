@@ -90,6 +90,12 @@ func TestExtractProviderArg(t *testing.T) {
 			wantFiltered: []string{"enumeraga"},
 		},
 		{
+			name:         "kubernetes provider alias",
+			args:         []string{"enumeraga", "k8s"},
+			wantProvider: "k8s",
+			wantFiltered: []string{"enumeraga"},
+		},
+		{
 			name:         "no provider",
 			args:         []string{"enumeraga", "--help"},
 			wantProvider: "",
@@ -165,5 +171,17 @@ func TestCloudConfigNucleiDefaults(t *testing.T) {
 	}
 	if cfg.NucleiTargetURL != "" {
 		t.Errorf("expected NucleiTargetURL to default to empty, got %q", cfg.NucleiTargetURL)
+	}
+}
+
+func TestParseCSPSupportsKubernetes(t *testing.T) {
+	for _, alias := range []string{"k8s", "kubernetes"} {
+		got, err := parseCSP(alias)
+		if err != nil {
+			t.Fatalf("parseCSP(%q) returned unexpected error: %v", alias, err)
+		}
+		if got != "k8s" {
+			t.Errorf("parseCSP(%q) = %q, want %q", alias, got, "k8s")
+		}
 	}
 }

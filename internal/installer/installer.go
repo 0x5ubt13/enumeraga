@@ -55,7 +55,13 @@ func Consent(tool string) rune {
 // OSCPConsent asks for user consent to run any forbidden tool for OSCP
 func OSCPConsent(tool string) rune {
 	output.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Enumeraga ", "needs ", tool, " to be run, which won't be very good if you're trying OSCP 😬")
-	output.PrintCustomBiColourMsg("yellow", "cyan", "Do you want to run '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
+
+	if !stdinIsInteractive() {
+		output.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Non-interactive session", ": cannot prompt to run ", tool, ". Skipping.")
+		return 'n'
+	}
+
+	output.PrintCustomBiColourMsgNoNL("yellow", "cyan", "Do you want to run '", tool, "' (", "[Y]", " 'yes' / ", "[N]", " 'no' / ", "[A]", " 'yes to all'): ")
 
 	consent := bufio.NewScanner(os.Stdin)
 	consent.Scan()
@@ -276,10 +282,10 @@ func printConsentNotGiven(tool string) {
 
 func printOSCPConsentNotGiven(tool string) {
 	fmt.Printf(
-		"%s\n%s %s\n",
+		"%s%s%s\n",
 		output.Red("[-] Consent not given to run '"),
 		output.Cyan(tool),
-		output.Red(". Aborting..."),
+		output.Red("'. Aborting..."),
 	)
 }
 

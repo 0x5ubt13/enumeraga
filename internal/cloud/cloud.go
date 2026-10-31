@@ -150,6 +150,7 @@ var knownProviderAliases = map[string]bool{
 	"ay": true, "ali": true, "aliy": true, "aliyun": true, "alibaba": true,
 	"oci": true, "oracle": true,
 	"do": true, "digital": true, "digitalocean": true,
+	"k8s": true, "kubernetes": true,
 }
 
 // extractProviderArg pre-scans args for a cloud provider name, removes it from the
@@ -474,6 +475,7 @@ func printCloudUsage() {
 	fmt.Println("  oci, oracle          Oracle Cloud Infrastructure")
 	fmt.Println("  aliyun, alibaba      Alibaba Cloud")
 	fmt.Println("  do, digitalocean     DigitalOcean")
+	fmt.Println("  k8s, kubernetes      Kubernetes")
 	fmt.Println("\nOptions:")
 	fmt.Println("  -c, --creds FILE         Path to credentials file (e.g. GCP service account JSON)")
 	fmt.Println("      --profile NAME       AWS profile from ~/.aws/credentials (AWS only; falls back to $AWS_PROFILE)")
@@ -483,8 +485,11 @@ func printCloudUsage() {
 	fmt.Println("                           Azure: omit all three to scan unattended as your signed-in user")
 	fmt.Println("                           via 'az login' (ScoutSuite + Prowler). Supply all three to add a")
 	fmt.Println("                           service principal — required for monkey365's M365/Entra inventory.")
+	fmt.Println("      --project ID         GCP project ID for gcp_scanner and prowler (GCP only)")
+	fmt.Println("      --gcp-token FILE     Path to file containing a raw GCP OAuth2 access token (GCP only)")
 	fmt.Println("      --iam-brute-email EMAIL  Override service account email for gcp-iam-brute (GCP only)")
 	fmt.Println("      --no-iam-brute           Disable gcp-iam-brute permission enumeration (GCP only)")
+	fmt.Println("      --nuclei-url URL     Target URL for nuclei cloud/exposure template scan")
 	fmt.Println("  -h, --help               Display this help and exit")
 	fmt.Println("  -o, --output DIR         Select a different base folder for output (default: /tmp/enumeraga_output)")
 	fmt.Println("  -q, --quiet              Don't print the banner and decrease overall verbosity")
@@ -493,7 +498,7 @@ func printCloudUsage() {
 
 // parseCSP parses the provider the user wants to enumerate
 func parseCSP(provider string) (string, error) {
-	possibleProviders := []string{"aws", "azure", "gcp", "oci", "aliyun", "digitalocean (do)"}
+	possibleProviders := []string{"aws", "azure", "gcp", "oci", "aliyun", "digitalocean (do)", "kubernetes (k8s)"}
 
 	switch provider {
 	case "aws", "amazon":
@@ -508,6 +513,8 @@ func parseCSP(provider string) (string, error) {
 		provider = "oci"
 	case "do", "digital", "digitalocean":
 		provider = "do"
+	case "k8s", "kubernetes":
+		provider = "k8s"
 	default:
 		utils.ErrorMsg(fmt.Sprintf("%s not detected as a suitable cloud service provider. Please try again by using one of these: %v.", provider, possibleProviders))
 		return "", fmt.Errorf("no suitable cloud service provider parsed")

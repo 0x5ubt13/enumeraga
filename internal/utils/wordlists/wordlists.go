@@ -38,13 +38,22 @@ func GetWordlists(optVVerbose *bool) error {
 		DirListMedium = dirListMediumSlice[0]
 	}
 
-	// Locate the "darkweb2017-top1000.txt" file
-	DarkwebTop1000Slice, err := zglob.Glob("/usr/share/seclists/Passwords/Common-Credentials/darkweb2017_top-1000.txt")
-	if err != nil || len(DarkwebTop1000Slice) == 0 {
+	// Locate the "darkweb2017-top1000.txt" file across both Kali seclists and upstream SecLists paths
+	darkwebCandidates := []string{
+		"/usr/share/seclists/Passwords/Common-Credentials/darkweb2017_top-1000.txt",
+		"/usr/share/seclists/Passwords/Common-Credentials/darkweb2017-top1000.txt",
+		"/usr/share/seclists/Passwords/darkweb2017-top1000.txt",
+		"/usr/share/seclists/Passwords/darkweb2017_top-1000.txt",
+	}
+	for _, pattern := range darkwebCandidates {
+		if matches, globErr := zglob.Glob(pattern); globErr == nil && len(matches) > 0 {
+			DarkwebTop1000 = matches[0]
+			break
+		}
+	}
+	if DarkwebTop1000 == "" {
 		missingWordlists = append(missingWordlists, "darkweb2017-top1000.txt")
 		output.PrintCustomBiColourMsg("red", "cyan", "[-] Warning: ", "Could not locate 'darkweb2017-top1000.txt' - password bruteforcing may not work")
-	} else {
-		DarkwebTop1000 = DarkwebTop1000Slice[0]
 	}
 
 	// Locate the "web-extensions.txt" file

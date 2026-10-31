@@ -99,6 +99,15 @@ func Run() (int, error) {
 		os.Exit(0)
 	}
 
+	// Check for top-level help flag (when passed before or without a subcommand)
+	if *OptHelp {
+		if !*OptQuiet {
+			utils.PrintBanner()
+		}
+		printTopLevelUsage()
+		return 0, utils.ErrHelpRequested
+	}
+
 	// Check if infra flow or cloud flow apply
 	if len(os.Args) < 2 {
 		utils.ErrorMsg("You need to choose between `enumeraga infra` or `enumeraga cloud`")
@@ -196,4 +205,15 @@ func applyBounds(totalLines int) error {
 		utils.PrintCustomBiColourMsg("cyan", "yellow", "[*] Bounded run: ", b.SummaryLine())
 	}
 	return nil
+}
+
+func printTopLevelUsage() {
+	fmt.Println("Usage: enumeraga <subcommand> [OPTIONS]")
+	fmt.Println("\nSubcommands:")
+	fmt.Println("  infra, i             Infrastructure enumeration (hosts, ports, services, CIDR ranges)")
+	fmt.Println("  cloud, c             Cloud provider enumeration (aws, azure, gcp, oci, aliyun, do, k8s)")
+	fmt.Println("\nGlobal Options:")
+	fmt.Println("  -h, --help           Display this help message and exit")
+	fmt.Println("  -v, --version        Display version information and exit")
+	fmt.Println("\nRun 'enumeraga infra --help' or 'enumeraga cloud --help' for subcommand-specific options.")
 }
