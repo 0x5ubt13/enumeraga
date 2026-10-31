@@ -68,6 +68,9 @@ func Ident(port string, openPortsSlice []string) {
 
 // MSRPC enumerates Microsoft's Remote Procedure Call Protocol (135,593/TCP)
 func MSRPC(port string) {
+	if utils.IsVisited("msrpc") {
+		return
+	}
 	dir := utils.ProtocolDetected2("MSRPC", port, utils.BaseDir)
 	nmapOutputFile := dir + "msrpc_scan"
 
@@ -78,13 +81,13 @@ func MSRPC(port string) {
 	}
 
 	if bounds.Active.PortInScope("135", false) {
-		rpcDump135Args := []string{"impacket-rpcdump", "135"}
+		rpcDump135Args := []string{"impacket-rpcdump", "-port", "135", utils.Target}
 		rpcDump135Path := fmt.Sprintf("%srpcdump_135.out", dir)
 		commands.CallRunTool(rpcDump135Args, rpcDump135Path, checks.OptVVerbose)
 	}
 
 	if bounds.Active.PortInScope("593", false) {
-		rpcDump593Args := []string{"impacket-rpcdump", "593"}
+		rpcDump593Args := []string{"impacket-rpcdump", "-port", "593", utils.Target}
 		rpcDump593Path := fmt.Sprintf("%srpcdump_593.out", dir)
 		commands.CallRunTool(rpcDump593Args, rpcDump593Path, checks.OptVVerbose)
 	}
@@ -117,10 +120,10 @@ func RServices(port string) {
 	commands.CallRunTool(rusersArgs, rusersPath, checks.OptVVerbose)
 
 	filePath := dir + "next_step_tip.txt"
-	message := `
-	Tip: Enumerate NFS, etc on the utils.Target server for /home/user/.rhosts and /etc/hosts.equiv files to use with rlogin, rsh and rexec.
+	message := fmt.Sprintf(`
+	Tip: Enumerate NFS, etc on the %s server for /home/user/.rhosts and /etc/hosts.equiv files to use with rlogin, rsh and rexec.
 	If found, use the following command:
-	rlogin "utils.Target" -l "found_user"`
+	rlogin "%s" -l "found_user"`, utils.Target, utils.Target)
 	if err := utils.WriteTextToFile(filePath, message); err != nil {
 		utils.ErrorMsg(fmt.Sprintf("Failed to write r-services enumeration tips file: %v", err))
 	}
@@ -262,17 +265,17 @@ func RTSP(port string) {
 	dir := utils.ProtocolDetected2("RTSP", port, utils.BaseDir)
 
 	// Nmap
-	nmapOutputFile := dir + "rtsp_scan"
+	nmapOutputFile := dir + "rtsp_scan_" + port
 	nmapNSEScripts := "rtsp-url-brute,rtsp-methods"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
 }
 
-// RMI enumerates Java RMI (1099,1099,1050/TCP)
+// RMI enumerates Java RMI (1098,1099,1050/TCP)
 func RMI(port string) {
 	dir := utils.ProtocolDetected2("RMI", port, utils.BaseDir)
 
 	// Nmap
-	nmapOutputFile := dir + "javarmi_scan"
+	nmapOutputFile := dir + "javarmi_scan_" + port
 	nmapNSEScripts := "rmi-*"
 	commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, nmapOutputFile, nmapNSEScripts, checks.OptVVerbose)
 	// https://github.com/qtc-de/remote-method-guesser - not in kali repo

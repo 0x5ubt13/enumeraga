@@ -16,18 +16,18 @@ func LDAP(port string, scheme string) {
         commands.CallIndividualPortScannerWithNSEScripts(utils.Target, port, dir+"ldap_scan_"+port, "ldap* and not (brute or fuzzer or dos)", checks.OptVVerbose)
 
 	// LDAPSearch - Anonymous bind to discover base DN
-	ldapSearchArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("%s://%s:%s",scheme, utils.Target, port), "-s", "base", "-b", "", "defaultNamingContext"}
-	ldapSearchPath := fmt.Sprintf("%sldapsearch_defaultNamingContext.out", dir)
+	ldapSearchArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port), "-s", "base", "-b", "", "defaultNamingContext"}
+	ldapSearchPath := fmt.Sprintf("%sldapsearch_defaultNamingContext_%s.out", dir, port)
 	commands.CallRunTool(ldapSearchArgs, ldapSearchPath, checks.OptVVerbose)
 
 	// LDAPSearch - Anonymous bind to get all users
-	ldapSearchUsersArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("%s://%s:%s",scheme , utils.Target, port), "-b", "", "(objectClass=user)"}
-	ldapSearchUsersPath := fmt.Sprintf("%sldapsearch_anonymous_users.out", dir)
+	ldapSearchUsersArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port), "-b", "", "(objectClass=user)"}
+	ldapSearchUsersPath := fmt.Sprintf("%sldapsearch_anonymous_users_%s.out", dir, port)
 	commands.CallRunTool(ldapSearchUsersArgs, ldapSearchUsersPath, checks.OptVVerbose)
 
 	// LDAPSearch - Anonymous bind to enumerate everything (if allowed)
-	ldapSearchFullArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("%s://%s:%s",scheme , utils.Target, port), "-b", ""}
-	ldapSearchFullPath := fmt.Sprintf("%sldapsearch_anonymous_dump.out", dir)
+	ldapSearchFullArgs := []string{"ldapsearch", "-x", "-H", fmt.Sprintf("%s://%s:%s", scheme, utils.Target, port), "-b", ""}
+	ldapSearchFullPath := fmt.Sprintf("%sldapsearch_anonymous_dump_%s.out", dir, port)
 	commands.CallRunTool(ldapSearchFullArgs, ldapSearchFullPath, checks.OptVVerbose)
 }
 // Kerberos enumerates Kerberos Protocol (88/TCP)

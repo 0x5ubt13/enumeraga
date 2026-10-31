@@ -149,11 +149,11 @@ func HTTP(port string, scheme string) {
 	commands.CallWPEnumeration(fmt.Sprintf("%s://%s:%s", scheme, utils.Target,port), dir, port, checks.OptVVerbose)
 
 	// Check for Tomcat and run gobuster + hydra
-	commands.CallTomcatEnumeration(utils.Target, fmt.Sprintf("%s://%s:%s/docs",scheme, utils.Target, port), dir, port, checks.OptBrute, checks.OptVVerbose)
+	commands.CallTomcatEnumeration(utils.Target, fmt.Sprintf("%s://%s:%s/docs", scheme, utils.Target, port), dir, port, scheme, checks.OptBrute, checks.OptVVerbose)
 
 	// CeWL + Ffuf Keywords Bruteforcing
 	if *checks.OptBrute {
-		commands.CallRunCewlandFfufKeywords(utils.Target, dir, port, checks.OptVVerbose)
+		commands.CallRunCewlandFfufKeywords(utils.Target, dir, port, scheme, checks.OptVVerbose)
 	}
 }
 

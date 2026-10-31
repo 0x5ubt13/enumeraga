@@ -41,7 +41,7 @@ func TestTomcatEnumeration(t *testing.T) {
 
 	t.Run("invalid URL does not panic", func(t *testing.T) {
 		// Should return gracefully, not panic
-		tomcatEnumeration("invalid-test-url-12345.invalid", "http://invalid-test-url-12345.invalid", tmpDir, "8080", &brute, &verbose)
+		tomcatEnumeration("invalid-test-url-12345.invalid", "http://invalid-test-url-12345.invalid", tmpDir, "8080", "http", &brute, &verbose)
 	})
 }
 

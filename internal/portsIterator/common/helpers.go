@@ -49,6 +49,6 @@ func RunHydraBrute(service, port, dir string) {
 		"-W", "30",
 		fmt.Sprintf("%s://%s:%s", service, utils.Target, port),
 	}
-	hydraPath := BuildOutputPath(dir, "hydra_"+service)
+	hydraPath := BuildOutputPath(dir, fmt.Sprintf("hydra_%s_%s", service, port))
 	commands.CallRunTool(hydraArgs, hydraPath, checks.OptVVerbose)
 }

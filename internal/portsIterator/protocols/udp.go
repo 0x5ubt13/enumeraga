@@ -62,7 +62,7 @@ func IPSEC(port string) {
 	if !bounds.Active.PortInScope(port, true) {
 		return
 	}
-	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, port, dir+"ntp_scan", "ike-version", checks.OptVVerbose)
+	commands.CallIndividualUDPPortScannerWithNSEScripts(utils.Target, port, dir+"ipsec_scan", "ike-version", checks.OptVVerbose)
 }
 
 

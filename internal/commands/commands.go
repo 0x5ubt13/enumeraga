@@ -46,8 +46,8 @@ func toolContext(parent context.Context) (context.Context, context.CancelFunc) {
 
 // WPEnumeration provides enumeration for WordPress
 func WPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
-	// Identify WordPress: Run curl
-	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
+	// Identify WordPress: Run curl with timeout and TLS skip-verify for self-signed certs
+	curl := exec.CommandContext(utils.GetGlobalContext(), "curl", "-s", "-k", "--max-time", "10", "-X", "GET", targetUrl)
 	curlOutput, err := curl.Output()
 	if err != nil {
 		if *OptVVerbose {
@@ -68,9 +68,16 @@ func WPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
 	CallRunTool(wpScanArgs, wpScanPath, OptVVerbose)
 }
 
-func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, OptVVerbose *bool) {
-	// Identify Tomcat: Run curl
-	curl := exec.Command("curl", "-s", "-X", "GET", targetUrl)
+func tomcatEnumeration(target, targetUrl, caseDir, port, scheme string, OptBrute *bool, OptVVerbose *bool) {
+	if scheme == "" {
+		scheme = "http"
+		if port == "443" || port == "8443" {
+			scheme = "https"
+		}
+	}
+
+	// Identify Tomcat: Run curl with timeout and TLS skip-verify for self-signed certs
+	curl := exec.CommandContext(utils.GetGlobalContext(), "curl", "-s", "-k", "--max-time", "10", "-X", "GET", targetUrl)
 	curlOutput, err := curl.Output()
 	if err != nil {
 		if *OptVVerbose {
@@ -87,8 +94,8 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, 
 	utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] ", "Tomcat detected. Running ", "Gobuster", "...")
 
 	// Run Gobuster
-	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "-u", fmt.Sprintf("%s:%s", target, port), "-w", utils.DirListMedium, "--timeout", getTimeoutSeconds() + "s"}
-	gobusterPath := fmt.Sprintf("%stomcat_gobuster.out", caseDir)
+	gobusterArgs := []string{"gobuster", "-z", "-q", "dir", "-e", "-u", fmt.Sprintf("%s://%s:%s", scheme, target, port), "-w", utils.DirListMedium, "--timeout", getTimeoutSeconds() + "s"}
+	gobusterPath := fmt.Sprintf("%stomcat_gobuster_%s.out", caseDir, port)
 	CallRunTool(gobusterArgs, gobusterPath, OptVVerbose)
 
 	// Run hydra
@@ -96,14 +103,19 @@ func tomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute *bool, 
 		return
 	}
 
+	hydraService := "http-get"
+	if scheme == "https" {
+		hydraService = "https-get"
+	}
 	hydraArgs := []string{
 		"hydra",
+		"-s", port,
 		"-L", utils.UsersList,
 		"-P", utils.DarkwebTop1000,
 		"-f", target,
-		"http-get", "/manager/html",
+		hydraService, "/manager/html",
 	}
-	hydraPath := fmt.Sprintf("%stomcat_hydra.out", caseDir)
+	hydraPath := fmt.Sprintf("%stomcat_hydra_%s.out", caseDir, port)
 	CallRunTool(hydraArgs, hydraPath, OptVVerbose)
 }
 
@@ -117,7 +129,7 @@ func runCewlAndFfuf(target, caseDir, port, scheme string, OptVVerbose *bool) {
 	ffufArgs := []string{
 		"ffuf",
 		"-w", fmt.Sprintf("%s:FOLDERS,%s:KEYWORDS,%s:EXTENSIONS", utils.DirListMedium, keywordsList, utils.ExtensionsList),
-		"-u", fmt.Sprintf("%s://%s/FOLDERS/KEYWORDSEXTENSIONS", scheme, target),
+		"-u", fmt.Sprintf("%s://%s:%s/FOLDERS/KEYWORDSEXTENSIONS", scheme, target, port),
 		"-v",
 		"-maxtime", getTimeoutSeconds(),
 		"-maxtime-job", getTimeoutSeconds(),
@@ -127,12 +139,15 @@ func runCewlAndFfuf(target, caseDir, port, scheme string, OptVVerbose *bool) {
 	_ = runRegisteredTool(ffufArgs, ffufPath, port, OptVVerbose)
 }
 
-func runCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
-	if port == "80" {
-		runCewlAndFfuf(target, caseDir, port, "http", OptVVerbose)
-		return
+func runCewlandFfufKeywords(target, caseDir, port, scheme string, OptVVerbose *bool) {
+	if scheme == "" {
+		if port == "80" {
+			scheme = "http"
+		} else {
+			scheme = "https"
+		}
 	}
-	runCewlAndFfuf(target, caseDir, port, "https", OptVVerbose)
+	runCewlAndFfuf(target, caseDir, port, scheme, OptVVerbose)
 }
 
 func printToolSuccess(command, tool, filePath string, completed, total int, OptVVerbose *bool) {
@@ -596,16 +611,16 @@ func CallWPEnumeration(targetUrl, caseDir, port string, OptVVerbose *bool) {
 }
 
 // CallTomcatEnumeration is an async wrapper for Tomcat enumeration.
-func CallTomcatEnumeration(target, targetUrl, caseDir, port string, OptBrute, OptVVerbose *bool) {
+func CallTomcatEnumeration(target, targetUrl, caseDir, port, scheme string, OptBrute, OptVVerbose *bool) {
 	runAsync(func() {
-		tomcatEnumeration(target, targetUrl, caseDir, port, OptBrute, OptVVerbose)
+		tomcatEnumeration(target, targetUrl, caseDir, port, scheme, OptBrute, OptVVerbose)
 	})
 }
 
 // CallRunCewlandFfufKeywords is a Goroutine for runCewlandFfufKeywords()
-func CallRunCewlandFfufKeywords(target, caseDir, port string, OptVVerbose *bool) {
+func CallRunCewlandFfufKeywords(target, caseDir, port, scheme string, OptVVerbose *bool) {
 	runAsync(func() {
-		runCewlandFfufKeywords(target, caseDir, port, OptVVerbose)
+		runCewlandFfufKeywords(target, caseDir, port, scheme, OptVVerbose)
 	})
 }
 
