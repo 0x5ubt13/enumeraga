@@ -17,10 +17,14 @@ Automatic multiprocess Linux CLI tool that aims for a quick enumeration wrapping
 - **Fast parallel infrastructure scanning** - Runs multiple tools concurrently with configurable worker pool (default: 20 concurrent tools)
 - **Smart protocol detection** - Groups ports by protocol and runs appropriate enumeration tools
 - **Graceful shutdown** - Ctrl+C cleanly terminates all running tools
-- **Configurable timeouts** - Prevent long-running tools from blocking scans (default: 10 minutes)
+- **Configurable timeouts** - `-T/--timeout` caps every long-running tool (default: 10 minutes). On expiry the tool's whole process group is signalled INT, then TERM, then KILL, so it gets a chance to flush partial results before it is forced out
+- **Broad protocol coverage** - Over eighty ports are routed to protocol-specific handlers, from the usual web, SMB, LDAP and database suspects to VNC, IRC, RTSP, Java RMI, iSCSI, IPP and the OT/ICS trio of Modbus, Siemens S7 and PROFINET
+- **Bounded scans** - `--bounded`, `--ports`, `--rate`, `--concurrency` and `--max-runtime` give callers who must account for every packet a strict scan contract, recorded in a per-run `run.jsonl`
 - **Progress tracking** - Real-time progress counter showing completed/total tools
 - **Docker support** - Containerised versions for both infrastructure and cloud scanning
-- **Cloud scanning** - Supports the major Cloud Service Providers
+- **Cloud scanning** - Supports the major Cloud Service Providers, plus Kubernetes via kubenumerate
+- **Debian/Kali package** - `build-deb-package.sh` produces a `.deb` whose dependencies pull in the wrapped tools
+- **MCP server** - [`mcp-server-enumeraga/`](mcp-server-enumeraga/README.md) lets an AI agent drive infra and cloud scans in sibling containers
 
 ## Wrapped Tools
 
@@ -28,16 +32,18 @@ Automatic multiprocess Linux CLI tool that aims for a quick enumeration wrapping
 
 | Category | Tools |
 |----------|-------|
-| **Port Scanning** | Nmap |
-| **Web Enumeration** | Nikto, Dirsearch, Ffuf, Gobuster, WPScan, WhatWeb, WafW00f, CeWL |
-| **SMB/NetBIOS** | CrackMapExec, SMBMap, Enum4linux-ng, Nmblookup, Nbtscan-unixwiz |
+| **Port Scanning** | Nmap, plus the protocol-specific NSE scripts of every handler below |
+| **Web Enumeration** | Nikto, Dirsearch, Ffuf, Gobuster, WPScan, WhatWeb, WafW00f, CeWL, Gowitness |
+| **SMB/NetBIOS** | NetExec, SMBMap, Enum4linux-ng, Nmblookup, Nbtscan-unixwiz |
 | **LDAP** | Ldapsearch |
 | **SNMP** | SNMPWalk, Onesixtyone, Braa |
-| **Database** | ODAT (Oracle), Hydra (MySQL brute) |
-| **SSH** | SSH-Audit, Hydra |
+| **Database** | ODAT (Oracle), NetExec (MSSQL), OpenSSL `s_client` (PostgreSQL STARTTLS), Nmap `pgsql-brute` |
+| **Remote Access** | SSH-Audit, Nmap `vnc-*` and `realvnc-auth-bypass` |
 | **SSL/TLS** | Testssl |
-| **Other** | Metasploit, Ident-user-enum, Responder-RunFinger, RPCDump, Rusers, Rwho, Nuclei |
-| **Brute Force** | Hydra (FTP, SSH, MySQL, RDP) |
+| **OT/ICS** | Nmap `modbus-discover`, `s7-info`, `profinet-cm-lookup`; Metasploit `modbus_findunitid` |
+| **Templates** | Nuclei: `http/` templates on web ports, and the `ftp`, `ssh`, `telnet`, `rdp`, `smb`, `mysql`, `oracle`, `postgresql` and `vnc` tags on theirs |
+| **Other** | Metasploit (IPMI), Ident-user-enum, Responder-RunFinger, impacket-rpcdump, Rusers, Rwho, SIPPTS |
+| **Brute Force (`-b`)** | Hydra (FTP, SSH, Telnet, MySQL, RDP, Tomcat manager), NetExec (SMB, MSSQL), Nmap `pgsql-brute` |
 
 ### Cloud Scanning
 
@@ -57,7 +63,9 @@ Tools run sequentially per provider to avoid cloud API rate limiting. Inventory 
 
 ### Enumeraga Infra
 
-Give `enumeraga infra` either a single IP address or a file containing a list of IPs. Sit back, relax, and laugh maniacally while it handles all enumeration for you, going through every open port on your target on your behalf:
+Give `enumeraga infra` either a single IP address or a file containing a list of IPs. Sit back, relax, and laugh maniacally while it handles all enumeration for you, going through every open port on your target on your behalf.
+
+`enumeraga -h` on its own lists the two subcommands (`infra`/`i` and `cloud`/`c`); each has its own help:
 
     enumeraga infra -h
 
@@ -94,11 +102,10 @@ Give `enumeraga infra` either a single IP address or a file containing a list of
 
 
     Examples:
-    enumeraga -i
-    enumeraga -bq -t 10.10.11.230
-    enumeraga -V -r 10.129.121.0/24 -t 10.129.121.60
-    enumeraga -t targets_file.txt -r 10.10.8.0/24
-    exit status 1
+     enumeraga infra -i
+     enumeraga infra -bq -t 10.10.11.230
+     enumeraga infra -V -r 10.129.121.0/24 -t 10.129.121.60
+     enumeraga infra -t targets_file.txt -r 10.10.8.0/24
 
 
 #### Examples
@@ -226,7 +233,7 @@ Give `enumeraga cloud` a CSP, and depending on which, a couple more parameters f
                                 by 0x5ubt13
 
     Usage: enumeraga cloud [OPTIONS] <provider>
-    
+
     Cloud Providers:
       aws, amazon          Amazon Web Services
       azure, az            Microsoft Azure
@@ -234,34 +241,42 @@ Give `enumeraga cloud` a CSP, and depending on which, a couple more parameters f
       oci, oracle          Oracle Cloud Infrastructure
       aliyun, alibaba      Alibaba Cloud
       do, digitalocean     DigitalOcean
-    
+      k8s, kubernetes      Kubernetes
+
     Options:
-      -c, --creds FILE         Path to credentials file (e.g. GCP service     account JSON)
-          --tenant ID          Azure Tenant ID (optional; service principal auth)
-          --client-id ID       Azure Client/App ID (optional; service principal auth)
-          --client-secret SEC  Azure Client Secret (optional; service principal auth)
-                               Omit all three to scan unattended as your signed-in
-                               user via 'az login' (ScoutSuite + Prowler). Supply
-                               all three to also run monkey365 (M365 + Entra ID).
-          --iam-brute-email EMAIL  Override service account email for     gcp-iam-brute (GCP only)
-          --no-iam-brute           Disable gcp-iam-brute permission     enumeration (GCP only)
+      -c, --creds FILE         Path to credentials file (e.g. GCP service account JSON)
+          --profile NAME       AWS profile from ~/.aws/credentials (AWS only; falls back to $AWS_PROFILE)
+          --tenant ID          Azure Tenant ID (optional service principal auth; see note below)
+          --client-id ID       Azure Client/App ID (optional service principal auth; see note below)
+          --client-secret SEC  Azure Client Secret (optional service principal auth; see note below)
+                               Azure: omit all three to scan unattended as your signed-in user
+                               via 'az login' (ScoutSuite + Prowler). Supply all three to add a
+                               service principal — required for monkey365's M365/Entra inventory.
+          --project ID         GCP project ID for gcp_scanner and prowler (GCP only)
+          --gcp-token FILE     Path to file containing a raw GCP OAuth2 access token (GCP only)
+          --iam-brute-email EMAIL  Override service account email for gcp-iam-brute (GCP only)
+          --no-iam-brute           Disable gcp-iam-brute permission enumeration (GCP only)
+          --nuclei-url URL     Target URL for nuclei cloud/exposure template scan
       -h, --help               Display this help and exit
-      -o, --output DIR         Select a different base folder for output     (default: /tmp/enumeraga_output)
-      -q, --quiet              Don't print the banner and decrease overall     verbosity
+      -o, --output DIR         Select a different base folder for output (default: /tmp/enumeraga_output)
+      -q, --quiet              Don't print the banner and decrease overall verbosity
       -V, --vv                 Flood your terminal with plenty of verbosity!
-    
+
     Examples:
      enumeraga cloud aws
      enumeraga cloud gcp --creds sa-key.json --project <project-id>
-     enumeraga cloud azure --tenant <tenant-id> --client-id <app-id>     --client-secret <secret>
+     enumeraga cloud azure --tenant <tenant-id> --client-id <app-id> --client-secret <secret>
 
 #### Examples
 
 ```bash
-# AWS — uses ~/.aws credentials
+# AWS — uses ~/.aws credentials (default profile, or $AWS_PROFILE)
 enumeraga cloud aws
 
-# Azure — Application Default Credentials
+# AWS — a named profile from ~/.aws/credentials
+enumeraga cloud aws --profile assessment
+
+# Azure — unattended, as the user signed in with 'az login' (ScoutSuite + Prowler)
 enumeraga cloud azure
 
 # Azure — service principal (required for monkey365 full M365 + Entra ID coverage)
@@ -279,7 +294,13 @@ enumeraga cloud gcp --creds /path/to/sa-key.json --project <project-id> --iam-br
 # GCP — skip gcp-iam-brute (e.g. if testIamPermissions is restricted by policy)
 enumeraga cloud gcp --creds /path/to/sa-key.json --project <project-id> --no-iam-brute
 
-# Kubernetes
+# GCP — a raw OAuth2 access token instead of a key file
+enumeraga cloud gcp --gcp-token /path/to/token.txt --project <project-id>
+
+# Any provider — also run nuclei's cloud/exposure templates against a URL
+enumeraga cloud aws --nuclei-url https://app.example.com
+
+# Kubernetes — kubenumerate against the current kubeconfig context
 enumeraga cloud k8s
 ```
 
@@ -287,7 +308,7 @@ enumeraga cloud k8s
 
 ### Requirements
 
-- Go 1.23 or later
+- Go 1.26 or later
 - Linux (Kali recommended for tool availability)
 - Root/sudo privileges (for nmap privileged scans)
 
@@ -296,9 +317,22 @@ enumeraga cloud k8s
 ```bash
 git clone https://github.com/0x5ubt13/enumeraga.git
 cd enumeraga
-go build -o enumeraga main.go
+make build          # version-stamped, PIE, -trimpath, stripped
 sudo ./enumeraga infra -h
 ```
+
+`go build -o enumeraga main.go` also works; it just produces an unstamped binary that reports its version as `dev`.
+
+### Debian / Kali package
+
+On Kali, `build-deb-package.sh` installs the build prerequisites, builds the binary with `make build` and packages it. Only the `apt` step runs as root (via `sudo` if you are not already); the build itself is unprivileged.
+
+```bash
+./build-deb-package.sh
+sudo apt install ../enumeraga_*.deb
+```
+
+The package's `Depends` pulls in the Kali-packaged tools the infrastructure scanner wraps (nmap, netexec, hydra, nikto, …), so a fresh machine needs nothing else for `enumeraga infra`. Cloud tools that have no Kali package (gcloud, Prowler, ScoutSuite, gcp-iam-brute) are not included. Set `KALI_BUILD_ALLOW_NONKALI=1` to try the build on another Debian derivative.
 
 ### Quick install (download latest release)
 
@@ -418,6 +452,17 @@ A scan in which any tool fell short is labelled **PARTIAL COVERAGE** in the summ
 
 **CloudFox version.** The cloud image pins CloudFox to **v2.0.5** (`internal/cloud/Dockerfile`, mirrored by `CloudfoxPinnedVersion` in `internal/installer/github.go`; a test asserts the two agree). The pin exists because CloudFox takes its Azure scope from the command line: a release that renames those flags makes every Azure inventory run a no-op that still exits 0. Before raising it, check that `cloudfox azure inventory --help` still accepts `--subscription` and `--tenant`.
 
+### Drive it from an AI agent (MCP server)
+
+[`mcp-server-enumeraga/`](mcp-server-enumeraga/README.md) exposes `enumeraga_infra_scan`, `enumeraga_cloud_scan`, `enumeraga_pull_images` and `enumeraga_check_docker` to any MCP client, running each scan in one of the containers above. Install it with pipx, pinned to a release tag so every machine runs the same server:
+
+```bash
+pipx install "git+https://github.com/0x5ubt13/enumeraga@v0.7.0-beta#subdirectory=mcp-server-enumeraga"
+claude mcp add enumeraga -- mcp-server-enumeraga     # Claude Code; other clients in the server README
+```
+
+The server README covers the HTTP mode for shared or remote use (`docker compose up -d` in that directory), how results are mapped back to the host, and the scope arguments such as `subscription` for Azure.
+
 ## Flow chart
 
 ```mermaid
@@ -536,25 +581,20 @@ flowchart TD
 
 ## Protocols Enumerated
 
-- FTP (20-21)
-- SSH (22)
-- SMTP (25, 465, 587)
-- DNS (53)
-- Finger (79)
-- HTTP/HTTPS (80, 443, 8080, 8443)
-- Kerberos (88)
-- POP3/IMAP (110, 143, 993, 995)
-- MSRPC (135, 593)
-- NetBIOS/SMB (137-139, 445)
-- SNMP (161)
-- LDAP (389, 636)
-- R-Services (512-514)
-- Rsync (873)
-- NFS (2049)
-- MySQL (3306)
-- RDP (3389)
-- WinRM (5985-5986)
-- Webmin/NDMP (10000)
+Ports are grouped by protocol and handed to a dedicated handler. Anything not listed is service-detected, and probed as HTTP/HTTPS if it answers like a web server.
+
+| Group | Protocol (ports) |
+|-------|------------------|
+| **File transfer** | FTP (20, 21), Rsync (873), NFS (2049), iSCSI (3260) |
+| **Remote access** | SSH (22), Telnet (23), RDP (3389), WinRM (5985, 5986), VNC (5900-5903) |
+| **Mail** | SMTP (25, 465, 587), IMAP (143, 993), POP3 (110, 995) |
+| **Web** | HTTP (80, 8080), HTTPS (443), plus any other port that serves HTTP/HTTPS |
+| **Windows / directory** | NetBIOS/SMB (137-139, 445), Kerberos (88), LDAP (389, 3268), LDAPS (636, 3269), MSRPC (135, 593) |
+| **Databases** | MySQL (3306), PostgreSQL (5432, 5433), MSSQL (1433), Oracle TNS (1521-1529) |
+| **OT / ICS** | Modbus (502), Siemens S7 (102), PROFINET (34964/UDP) |
+| **Network services** | DNS (53), Finger (79), RPCbind (111), Ident (113), SNMP (161, 162, 10161, 10162/UDP), NTP (123/UDP), IPsec/IKE (500/UDP), IPMI (623/UDP), R-services (512-514), Webmin/NDMP (10000) |
+| **Media / messaging** | SIP (5060), RTSP (554, 8554), IRC (194, 6660-6669, 7000), IPP/CUPS (631) |
+| **Java** | RMI registry (1050, 1098, 1099) |
 
 ## Development
 
@@ -580,18 +620,25 @@ golangci-lint run
 enumeraga/
 ├── main.go                    # Entry point
 ├── internal/
+│   ├── bounds/               # Bounded-scan contract (--ports, --rate, ...)
 │   ├── checks/               # CLI argument parsing
-│   ├── commands/             # Tool execution wrappers
 │   ├── cloud/                # Cloud scanning logic
 │   ├── cloudScanner/         # Cloud provider handlers
+│   ├── commands/             # Tool execution wrappers and process-group termination
 │   ├── config/               # Configuration management
+│   ├── dockerhygiene/        # Checks that the Dockerfiles keep their guarantees
 │   ├── infra/                # Infrastructure scanning logic
-│   ├── portsIterator/        # Protocol-specific handlers
+│   ├── installer/            # Tool installation and consent prompts
+│   ├── portsIterator/        # Port routing and protocol-specific handlers
+│   ├── runrecord/            # Per-run run.jsonl writer
 │   ├── scans/                # Nmap wrapper functions
 │   ├── types/                # Type definitions
 │   └── utils/                # Shared utilities
-├── Dockerfile                # Infrastructure container
-└── internal/cloud/Dockerfile # Cloud scanning container
+├── debian/                    # Debian/Kali packaging
+├── build-deb-package.sh       # Builds the .deb on Kali
+├── mcp-server-enumeraga/      # MCP server that drives scans in containers
+├── Dockerfile                 # Infrastructure container
+└── internal/cloud/Dockerfile  # Cloud scanning container
 ```
 
 ## The motivation
