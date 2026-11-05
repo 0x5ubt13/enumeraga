@@ -9,8 +9,8 @@ Every template shares the same invariants:
 - After a scan the tool prints `Results saved to: <path>`. **Move** (`mv`, not `cp`) the contents into the working directory so the shared results directory keeps no client data.
 - Never overwrite, edit, or delete existing files in the working directory.
 - Stop and report on any auth/setup error — do not work around it or create credentials.
-- Scans run for many minutes. A client-side timeout does **not** mean failure — never re-invoke the tool (that spawns a duplicate). Use `detach: true` and poll `docker logs <id>`, or wait. The server also refuses duplicate concurrent scans and names the running container.
-- While a scan container is **still listed by `docker ps`, it is alive — treat it as running, not stalled or dead**, even if its logs are quiet for several minutes. Prowler in particular runs ~187 checks largely silently before writing its report, so long gaps with no new log lines are normal. Do **not** `docker stop`/`kill` it, do **not** declare the scan failed, and do **not** re-run the tool. Only conclude it finished when the container disappears from `docker ps` (it is `--rm`).
+- Scans run for many minutes. A client-side timeout does **not** mean failure: never re-invoke the tool (that spawns a duplicate). Use `detach: true`, which returns a Scan ID. Poll `enumeraga_scan_status(scan_id=…)` every 60–120 s until `stage` is `finished` or `failed`; relay `summary`. Do not call `docker logs`. The server also refuses duplicate concurrent scans and names the running scan.
+- While `stage` is `running`, the scan is alive, even if `summary` is unchanged for several minutes. If `summary` says "container state unknown: docker did not answer; poll again", that is not a failure: keep polling. Prowler in particular runs ~187 checks largely silently before writing its report, so long gaps are normal. Do **not** `docker stop`/`kill` the container, do **not** declare the scan failed before `stage` says so, and do **not** re-run the tool. If `total_is_provisional` is true, the total may still grow, so do not call the percentage final.
 
 ---
 
@@ -31,7 +31,7 @@ Task: run an Azure cloud security assessment of subscription <SUBSCRIPTION_ID> o
 
 1. Before anything, read ./AGENTS.md and every existing az_*.json / scope file already in this directory for context. I have already run the az commands. Do not re-run them or send new az commands unless something needed is genuinely missing, and never overwrite, edit, or delete any existing file in this directory.
 2. Call enumeraga_cloud_scan with exactly: provider="azure", subscription="<SUBSCRIPTION_ID>", detach=true. Do not pass — or ask me for — tenant, client_id, or client_secret. Authentication uses the host's existing az login. Do not create a service principal.
-3. The tool returns immediately with a Container ID and the results path. The scan then runs in the background for several minutes — do NOT call the tool again (a second call is a duplicate). Poll progress with `docker logs --tail 30 <ID>`; the scan is finished once `docker ps` no longer lists that container.
+3. The tool returns immediately with a Scan ID and the results path. The scan then runs in the background for several minutes. Do NOT call the tool again (a second call is a duplicate). Poll `enumeraga_scan_status(scan_id=…)` every 60–120 s until `stage` is `finished` or `failed`; relay `summary`.
 4. Once finished, move (mv, not cp) the contents of the results path into the current directory, then tell me the local location and summarise the findings.
 
 Hard constraints: stay strictly inside subscription <SUBSCRIPTION_ID>; never scan another subscription or tenant. A timeout or slow response is not a failure — never re-invoke the scan tool. If the tool reports an az login / setup error, stop and tell me — do not work around it, mount credentials, or create a service principal.
@@ -54,7 +54,7 @@ Task: run an AWS cloud security assessment using my mounted credentials.
 
 1. Read any existing context files in this directory; do not overwrite, edit, or delete them.
 2. Call enumeraga_cloud_scan with provider="aws", detach=true (add profile="<AWS_PROFILE>" only if I name a specific profile). Credentials come from the mounted ~/.aws — do not ask me to paste keys.
-3. The tool returns immediately with a Container ID and results path; the scan runs in the background. Do NOT call the tool again. Poll `docker logs --tail 30 <ID>`; done when `docker ps` no longer lists it. Then mv the contents of the results path into the current directory and summarise the findings.
+3. The tool returns immediately with a Scan ID and results path; the scan runs in the background. Do NOT call the tool again. Poll `enumeraga_scan_status(scan_id=…)` every 60–120 s until `stage` is `finished` or `failed`; relay `summary`. Then mv the contents of the results path into the current directory and summarise the findings.
 
 If the tool reports a credentials error, stop and tell me. A timeout is not a failure — never re-invoke the tool.
 ```
@@ -70,7 +70,7 @@ Task: run a GCP cloud security assessment.
 
 1. Read any existing context files in this directory; do not overwrite, edit, or delete them.
 2. Call enumeraga_cloud_scan with provider="gcp", detach=true. Credentials come from the mounted gcloud config / application default credentials — do not ask me to paste a key.
-3. The tool returns immediately with a Container ID and results path; the scan runs in the background. Do NOT call the tool again. Poll `docker logs --tail 30 <ID>`; done when `docker ps` no longer lists it. Then mv the contents of the results path into the current directory and summarise the findings.
+3. The tool returns immediately with a Scan ID and results path; the scan runs in the background. Do NOT call the tool again. Poll `enumeraga_scan_status(scan_id=…)` every 60–120 s until `stage` is `finished` or `failed`; relay `summary`. Then mv the contents of the results path into the current directory and summarise the findings.
 
 If the tool reports an auth error, stop and tell me. A timeout is not a failure — never re-invoke the tool.
 ```
@@ -86,7 +86,7 @@ Task: enumerate <TARGET> (a single IP, hostname, or comma-separated list). I hav
 
 1. Read any existing context files in this directory; do not overwrite, edit, or delete them.
 2. Call enumeraga_infra_scan with target="<TARGET>", detach=true. Add brute=true only if I ask for bruteforce/fuzzing, and top_ports="<N>" only if I ask to limit the port range.
-3. The tool returns immediately with a Container ID and results path; the scan runs in the background. Do NOT call the tool again. Poll `docker logs --tail 30 <ID>`; done when `docker ps` no longer lists it. Then mv the contents of the results path into the current directory and summarise the findings.
+3. The tool returns immediately with a Scan ID and results path; the scan runs in the background. Do NOT call the tool again. Poll `enumeraga_scan_status(scan_id=…)` every 60–120 s until `stage` is `finished` or `failed`; relay `summary`. Then mv the contents of the results path into the current directory and summarise the findings.
 
 Stay strictly to <TARGET>; do not scan anything else. A timeout is not a failure — never re-invoke the tool. Stop and tell me on any error.
 ```
