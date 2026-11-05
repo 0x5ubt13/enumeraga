@@ -8,6 +8,7 @@ import os
 import socket
 import stat
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, NamedTuple
 
@@ -21,9 +22,28 @@ from starlette.routing import Route, Mount
 from starlette.requests import Request
 from starlette.responses import Response
 
+from . import jobs
+from .jobs import (
+    CONTAINER_NAME_PATTERN, SCAN_ID_PATTERN, Job, JobStore, container_name_for,
+    detach_args, launch_detached, new_scan_id, now_iso,
+)
+from .scan_status import (
+    ContainerInfo,
+    build_status,
+    derive_stage,
+    parse_log_progress,
+    parse_ts,
+    read_closing_run_line,
+    read_progress,
+    redact,
+    strip_ansi,
+)
+
 # Docker image names (published on Docker Hub)
 INFRA_IMAGE = "gagarter/enumeraga_infra:latest"
 CLOUD_IMAGE = "gagarter/enumeraga_cloud:latest"
+# The cloud providers the scan tool accepts, by their canonical names only.
+CLOUD_PROVIDERS = ("aws", "azure", "gcp", "oci", "aliyun", "do")
 
 # When this server runs inside a container (SSE/compose mode), bind-mount sources
 # passed to sibling `docker run` calls are resolved by the host daemon, not by this
@@ -39,6 +59,17 @@ HOST_OUTPUT_DIR = os.environ.get("ENUMERAGA_HOST_OUTPUT_DIR")
 # this same path inside this container so the existence check and the sibling mount
 # both resolve. Falls back to ~/.azure directly when running on the host (stdio mode).
 HOST_AZURE_DIR = os.environ.get("ENUMERAGA_HOST_AZURE_DIR")
+
+# Detached scans known to this server process. A job file in each scan's output
+# directory lets a later process find scans started before a restart.
+JOBS = JobStore()
+
+# How long a detached call waits in-process before replying. A missing image is
+# pulled in the background, so this only catches a launch that fails at once.
+DETACH_WAIT_S = 3
+
+# Bound on each docker query made by enumeraga_scan_status, which must stay quick.
+STATUS_DOCKER_TIMEOUT_S = 3
 
 
 # Define available tools
@@ -90,7 +121,10 @@ TOOLS: list[Tool] = [
                 },
                 "detach": {
                     "type": "boolean",
-                    "description": "Run in background (detached mode) to avoid timeouts. Returns Container ID.",
+                    "description": (
+                        "Run in background (detached mode) to avoid timeouts. Returns a Scan ID "
+                        "straight away; poll enumeraga_scan_status with it for progress."
+                    ),
                     "default": False,
                 },
                 "nmap_only": {
@@ -207,7 +241,7 @@ TOOLS: list[Tool] = [
             "properties": {
                 "provider": {
                     "type": "string",
-                    "enum": ["aws", "azure", "gcp", "oci", "aliyun", "do"],
+                    "enum": list(CLOUD_PROVIDERS),
                     "description": "Cloud service provider to scan",
                 },
                 "profile": {
@@ -277,7 +311,10 @@ TOOLS: list[Tool] = [
                 },
                 "detach": {
                     "type": "boolean",
-                    "description": "Run in background (detached mode) to avoid timeouts. Returns Container ID.",
+                    "description": (
+                        "Run in background (detached mode) to avoid timeouts. Returns a Scan ID "
+                        "straight away; poll enumeraga_scan_status with it for progress."
+                    ),
                     "default": False,
                 },
             },
@@ -310,6 +347,34 @@ TOOLS: list[Tool] = [
         inputSchema={
             "type": "object",
             "properties": {},
+        },
+    ),
+    Tool(
+        name="enumeraga_scan_status",
+        description=(
+            "Report the stage and progress of a detached infra or cloud scan as a small JSON "
+            "object whose 'summary' field is one line ready to relay. Pass at least one of "
+            "'scan_id' (preferred, returned by a detached scan) or 'output_dir' (the results "
+            "path a scan reported, which also finds a scan started before a server restart). "
+            "Read-only and quick: it never starts, stops or retries anything and returns within "
+            "a few seconds. Poll every 60–120 s; do not call docker logs."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "scan_id": {
+                    "type": "string",
+                    "description": "The Scan ID returned by a detached enumeraga_infra_scan or enumeraga_cloud_scan.",
+                },
+                "output_dir": {
+                    "type": "string",
+                    "description": (
+                        "The results path a scan reported under 'Results saved to:', or the "
+                        "sub-folder name it was started with. Confined to the server's results "
+                        "directory exactly as scan output paths are."
+                    ),
+                },
+            },
         },
     ),
 ]
@@ -360,6 +425,33 @@ def _confine_under(base: Path, requested: str) -> Path:
     return target
 
 
+def _output_base() -> Path:
+    """The directory every scan's output is confined under."""
+    return Path(HOST_OUTPUT_DIR) if HOST_OUTPUT_DIR else (Path.cwd() / "enumeraga_output")
+
+
+def resolve_status_dir(requested: str) -> Path:
+    """Resolve an output_dir given to enumeraga_scan_status, without creating anything.
+
+    A caller usually passes back the absolute path a scan reported, which is already
+    under the base, so its relative part is confined rather than the whole path (which
+    would otherwise be re-rooted as base/<base>). Anything else, absolute or not, is
+    confined under the base exactly as a scan's output_dir is, so the result names the
+    same directory, in the same string form, as resolve_output_source.
+    """
+    base = _output_base()
+    path = Path(requested)
+    if path.is_absolute():
+        if path == base:
+            return base
+        try:
+            relative = path.relative_to(base)
+        except ValueError:
+            return _confine_under(base, requested)
+        return _confine_under(base, str(relative))
+    return _confine_under(base, requested)
+
+
 def resolve_output_source(args: dict[str, Any]) -> str:
     """Return the bind-mount source for the output directory, always confined to a base.
 
@@ -369,7 +461,7 @@ def resolve_output_source(args: dict[str, Any]) -> str:
     ever a confined sub-folder of the base — it can never select an arbitrary host path.
     """
     requested = args.get("output_dir")
-    base = Path(HOST_OUTPUT_DIR) if HOST_OUTPUT_DIR else (Path.cwd() / "enumeraga_output")
+    base = _output_base()
     target = _confine_under(base, requested) if requested else base
     target.mkdir(parents=True, exist_ok=True)
     if HOST_OUTPUT_DIR:
@@ -652,22 +744,226 @@ async def run_command(
         raise RuntimeError(f"Failed to execute command: {e}")
 
 
-async def running_scan_name(key: str) -> str | None:
-    """Name of an already-running enumeraga scan container with this key, or None.
+class RunningScan(NamedTuple):
+    """A running enumeraga scan container found by its duplicate-detection key."""
+
+    name: str
+    # The enumeraga.scan_id label, set only on a detached scan; None otherwise.
+    scan_id: str | None
+
+
+async def running_scan_name(key: str) -> RunningScan | None:
+    """The already-running enumeraga scan container with this key, or None.
 
     Used to refuse duplicate concurrent scans (see scan_key). Best-effort: if the docker
     query fails for any reason we return None and let the scan proceed rather than block.
+    The timeout is short so a detached call stays near its few-second budget.
     """
     try:
         out = await run_command(
             ["docker", "ps", "--filter", f"label=enumeraga.key={key}",
-             "--format", "{{.Names}}"],
-            timeout=10,
+             "--format", '{{.Names}}|{{.Label "enumeraga.scan_id"}}'],
+            timeout=3,
         )
     except Exception:
         return None
-    names = [n for n in out.splitlines() if n.strip()]
-    return names[0] if names else None
+    for line in out.splitlines():
+        name, _, scan_id = line.strip().partition("|")
+        if name.strip():
+            scan_id = scan_id.strip()
+            return RunningScan(name.strip(), scan_id if SCAN_ID_PATTERN.match(scan_id) else None)
+    return None
+
+
+def _running_duplicate_refusal(lead: str, running: RunningScan, arguments: dict[str, Any]) -> str:
+    """Refuse a duplicate of a scan whose container is already running.
+
+    Points at enumeraga_scan_status rather than docker logs: by scan_id for a detached
+    scan, otherwise by the results path, which finds a scan started without one.
+    Stopping stays a manual step.
+    """
+    if running.scan_id:
+        check = f"enumeraga_scan_status(scan_id={running.scan_id})"
+    else:
+        try:
+            results = resolve_output_source(arguments)
+        except Exception:
+            results = "<the results path it reported>"
+        check = f"enumeraga_scan_status(output_dir={results})"
+    return (
+        f"{lead} (container {running.name}). Not starting a duplicate. Wait for it to "
+        f"finish, check progress with {check} every 60–120 s, or stop it with "
+        f"`docker stop {running.name}` if it is stuck. Do not retry this tool meanwhile."
+    )
+
+
+async def image_present(image: str) -> bool:
+    """Whether the image is available locally (looked up through run_command)."""
+    return await jobs.image_present(image, run_command)
+
+
+class _DockerUnknown:
+    """Marker for "docker did not say": a timeout, a daemon error or unreadable output."""
+
+    def __repr__(self) -> str:
+        return "DOCKER_UNKNOWN"
+
+
+DOCKER_UNKNOWN = _DockerUnknown()
+
+_NO_SUCH_CONTAINER = ("no such object", "no such container")
+
+
+async def container_info(name: str) -> ContainerInfo | None | _DockerUnknown:
+    """State of the named container.
+
+    None means docker answered that the container does not exist, which (with --rm)
+    is evidence that it has gone. DOCKER_UNKNOWN means docker gave no usable answer;
+    that must never be read as the container having gone, or one slow inspect on a
+    loaded host would report a healthy scan as failed.
+
+    A name this server would never have given a scan container is treated as not
+    found without asking docker, so a crafted job file cannot reach another
+    container or smuggle in an option.
+    """
+    if not CONTAINER_NAME_PATTERN.match(name):
+        return None
+    try:
+        out = await run_command(
+            ["docker", "inspect", "--format",
+             "{{.Id}}|{{.Name}}|{{.State.Status}}|{{.State.ExitCode}}", name],
+            timeout=STATUS_DOCKER_TIMEOUT_S,
+        )
+    except Exception as exc:
+        text = str(exc).lower()
+        if any(marker in text for marker in _NO_SUCH_CONTAINER):
+            return None
+        return DOCKER_UNKNOWN
+    line = next((ln.strip() for ln in out.splitlines() if ln.strip()), "")
+    parts = line.split("|")
+    if len(parts) != 4 or not parts[2]:
+        return DOCKER_UNKNOWN
+    cid, cname, state, code = parts
+    exit_code: int | None = None
+    # docker reports ExitCode 0 for a container that has not exited yet.
+    if state in ("exited", "dead"):
+        try:
+            exit_code = int(code)
+        except ValueError:
+            exit_code = None
+    return ContainerInfo(cid, cname.lstrip("/"), state, exit_code)
+
+
+async def recent_log_lines(name: str, n: int = 200) -> list[str]:
+    """The container's last n log lines, stdout and stderr merged, ANSI stripped.
+
+    An empty list means the call failed. Callers must still redact the lines.
+    A name this server would never have given a scan container yields no lines and
+    no docker call.
+    """
+    if not CONTAINER_NAME_PATTERN.match(name):
+        return []
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "docker", "logs", "--tail", str(n), name,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        try:
+            out, _ = await asyncio.wait_for(
+                process.communicate(), timeout=STATUS_DOCKER_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return []
+    except Exception:
+        return []
+    if process.returncode != 0:
+        return []
+    return [strip_ansi(line) for line in out.decode(errors="replace").splitlines()]
+
+
+def _status_not_found(scan_id: str | None, reason: str | None, results_path: str | None) -> dict:
+    return build_status(
+        scan_id=scan_id, stage="not_found", reason=reason, progress=None,
+        log_progress=None, closing=None, container=None, results_path=results_path,
+        job_created_at=None, last_log_lines=[], now=datetime.now(timezone.utc),
+    )
+
+
+async def scan_status(scan_id: str | None, output_dir: str | None) -> dict:
+    """Work out a scan's stage and progress. Read-only; bounded by short docker timeouts."""
+    job: Job | None = JOBS.get(scan_id) if scan_id else None
+    orphaned = False
+    if job is not None:
+        directory = Path(job.output_dir)
+    elif output_dir:
+        directory = resolve_status_dir(output_dir)
+        job, orphaned = JOBS.load_from_dir(directory)
+        if scan_id and (job is None or job.scan_id != scan_id):
+            return _status_not_found(scan_id, None, str(directory))
+    else:
+        return _status_not_found(
+            scan_id,
+            "unknown scan_id in this server session; pass output_dir to look up a scan "
+            "started earlier",
+            None,
+        )
+
+    container = None
+    container_known = False
+    if job is not None:
+        found = await container_info(job.container_name)
+        if found is not DOCKER_UNKNOWN:
+            container, container_known = found, True
+        try:
+            not_before = parse_ts(job.created_at)
+        except ValueError:
+            not_before = None
+        progress = read_progress(
+            directory, kind=job.kind, target=job.target, not_before=not_before)
+    else:
+        progress = read_progress(directory, kind=None, target=None, not_before=None)
+        not_before = None
+        if progress is not None:
+            try:
+                not_before = parse_ts(str(progress.get("started_at")))
+            except ValueError:
+                not_before = None
+    closing = read_closing_run_line(
+        directory, target=job.target if job else None, not_before=not_before)
+
+    log_progress = None
+    log_lines: list[str] = []
+    if job is not None and container is not None:
+        secrets = job.secrets
+        raw = await recent_log_lines(job.container_name)
+        # Redacted before parsing, so no unredacted text can reach progress.running
+        # or the summary.
+        log_lines = [redact(strip_ansi(line), secrets) for line in raw if line.strip()]
+        if log_lines:
+            log_progress = parse_log_progress(log_lines)
+
+    stage, reason = derive_stage(
+        job.stage if job else None, orphaned, container, container_known, progress, closing)
+    if job is not None and job.stage == "failed":
+        reason = job.error or reason
+    if stage == "pulling_image" and job is not None:
+        reason = job.image
+
+    return build_status(
+        scan_id=job.scan_id if job else scan_id,
+        stage=stage,
+        reason=reason,
+        progress=progress,
+        log_progress=log_progress,
+        closing=closing,
+        container=container,
+        results_path=str(directory),
+        job_created_at=job.created_at if job else None,
+        last_log_lines=log_lines,
+        now=datetime.now(timezone.utc),
+    )
 
 
 async def pull_docker_image(image: str) -> str:
@@ -749,27 +1045,105 @@ def scan_outcome_message(info_msg: str, scan_kind: str, body: str, output_dir: s
     return f"{info_msg}{headline}\n\n{body}\n\nResults saved to: {output_dir}{RESULTS_HANDLING}"
 
 
+def _active_job_refusal(job: Job) -> str:
+    """Refuse a duplicate while an identical detached scan is still pulling or starting."""
+    return (
+        f"An identical scan is already in progress (scan {job.scan_id}, stage {job.stage}). "
+        f"Not starting a duplicate. Check it with "
+        f"enumeraga_scan_status(scan_id={job.scan_id}). Do not retry this tool meanwhile."
+    )
+
+
+async def _start_detached(
+    *,
+    kind: str,
+    key: str,
+    target: str,
+    image: str,
+    cmd: list[str],
+    extra_env: dict[str, str] | None,
+    scan_id: str,
+    output_dir: str,
+    info_msg: str,
+    scan_kind: str,
+) -> str:
+    """Record a detached scan, launch it in the background and reply without waiting.
+
+    A missing image is pulled by the background task, so the reply comes back within
+    DETACH_WAIT_S whatever the pull costs; the caller then polls enumeraga_scan_status.
+    """
+    present = await image_present(image)
+    job = Job(
+        scan_id=scan_id,
+        kind=kind,
+        key=key,
+        target=target,
+        image=image,
+        output_dir=output_dir,
+        stage="starting" if present else "pulling_image",
+        created_at=now_iso(),
+        container_name=container_name_for(scan_id),
+        # Held in memory only, to redact status output; never written to the job file.
+        secrets=frozenset((extra_env or {}).values()),
+    )
+    # Re-checked here because the awaits since the caller's check let an identical
+    # concurrent call get this far too; nothing between this check and add() yields.
+    active = JOBS.active_for_key(key)
+    if active is not None:
+        return _active_job_refusal(active)
+    JOBS.add(job)
+    JOBS.save(job)
+
+    task = asyncio.create_task(
+        launch_detached(job, cmd, extra_env, JOBS, run=run_command))
+    JOBS.tasks.add(task)
+    task.add_done_callback(JOBS.tasks.discard)
+    await asyncio.wait({task}, timeout=DETACH_WAIT_S)
+
+    if job.stage == "failed":
+        # The id is still useful: enumeraga_scan_status reports the job's error.
+        return f"Scan ID: {scan_id}\n" + scan_outcome_message(
+            info_msg, scan_kind, job.error or "launch failed", output_dir, clean=False)
+
+    # "launched" is the job's own bookkeeping; to the caller the container is running.
+    stage = "running" if job.stage == "launched" else job.stage
+    return (
+        "Scan started in detached mode.\n"
+        f"Scan ID: {scan_id}\n"
+        f"Stage: {stage}\n"
+        f"Container: {job.container_name}\n\n"
+        f"Results saved to: {output_dir}\n"
+        f"Poll progress with enumeraga_scan_status(scan_id={scan_id}) every 60–120 s; "
+        f"do not call docker logs.{RESULTS_HANDLING}"
+    )
+
+
 async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool execution requests."""
     print(f"Executing tool: {name} with args: {arguments}", file=sys.stderr)
     try:
         if name == "enumeraga_infra_scan":
+            key = scan_key("infra", arguments)
+            # A detached scan that is still pulling or starting has no container yet,
+            # so docker cannot see it; the job store can.
+            active = JOBS.active_for_key(key)
+            if active is not None:
+                return [TextContent(type="text", text=_active_job_refusal(active))]
             # Refuse to start a duplicate while an identical scan is already running.
-            existing = await running_scan_name(scan_key("infra", arguments))
+            existing = await running_scan_name(key)
             if existing:
-                return [TextContent(type="text", text=(
-                    f"An infrastructure scan of {arguments.get('target')} is already running "
-                    f"(container {existing}). Not starting a duplicate. Wait for it to finish, "
-                    f"check progress with `docker logs {existing}`, or stop it with "
-                    f"`docker stop {existing}` if it is stuck. Do not retry this tool meanwhile."
+                return [TextContent(type="text", text=_running_duplicate_refusal(
+                    f"An infrastructure scan of {arguments.get('target')} is already running",
+                    existing, arguments,
                 ))]
             cmd = build_docker_infra_command(arguments)
 
             # Handle detached mode
             detached = arguments.get("detach", False)
+            scan_id = None
             if detached:
-                # Insert -d after "run"
-                cmd.insert(2, "-d")
+                scan_id = new_scan_id()
+                cmd = detach_args(cmd, scan_id)
 
             # Inform user about the scan
             target = arguments["target"]
@@ -779,6 +1153,13 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
             info_msg += f"Output directory: {output_dir}\n"
             info_msg += f"Docker command: {' '.join(cmd)}\n\n"
             info_msg += "This may take several minutes depending on the target...\n\n"
+
+            if detached:
+                return [TextContent(type="text", text=await _start_detached(
+                    kind="infra", key=key, target=target, image=INFRA_IMAGE, cmd=cmd,
+                    extra_env=None, scan_id=scan_id, output_dir=output_dir,
+                    info_msg=info_msg, scan_kind="Infrastructure scan",
+                ))]
 
             # A failed scan still has to report where its artefacts are: the tools
             # that ran before the failure wrote real output, and the only path that
@@ -794,14 +1175,6 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
                     )
                 ]
 
-            if detached:
-                 return [
-                    TextContent(
-                        type="text",
-                        text=f"Scan started in detached mode.\nContainer ID: {output.strip()}\n\nResults saved to: {output_dir}\nCheck container logs: docker logs {output.strip()}{RESULTS_HANDLING}",
-                    )
-                ]
-
             return [
                 TextContent(
                     type="text",
@@ -811,23 +1184,36 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
             ]
 
         elif name == "enumeraga_cloud_scan":
-            # Refuse to start a duplicate while an identical scan is already running.
-            existing = await running_scan_name(scan_key("cloud", arguments))
-            if existing:
+            # Checked before any job or docker call. enumeraga itself accepts aliases
+            # (amazon, gcloud, ...), but the schema's names are the contract: an
+            # alias would produce a different duplicate key for the same scope.
+            provider_arg = arguments.get("provider")
+            if provider_arg not in CLOUD_PROVIDERS:
                 return [TextContent(type="text", text=(
+                    f"Error: unsupported cloud provider {provider_arg!r}. Use one of: "
+                    f"{', '.join(CLOUD_PROVIDERS)}. Not starting a scan."
+                ))]
+            key = scan_key("cloud", arguments)
+            active = JOBS.active_for_key(key)
+            if active is not None:
+                return [TextContent(type="text", text=_active_job_refusal(active))]
+            # Refuse to start a duplicate while an identical scan is already running.
+            existing = await running_scan_name(key)
+            if existing:
+                return [TextContent(type="text", text=_running_duplicate_refusal(
                     f"A {arguments.get('provider')} cloud scan for this scope is already "
-                    f"running (container {existing}). Not starting a duplicate — this prevents "
-                    f"racing scans on the same output and repeated cloud API calls. Wait for it "
-                    f"to finish, check progress with `docker logs {existing}`, or stop it with "
-                    f"`docker stop {existing}` if it is stuck. Do not retry this tool meanwhile."
+                    f"running; a duplicate would race on the same output and repeat cloud "
+                    f"API calls",
+                    existing, arguments,
                 ))]
             cmd, extra_env = build_docker_cloud_command(arguments)
 
             # Handle detached mode
             detached = arguments.get("detach", False)
+            scan_id = None
             if detached:
-                # Insert -d after "run"
-                cmd.insert(2, "-d")
+                scan_id = new_scan_id()
+                cmd = detach_args(cmd, scan_id)
 
             provider = arguments["provider"]
             output_dir = resolve_output_source(arguments)
@@ -838,6 +1224,13 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
             # value is never present in this displayed command string.
             info_msg += f"Docker command: {' '.join(cmd)}\n\n"
             info_msg += "This may take several minutes...\n\n"
+
+            if detached:
+                return [TextContent(type="text", text=await _start_detached(
+                    kind="cloud", key=key, target=provider, image=CLOUD_IMAGE, cmd=cmd,
+                    extra_env=extra_env, scan_id=scan_id, output_dir=output_dir,
+                    info_msg=info_msg, scan_kind="Cloud assessment",
+                ))]
 
             # Cloud scanners routinely exit non-zero with their reports already
             # written -- prowler exits 3 when checks fail, ScoutSuite 200 when a
@@ -855,14 +1248,6 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
                     )
                 ]
 
-            if detached:
-                 return [
-                    TextContent(
-                        type="text",
-                        text=f"Scan started in detached mode.\nContainer ID: {output.strip()}\n\nResults saved to: {output_dir}\nCheck container logs: docker logs {output.strip()}{RESULTS_HANDLING}",
-                    )
-                ]
-
             return [
                 TextContent(
                     type="text",
@@ -870,6 +1255,17 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
                         info_msg, "Cloud assessment", output, output_dir, clean=True),
                 )
             ]
+
+        elif name == "enumeraga_scan_status":
+            scan_id = arguments.get("scan_id") or None
+            output_dir = arguments.get("output_dir") or None
+            if not scan_id and not output_dir:
+                return [TextContent(type="text", text=(
+                    "enumeraga_scan_status needs scan_id or output_dir: pass the Scan ID a "
+                    "detached scan returned, or the path it reported under 'Results saved to:'."
+                ))]
+            status = await scan_status(scan_id, output_dir)
+            return [TextContent(type="text", text=json.dumps(status))]
 
         elif name == "enumeraga_pull_images":
             image_choice = arguments.get("image", "both")
