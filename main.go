@@ -12,6 +12,7 @@ import (
 	"github.com/0x5ubt13/enumeraga/internal/checks"
 	"github.com/0x5ubt13/enumeraga/internal/commands"
 	"github.com/0x5ubt13/enumeraga/internal/portsIterator"
+	"github.com/0x5ubt13/enumeraga/internal/progress"
 	"github.com/0x5ubt13/enumeraga/internal/runrecord"
 	"github.com/0x5ubt13/enumeraga/internal/scans"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
@@ -37,12 +38,12 @@ func main() {
 	// every non-nil error as a failure made a completed cloud scan exit 1, which
 	// the MCP server surfaces to its caller as "Command failed with code 1" and
 	// which hides valid reports behind an apparent crash.
+	//
+	// A cloud scan stopped by a signal returns its own sentinel and exits 130,
+	// so a caller can tell partial results from a completed run.
 	totalLines, err := checks.Run()
 	if err != nil {
-		if utils.IsExitSuccess(err) {
-			os.Exit(0)
-		}
-		os.Exit(1)
+		os.Exit(utils.ExitCodeForError(err))
 	}
 
 	// Apply the run's wall-clock budget now the flags have been parsed. Signal
@@ -55,6 +56,13 @@ func main() {
 	// view of the invocation.
 	runrecord.Active = runrecord.Open(*checks.OptOutput)
 	defer runrecord.Active.Close()
+
+	progress.Active = progress.Open(*checks.OptOutput, progress.Meta{
+		Kind:       "infra",
+		Target:     *checks.OptTarget,
+		MaxRuntime: bounds.Active.MaxRuntime,
+	})
+	utils.ToolRegistry.SetObserver(progress.Active.Update)
 
 	runStart := time.Now()
 	runrecord.Active.Write(runrecord.Entry{
@@ -86,6 +94,7 @@ func main() {
 
 	// Main flow
 	flowErr := targetInit(totalLines)
+	progress.Active.DiscoveryDone()
 	if flowErr != nil {
 		utils.ErrorMsg(fmt.Sprintf("%s", flowErr))
 	}
@@ -101,29 +110,30 @@ func main() {
 
 	// A run stopped by its own wall-clock budget is not a failure: the artefacts
 	// produced so far are complete and valid. Exit 124 (the GNU timeout
-	// convention) so the caller can tell the two apart.
+	// convention) so the caller can tell the two apart. A run stopped by a
+	// signal (Ctrl+C, docker stop) exits 130 instead: its results are partial
+	// and it must not be recorded as finished.
 	deadlineHit := utils.RunDeadlineExceeded()
-	exitCode := 0
-	if deadlineHit {
-		exitCode = 124
-	}
+	exitCode := utils.RunExitCode(deadlineHit, utils.IsShuttingDown())
 	runEnd := time.Now()
-	runrecord.Active.Write(runrecord.Entry{
-		Kind:        runrecord.KindRun,
-		EndedAt:     &runEnd,
-		DeadlineHit: &deadlineHit,
-		ProcessExit: &exitCode,
-	})
+	runrecord.Active.Write(runrecord.ClosingLine(*checks.OptTarget, runEnd, deadlineHit, exitCode))
+	progress.Active.Finish(exitCode, deadlineHit)
 
-	if deadlineHit {
+	switch exitCode {
+	case utils.ExitDeadline:
 		utils.PrintCustomBiColourMsg("yellow", "red",
 			"[!] Wall-clock limit of ", bounds.Active.MaxRuntime.String(),
 			" reached. Results above are partial but valid.")
+	case utils.ExitInterrupted:
+		utils.PrintCustomBiColourMsg("yellow", "red",
+			"[!] Scan ", "stopped by a signal", ". Results above are partial.")
+	}
+	if exitCode != 0 {
 		// os.Exit skips deferred calls, so the record is flushed explicitly.
 		// Without this the flagship bounded case would be the one run with no
 		// closing line.
 		runrecord.Active.Close()
-		os.Exit(124)
+		os.Exit(exitCode)
 	}
 }
 

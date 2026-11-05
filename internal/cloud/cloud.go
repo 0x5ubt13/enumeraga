@@ -17,6 +17,7 @@ import (
 
 	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
 	"github.com/0x5ubt13/enumeraga/internal/config"
+	"github.com/0x5ubt13/enumeraga/internal/progress"
 	"github.com/0x5ubt13/enumeraga/internal/runrecord"
 	"github.com/0x5ubt13/enumeraga/internal/utils"
 	"github.com/pborman/getopt/v2"
@@ -337,13 +338,19 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 		StartedAt: &runStart,
 	})
 
+	progress.Active = progress.Open(*OptOutput, progress.Meta{Kind: "cloud", Target: provider, MaxRuntime: 0})
+	utils.ToolRegistry.SetObserver(progress.Active.Update)
+
 	cloudScanner.Run(cfg, OptVVerbose)
 
+	// A scan stopped by a signal (Ctrl+C, docker stop) is recorded as exit 130
+	// rather than as a completed run: its results are partial. The cloud path
+	// sets no wall-clock budget, but the shared helper keeps the rule in one place.
+	deadlineHit := utils.RunDeadlineExceeded()
+	exitCode := utils.RunExitCode(deadlineHit, utils.IsShuttingDown())
 	runEnd := time.Now()
-	runrecord.Active.Write(runrecord.Entry{
-		Kind:    runrecord.KindRun,
-		EndedAt: &runEnd,
-	})
+	runrecord.Active.Write(runrecord.ClosingLine(provider, runEnd, deadlineHit, exitCode))
+	progress.Active.Finish(exitCode, deadlineHit)
 
 	// Finish and show elapsed time
 	utils.FinishLine(start, utils.Interrupted)
@@ -351,6 +358,9 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	// Wait for goroutines to finish to terminate the program
 	utils.Wg.Wait()
 
+	if exitCode == utils.ExitInterrupted {
+		return utils.ErrCloudInterrupted
+	}
 	return utils.ErrCloudComplete
 }
 
