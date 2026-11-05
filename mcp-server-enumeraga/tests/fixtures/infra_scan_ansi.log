@@ -1,0 +1,5 @@
+[36m[+][0m Starting infra scan of 10.0.0.5
+[33m[!] Running 'nikto on port 443' (20 tools total, 2 running)[0m
+[34m[65%] Still running: ffuf on port 8080, nikto on port 443[0m
+[32m[!][0m AZURE_CLIENT_SECRET=s3cr3t-value
+[34m[70%] Still running: 12 tools[0m
