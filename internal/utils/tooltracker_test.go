@@ -1,8 +1,12 @@
 package utils
 
 import (
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/0x5ubt13/enumeraga/internal/progress"
 )
 
 // TestToolTrackerBasicFlow tests the basic tool tracking flow
@@ -442,5 +446,64 @@ func TestASkipOnOneLaunchLeavesItsSiblingsAlone(t *testing.T) {
 	}
 	if got := tracker.CountByStatus(ToolCompleted); got != 1 {
 		t.Errorf("completed = %d, want 1: a sibling's skip must not suppress this success", got)
+	}
+}
+
+func TestObserverSeesEveryMutation(t *testing.T) {
+	tracker := NewToolTracker()
+	var got []progress.Counts
+	tracker.SetObserver(func(c progress.Counts) { got = append(got, c) })
+
+	tracker.RegisterTool("a")
+	tracker.RegisterTool("b")
+	tracker.StartTool("a")
+	if len(got) != 3 || !reflect.DeepEqual(got[2].Running, []string{"a"}) {
+		t.Fatalf("after StartTool(a) want Running [a], got %+v", got)
+	}
+	tracker.CompleteTool("a", false)
+	tracker.SkipTool("b", "r")
+
+	if len(got) != 5 {
+		t.Fatalf("want 5 observer calls, got %d: %+v", len(got), got)
+	}
+	last := got[4]
+	if last.Completed != 2 || last.Failed != 1 || last.Skipped != 1 || last.Total != 2 || len(last.Running) != 0 {
+		t.Errorf("unexpected final counts: %+v", last)
+	}
+}
+
+func TestObserverNotCalledByNoteRate(t *testing.T) {
+	tracker := NewToolTracker()
+	tracker.RegisterTool("a")
+	calls := 0
+	tracker.SetObserver(func(progress.Counts) { calls++ })
+	tracker.NoteRate("a", "capped")
+	if calls != 0 {
+		t.Errorf("NoteRate notified the observer %d times", calls)
+	}
+}
+
+func TestObserverConcurrent(t *testing.T) {
+	tracker := NewToolTracker()
+	var last progress.Counts
+	tracker.SetObserver(func(c progress.Counts) { last = c })
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			name := tracker.RegisterTool(string(rune('A' + idx)))
+			tracker.StartTool(name)
+			tracker.CompleteTool(name, idx%2 == 0)
+		}(i)
+	}
+	wg.Wait()
+
+	if last.Total != tracker.GetTotal() {
+		t.Errorf("last observed Total %d, GetTotal %d", last.Total, tracker.GetTotal())
+	}
+	if last.Completed != 20 || last.Failed != 10 {
+		t.Errorf("unexpected final counts: %+v", last)
 	}
 }

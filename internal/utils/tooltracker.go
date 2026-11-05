@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/0x5ubt13/enumeraga/internal/progress"
 )
 
 type ToolStatus string
@@ -39,6 +41,47 @@ type ToolInfo struct {
 type ToolTracker struct {
 	mu    sync.RWMutex
 	tools map[string]*ToolInfo
+
+	// observer, when set, receives a snapshot after every state change. It is
+	// called with mu held, which keeps snapshots in the order the changes were
+	// made. Lock order: ToolTracker.mu first, then any lock the observer takes
+	// itself. An observer must therefore never call back into the tracker, and
+	// must not block.
+	observer func(progress.Counts)
+}
+
+// SetObserver installs fn to be told of every change made by RegisterTool,
+// StartTool, CompleteTool and SkipTool. NoteRate only annotates, so it does not
+// notify. Passing nil removes the observer. See the observer field for the lock
+// order and the restrictions on fn.
+func (t *ToolTracker) SetObserver(fn func(progress.Counts)) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.observer = fn
+}
+
+// notifyLocked reports the current counts to the observer, if there is one.
+// Callers must hold t.mu for writing.
+func (t *ToolTracker) notifyLocked() {
+	if t.observer == nil {
+		return
+	}
+	counts := progress.Counts{Total: len(t.tools), Running: []string{}}
+	for name, tool := range t.tools {
+		switch tool.Status {
+		case ToolRunning:
+			counts.Running = append(counts.Running, name)
+		case ToolFailed:
+			counts.Failed++
+		case ToolSkipped:
+			counts.Skipped++
+		}
+		if isFinished(tool.Status) {
+			counts.Completed++
+		}
+	}
+	sort.Strings(counts.Running)
+	t.observer(counts)
 }
 
 func NewToolTracker() *ToolTracker {
@@ -76,6 +119,7 @@ func (t *ToolTracker) RegisterTool(name string) string {
 		Name:   key,
 		Status: ToolPending,
 	}
+	t.notifyLocked()
 	return key
 }
 
@@ -85,6 +129,7 @@ func (t *ToolTracker) StartTool(name string) {
 	if tool, exists := t.tools[name]; exists {
 		tool.Status = ToolRunning
 		tool.StartTime = time.Now()
+		t.notifyLocked()
 	}
 }
 
@@ -111,6 +156,7 @@ func (t *ToolTracker) CompleteTool(name string, success bool) (completed, total 
 			tool.Status = ToolFailed
 		}
 		tool.EndTime = time.Now()
+		t.notifyLocked()
 	}
 
 	return t.progressLocked()
@@ -143,6 +189,7 @@ func (t *ToolTracker) SkipTool(name, reason string) {
 	tool.Status = ToolSkipped
 	tool.SkipReason = reason
 	tool.EndTime = time.Now()
+	t.notifyLocked()
 }
 
 // NoteRate records how a rate cap applied to a tool, for the summary block.
