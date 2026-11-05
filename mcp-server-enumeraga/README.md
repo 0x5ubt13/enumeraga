@@ -209,7 +209,7 @@ Run infrastructure enumeration using Docker container.
 - `top_ports` (optional, string): Scan only top N ports (e.g., "100"). Mutually exclusive with `ports`
 - `quiet` (optional, boolean): Suppress verbose output
 - `verbose` (optional, boolean): Very verbose debugging output
-- `detach` (optional, boolean): Run in the background to avoid client timeouts; returns a container ID
+- `detach` (optional, boolean): Run in the background to avoid client timeouts; returns a `scan_id` straight away (within a few seconds, even if the image has to be pulled first). Check progress with `enumeraga_scan_status`
 - `nmap_only` (optional, boolean): Run nmap scans only and skip the tool suite
 - `gentle` (optional, boolean): Throttle scans and tools. Cannot be combined with `rate` or `concurrency`
 - `timeout` (optional, integer): Maximum minutes for any single long-running tool (default 10)
@@ -233,7 +233,9 @@ Tools differ in what a `rate` cap can mean for them, and a tool with no throttle
 
 Validation lives in the scanner, not here. Passing `ports` with `top_ports`, or `gentle` with `rate`, is rejected at startup with a message naming both flags.
 
-**The run record.** Every scan writes `run.jsonl` into the mounted results directory: one JSON object per line naming each tool launched, its argument vector, its timings and its real exit status, bracketed by a pair of `run` lines carrying the bounds and the final disposition. It is appended as the scan proceeds, so it can be read while a scan is still running — which is the point when `detach` is set. Its absence means recording was disabled, not that nothing ran. The repository README documents the entry shapes.
+**The run record.** Every scan writes `run.jsonl` into the mounted results directory: one JSON object per line naming each tool launched, its argument vector, its timings and its real exit status, bracketed by a pair of `run` lines carrying the bounds and the final disposition. It is appended as the scan proceeds, so it can be read while a scan is still running, which is the point when `detach` is set. Its absence means recording was disabled, not that nothing ran. The repository README documents the entry shapes. The closing `run` line always carries `target`, `deadline_exceeded` and `process_exit_code`, for infra and cloud scans alike.
+
+**Progress snapshot.** The scan also keeps a small `progress.json` in the same directory, replaced as tools start and finish. It carries `schema`, `kind`, `target`, `started_at`, `updated_at`, `phase` (`discovery`, `running`, `finished` or `failed`), the counts `completed`, `failed`, `skipped` and `total`, `total_is_provisional`, the names of the tools currently `running`, `max_runtime_s`, `deadline_exceeded` and `process_exit_code`. It is evidence of progress, not a record: each write replaces the last, and `run.jsonl` remains the account of what ran. `enumeraga_scan_status` reads it for you, so a caller has no need to open it.
 
 **Example:**
 ```python
@@ -276,12 +278,13 @@ docker run --rm --network host \
 Run cloud security assessment using Docker container.
 
 **Parameters:**
-- `provider` (required, enum): `aws`, `azure`, `gcp`, `oci`, `aliyun`, `do`
+- `provider` (required, enum): `aws`, `azure`, `gcp`, `oci`, `aliyun`, `do`. Any other value, including an alias such as `amazon` or `gcloud`, is refused before anything starts
 - `output_dir` (optional, string): sub-folder name for this scan's results
 - `subscription` (optional, string): **Azure** — scope the scan to one subscription ID
 - `tenant`, `client_id`, `client_secret` (optional, strings): **Azure** — service principal auth
 - `quiet` (optional, boolean): Suppress verbose output
 - `verbose` (optional, boolean): Very verbose debugging output
+- `detach` (optional, boolean): Run in the background to avoid client timeouts; returns a `scan_id` straight away. Check progress with `enumeraga_scan_status`
 
 **Azure authentication:**
 - **Default — your own user:** run `az login` on the host first, then call with just `provider: "azure"`. ScoutSuite and Prowler reuse that session (`--cli` / `--az-cli-auth`) and run unattended. monkey365 is skipped (it has no Azure-CLI mode).
@@ -349,6 +352,46 @@ Image Status:
 ✓ Infrastructure image available: gagarter/enumeraga_infra:latest
 ✓ Cloud image available: gagarter/enumeraga_cloud:latest
 ```
+
+### 5. enumeraga_scan_status
+
+Report the stage and progress of a detached infra or cloud scan. It is read-only and quick: it never starts, stops or retries anything, and replies within a few seconds. Use it instead of `docker logs` or `docker ps`.
+
+**Parameters:** at least one of the following is required.
+- `scan_id` (optional, string): The Scan ID returned by a detached `enumeraga_infra_scan` or `enumeraga_cloud_scan`. Preferred
+- `output_dir` (optional, string): The results path a scan reported under `Results saved to:`, or the sub-folder name it was started with. This also finds a scan started before a server restart
+
+**Example:**
+```python
+{
+    "scan_id": "<SCAN_ID>"
+}
+```
+
+**Output.** A small JSON object:
+- `scan_id`, `stage` and `summary`: `summary` is one line ready to relay to the user
+- `progress`: `completed`, `total`, `percent`, `total_is_provisional`, `failed`, `skipped` and `running` (the tools in flight)
+- `elapsed_s`, `max_runtime_s` and `deadline_exceeded`
+- `container`: `id`, `name`, `state` and `exit_code`, or `null`
+- `results_path` and `run_record` (the path to `run.jsonl`)
+- `progress_source`: `progress.json`, `logs` or `null`
+- `last_log_lines`: up to five recent lines, with secrets redacted
+
+**Stages:**
+- `pulling_image`: the image is being fetched; no container exists yet
+- `starting`: the container has been created and the scan is starting
+- `running`: the scan is in progress. The summary may add "container state unknown: docker did not answer; poll again". That is not terminal, so keep polling
+- `finished`: the scan completed. A scan stopped at its `max_runtime` wall-clock limit (exit 124) is also `finished`, and the summary says its results are partial but valid
+- `failed`: the scan or its launch failed, or the container exited without completing its record. The summary gives the reason. A scan stopped by a signal (`docker stop`, Ctrl+C) exits 130, or 143 if it died before recording anything, and is `failed` with the reason "stopped by a signal; results are partial"
+- `not_found`: no scan matches the `scan_id` or `output_dir`
+
+**Polling.** Poll every 60–120 s until `stage` is `finished` or `failed`, and relay `summary` each time. Do not call `docker logs`, and do not re-invoke the scan tool: the server refuses a duplicate of a scan that is still pulling, starting or running, and names the `enumeraga_scan_status` call that tracks it (by `scan_id` for a detached scan, otherwise by `output_dir`).
+
+**Provisional totals.** While `total_is_provisional` is `true` the total can still grow a little after port discovery (for example, wpscan is added once WordPress is detected), so the percentage can dip. Do not present it as final until the flag is `false`. When `progress_source` is `logs`, the scanner's `progress.json` was unavailable and the figures were read from the container's output instead; the flag is then `null`, meaning unknown, and `completed`, `failed` and `skipped` are `null` too. The summary marks such a percentage as provisional, for example `40% (from logs; total may grow): running …`.
+
+**Cloud scans.** Cloud tools are registered up front, so the total is final from the start. The `failed` count reflects launch failures only. Scanner exit codes are reported in the coverage summary and the run record.
+
+**One scan per `output_dir`.** Scans started without an `output_dir` share the base results directory, so a lookup by `output_dir` reports the most recent scan started there. A lookup by `scan_id` in the same server session is unaffected, so keep the `scan_id` and prefer it.
 
 ## Usage Examples
 

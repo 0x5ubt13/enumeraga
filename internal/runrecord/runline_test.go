@@ -52,3 +52,35 @@ func TestClosingRunLineRecordsTheDisposition(t *testing.T) {
 		t.Errorf("process_exit_code = %v, want 124", line["process_exit_code"])
 	}
 }
+
+// The closing line is what a caller matches to decide how a run ended, so it
+// must always say which target it was, whether the deadline was hit and what
+// the process exited with -- never leave those to be inferred from absence.
+func TestClosingLineCarriesTargetAndDisposition(t *testing.T) {
+	dir := t.TempDir()
+	r := Open(dir)
+	end := time.Now()
+	r.Write(ClosingLine("10.0.0.5", end, true, 124))
+	r.Close()
+
+	lines := readLines(t, dir)
+	l := lines[len(lines)-1]
+	if l["kind"] != "run" {
+		t.Errorf("kind = %v, want run", l["kind"])
+	}
+	if l["target"] != "10.0.0.5" {
+		t.Errorf("target = %v, want 10.0.0.5", l["target"])
+	}
+	if l["deadline_exceeded"] != true {
+		t.Errorf("deadline_exceeded = %v, want true", l["deadline_exceeded"])
+	}
+	if l["process_exit_code"] != float64(124) {
+		t.Errorf("process_exit_code = %v, want 124", l["process_exit_code"])
+	}
+	if _, ok := l["ended_at"]; !ok {
+		t.Error("ended_at missing")
+	}
+	if _, ok := l["started_at"]; ok {
+		t.Error("started_at must be absent from the closing line")
+	}
+}

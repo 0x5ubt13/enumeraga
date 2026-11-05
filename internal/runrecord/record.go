@@ -82,3 +82,16 @@ type Entry struct {
 	DeadlineHit *bool  `json:"deadline_exceeded,omitempty"`
 	ProcessExit *int   `json:"process_exit_code,omitempty"`
 }
+
+// ClosingLine builds the run's closing line. It always carries the target, the
+// deadline disposition and the process exit code, so a caller never has to
+// infer how a run ended from a field being absent.
+func ClosingLine(target string, end time.Time, deadlineHit bool, exitCode int) Entry {
+	return Entry{
+		Kind:        KindRun,
+		Target:      target,
+		EndedAt:     &end,
+		DeadlineHit: &deadlineHit,
+		ProcessExit: &exitCode,
+	}
+}
