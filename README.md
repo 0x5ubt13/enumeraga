@@ -16,11 +16,11 @@ Automatic multiprocess Linux CLI tool that aims for a quick enumeration wrapping
 
 - **Fast parallel infrastructure scanning** - Runs multiple tools concurrently with configurable worker pool (default: 20 concurrent tools)
 - **Smart protocol detection** - Groups ports by protocol and runs appropriate enumeration tools
-- **Graceful shutdown** - Ctrl+C cleanly terminates all running tools
+- **Graceful shutdown** - Ctrl+C cleanly terminates all running tools, and the run exits 130 so its partial results are never mistaken for a finished scan
 - **Configurable timeouts** - `-T/--timeout` caps every long-running tool (default: 10 minutes). On expiry the tool's whole process group is signalled INT, then TERM, then KILL, so it gets a chance to flush partial results before it is forced out
 - **Broad protocol coverage** - Over eighty ports are routed to protocol-specific handlers, from the usual web, SMB, LDAP and database suspects to VNC, IRC, RTSP, Java RMI, iSCSI, IPP and the OT/ICS trio of Modbus, Siemens S7 and PROFINET
 - **Bounded scans** - `--bounded`, `--ports`, `--rate`, `--concurrency` and `--max-runtime` give callers who must account for every packet a strict scan contract, recorded in a per-run `run.jsonl`
-- **Progress tracking** - Real-time progress counter showing completed/total tools
+- **Progress tracking** - Real-time progress counter showing completed/total tools, plus a `progress.json` snapshot that the MCP server's `enumeraga_scan_status` polls
 - **Docker support** - Containerised versions for both infrastructure and cloud scanning
 - **Cloud scanning** - Supports the major Cloud Service Providers, plus Kubernetes via kubenumerate
 - **Debian/Kali package** - `build-deb-package.sh` produces a `.deb` whose dependencies pull in the wrapped tools
@@ -213,6 +213,8 @@ Three kinds of line appear:
 `status` and `exit_code` can legitimately disagree. Enumeraga treats `nikto`, `fping` and `ssh-audit` as completed despite their non-zero exits, because those tools do not exit cleanly by design; the record reports the status enumeraga acted on and the exit code the process actually returned, without normalising either to match the other. A `failed` status with no `exit_code` beside it means the launch never produced one — a refused exec rather than a tool that ran and failed.
 
 Alongside it, the run keeps a small `progress.json` in the output root, replaced as tools start and finish, so that something outside the process can report how far a scan has got without reading logs. It holds the phase (`discovery`, `running`, `finished` or `failed`), the counts of completed, failed, skipped and total tools, whether that total is still provisional (it can grow a little after port discovery, for example when wpscan is added once WordPress is detected), the tools currently running, and the deadline and exit-code disposition. It is evidence of progress, not a record: each write replaces the last, and `run.jsonl` stays the account of what ran. The MCP server's `enumeraga_scan_status` tool reads it.
+
+**Exit codes.** A run that completes exits 0, and one stopped by its `--max-runtime` budget exits 124 with valid partial results. One stopped by a signal (Ctrl+C, `docker stop`) exits **130**, for infra and cloud runs alike: its results are partial, so the closing `run` line carries `process_exit_code: 130` and `progress.json` ends in the `failed` phase rather than `finished`.
 
 If the file cannot be written the scan continues with recording disabled, after one warning on stderr. A scan abandoned because a log file could not be opened is a worse outcome than a scan with no log, so the absence of `run.jsonl` means recording was disabled, not that nothing ran.
 
@@ -456,7 +458,7 @@ A scan in which any tool fell short is labelled **PARTIAL COVERAGE** in the summ
 
 ### Drive it from an AI agent (MCP server)
 
-[`mcp-server-enumeraga/`](mcp-server-enumeraga/README.md) exposes `enumeraga_infra_scan`, `enumeraga_cloud_scan`, `enumeraga_pull_images` and `enumeraga_check_docker` to any MCP client, running each scan in one of the containers above. Install it with pipx, pinned to a release tag so every machine runs the same server:
+[`mcp-server-enumeraga/`](mcp-server-enumeraga/README.md) exposes `enumeraga_infra_scan`, `enumeraga_cloud_scan`, `enumeraga_scan_status`, `enumeraga_pull_images` and `enumeraga_check_docker` to any MCP client, running each scan in one of the containers above. A scan started with `detach: true` returns straight away with a `scan_id` (pulling the image in the background if it is missing), and `enumeraga_scan_status` reports its stage and progress by that ID or by results path, so a caller polls it instead of reading `docker logs`. Install it with pipx, pinned to a release tag so every machine runs the same server:
 
 ```bash
 pipx install "git+https://github.com/0x5ubt13/enumeraga@v0.7.0-beta#subdirectory=mcp-server-enumeraga"
@@ -632,6 +634,7 @@ enumeraga/
 │   ├── infra/                # Infrastructure scanning logic
 │   ├── installer/            # Tool installation and consent prompts
 │   ├── portsIterator/        # Port routing and protocol-specific handlers
+│   ├── progress/             # progress.json snapshot writer
 │   ├── runrecord/            # Per-run run.jsonl writer
 │   ├── scans/                # Nmap wrapper functions
 │   ├── types/                # Type definitions
