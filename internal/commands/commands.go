@@ -2278,9 +2278,6 @@ func generateReport(findings []types.Finding, cfg *config.CloudConfig) error {
 		}
 	}()
 
-	// Remove default Sheet1
-	_ = f.DeleteSheet("Sheet1")
-
 	// Sort findings by provider and severity
 	sort.Slice(findings, func(i, j int) bool {
 		if findings[i].Provider != findings[j].Provider {
@@ -2301,6 +2298,15 @@ func generateReport(findings []types.Finding, cfg *config.CloudConfig) error {
 	// Create provider-specific sheets
 	for provider, findings := range providerFindings {
 		createProviderSheet(f, provider, findings)
+	}
+
+	// Drop the default Sheet1 only now: excelize refuses to delete a workbook's
+	// only sheet, so deleting it before the others exist silently does nothing.
+	if err := f.DeleteSheet("Sheet1"); err != nil {
+		utils.ErrorMsg(fmt.Sprintf("Error removing default sheet from Excel report: %v", err))
+	}
+	if idx, err := f.GetSheetIndex("Summary"); err == nil && idx >= 0 {
+		f.SetActiveSheet(idx)
 	}
 
 	// Generate output filename with timestamp
