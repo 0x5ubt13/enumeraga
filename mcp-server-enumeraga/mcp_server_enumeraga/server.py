@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import socket
 import stat
 import sys
@@ -44,6 +45,10 @@ INFRA_IMAGE = "gagarter/enumeraga_infra:latest"
 CLOUD_IMAGE = "gagarter/enumeraga_cloud:latest"
 # The cloud providers the scan tool accepts, by their canonical names only.
 CLOUD_PROVIDERS = ("aws", "azure", "gcp", "oci", "aliyun", "do")
+# One service name for enumeraga cloud's -s/--services: Prowler's names (ec2, vm) and
+# ScoutSuite's Azure aliases (virtualmachines) are all letters and digits. Anything else
+# is refused here, so a value can never be read by the binary as a flag of its own.
+SERVICE_NAME_PATTERN = r"^[A-Za-z0-9]+$"
 
 # When this server runs inside a container (SSE/compose mode), bind-mount sources
 # passed to sibling `docker run` calls are resolved by the host daemon, not by this
@@ -288,6 +293,19 @@ TOOLS: list[Tool] = [
                         "and confirm it is in scope before scanning, rather than leaving this blank."
                     ),
                 },
+                "services": {
+                    "type": "array",
+                    "items": {"type": "string", "pattern": SERVICE_NAME_PATTERN},
+                    "minItems": 1,
+                    "description": (
+                        "Optional: restrict the scan to these services (AWS and Azure only), "
+                        "using Prowler's service names, e.g. ['ec2', 's3'] for AWS or "
+                        "['vm', 'storage'] for Azure (ScoutSuite's Azure names such as "
+                        "'virtualmachines' are accepted too). Omit to scan every service. Tools "
+                        "that cannot be limited to the requested services are skipped and named "
+                        "in the coverage summary; an unknown name stops the scan before it starts."
+                    ),
+                },
                 "output_dir": {
                     "type": "string",
                     "description": (
@@ -529,8 +547,8 @@ def scan_key(kind: str, args: dict[str, Any]) -> str:
     A retry storm (the client call times out, the agent re-invokes the tool while the
     first scan is still running) would otherwise spawn racing containers writing the same
     output and re-hammering the target/cloud API. Two scans share a key when they would
-    do the same work: same target and same bounds for infra, same provider+subscription
-    for cloud.
+    do the same work: same target and same bounds for infra, same provider, subscription
+    and services for cloud.
     """
     if kind == "infra":
         # Falsy is treated as unset, so a client that spells out the defaults produces
@@ -540,7 +558,27 @@ def scan_key(kind: str, args: dict[str, Any]) -> str:
         )
         target = args.get("target", "")
         return f"infra:{target}" if not bounding else f"infra:{target};{bounding}"
-    return f"cloud:{args.get('provider', '')}:{args.get('subscription') or 'all'}"
+    key = f"cloud:{args.get('provider', '')}:{args.get('subscription') or 'all'}"
+    services = args.get("services")
+    if services:
+        key += ":services=" + ",".join(sorted({str(s).lower() for s in services}))
+    return key
+
+
+def services_argument_error(services: Any) -> str | None:
+    """Why a cloud scan's `services` argument is unusable, or None if absent or valid."""
+    if services is None:
+        return None
+    # An empty list names nothing. Treating it as "every service" would scan more than
+    # the caller asked for, so it is refused, as enumeraga refuses an empty -s.
+    if not isinstance(services, list) or not services or not all(
+        isinstance(s, str) and re.fullmatch(SERVICE_NAME_PATTERN, s) for s in services
+    ):
+        return (
+            "'services' must be a non-empty list of service names made of letters and "
+            "digits, e.g. [\"ec2\", \"s3\"] or [\"vm\", \"storage\"]; omit it to scan every service."
+        )
+    return None
 
 
 def build_docker_infra_command(args: dict[str, Any]) -> list[str]:
@@ -686,6 +724,10 @@ def build_docker_cloud_command(args: dict[str, Any]) -> tuple[list[str], dict[st
 
     label = ["--label", f"enumeraga.key={scan_key('cloud', args)}"]
     cmd = ["docker", "run", "--rm"] + volume_mounts + host_owner_env() + forwarded_env() + label + [CLOUD_IMAGE, provider]
+
+    services = args.get("services")
+    if services:
+        cmd.extend(["-s", ",".join(services)])
 
     if args.get("quiet"):
         cmd.append("-q")
@@ -1193,6 +1235,9 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
                     f"Error: unsupported cloud provider {provider_arg!r}. Use one of: "
                     f"{', '.join(CLOUD_PROVIDERS)}. Not starting a scan."
                 ))]
+            services_error = services_argument_error(arguments.get("services"))
+            if services_error:
+                return [TextContent(type="text", text=f"Error: {services_error} Not starting a scan.")]
             key = scan_key("cloud", arguments)
             active = JOBS.active_for_key(key)
             if active is not None:

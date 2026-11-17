@@ -18,6 +18,7 @@ The tools:
 
 - **`enumeraga_infra_scan`** — infrastructure enumeration against a target IP, hostname, or targets file (nmap plus specialised tools, run in a container).
 - **`enumeraga_cloud_scan`** — cloud-provider enumeration (aws, azure, gcp, etc). For **Azure**, scan unattended as the user's signed-in `az login` session: call it with just `provider: "azure"`. Do **not** ask for `tenant`, `client_id` or `client_secret` — those are an optional service principal, used only if the user explicitly supplies one (it additionally enables monkey365). If ScoutSuite/Prowler fail inside the scan container with "Please run 'az login'", that is a **setup** problem, not a choice for the user: the host has no live `az login`, or the cloud scan image lacks the Azure CLI. Do **not** offer to create a service principal or to mount credentials yourself — the MCP tool cannot accept mount/env overrides from here. Report plainly that the operator must `az login` on the host (and, if needed, rebuild the cloud image `gagarter/enumeraga_cloud:latest`), then re-run with `provider: "azure"`.
+  - To restrict a cloud scan to particular services (AWS and Azure only), pass `services` as a list of Prowler's service names, e.g. `["ec2", "s3"]` or `["vm", "storage"]`. Tools that cannot be limited to those services are skipped and named in the coverage summary. A skipped tool is not a failure.
 - **`enumeraga_pull_images`** — warm-pull the cached scan container images.
 - **`enumeraga_check_docker`** — check Docker availability.
 

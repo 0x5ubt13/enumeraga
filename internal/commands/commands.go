@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/bounds"
+	"github.com/0x5ubt13/enumeraga/internal/cloudservices"
 	"github.com/0x5ubt13/enumeraga/internal/config"
 	"github.com/0x5ubt13/enumeraga/internal/installer"
 	"github.com/0x5ubt13/enumeraga/internal/runrecord"
@@ -1068,8 +1069,16 @@ func resolveGCPIAMBruteToken(_ *config.CloudConfig) (string, error) {
 func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *bool) error {
 	var (
 		args []string
+		runs []cloudRun
 		err  error
 	)
+
+	// A tool that cannot be limited to the requested services would reach the
+	// ones the operator left out, so it is skipped rather than run unrestricted.
+	if len(cfg.Services) > 0 && !servicesScopedTools[tool] {
+		skipCloudTool(tool, unscopedReason(tool))
+		return nil
+	}
 
 	switch tool {
 	case "scoutsuite":
@@ -1082,7 +1091,13 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 	case "prowler":
 		args, err = prepProwler(cfg, filePath)
 	case "cloudfox":
-		args, err = prepCloudfox(cfg, filePath)
+		// CloudFox has no service flag, so a restricted scan runs one module per
+		// mapped command instead of all-checks.
+		if len(cfg.Services) > 0 {
+			runs, err = cloudfoxServiceRuns(cfg, filePath)
+		} else {
+			args, err = prepCloudfox(cfg, filePath)
+		}
 	case "pmapper":
 		args, err = prepPmapper(cfg, filePath)
 	case "kubenumerate":
@@ -1096,7 +1111,11 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 	case "gcp_iam_brute":
 		args, err = prepGcpIAMBrute(cfg)
 	case "aws_enumerator":
-		args, err = prepAWSEnumerator(cfg)
+		if len(cfg.Services) > 0 {
+			runs, err = awsEnumeratorServiceRuns(cfg)
+		} else {
+			args, err = prepAWSEnumerator(cfg)
+		}
 	default:
 		utils.ErrorMsg(fmt.Sprintf("Tool %s not supported", tool))
 	}
@@ -1104,7 +1123,10 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 	if err != nil {
 		return err
 	}
-	if len(args) == 0 {
+	if len(args) > 0 {
+		runs = []cloudRun{{args: args, out: "output.out"}}
+	}
+	if len(runs) == 0 {
 		// A prep function returning no arguments has declined to run the tool.
 		// That is a coverage gap, so it is recorded rather than passed over in
 		// silence -- unless the prep function already recorded a better reason.
@@ -1116,11 +1138,12 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 		return nil
 	}
 
-	toolOutput := fmt.Sprintf("%soutput.out", filePath)
 	if _, mkErr := utils.CustomMkdir(filePath); mkErr != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating custom dir %s: %v", filePath, mkErr))
 	}
-	runCloudTool(args, toolOutput, OptVVerbose)
+	for _, r := range runs {
+		runCloudTool(r.args, filePath+r.out, OptVVerbose)
+	}
 	return nil
 }
 
@@ -1150,6 +1173,10 @@ func ensureScout() error {
 }
 
 func prepScoutsuite(cfg *config.CloudConfig, filePath string) ([]string, error) {
+	services, skip := scoutServices(cfg)
+	if skip {
+		return nil, nil
+	}
 	if err := ensureScout(); err != nil {
 		return nil, err
 	}
@@ -1165,7 +1192,7 @@ func prepScoutsuite(cfg *config.CloudConfig, filePath string) ([]string, error) 
 			args = append(args, "-u")
 		}
 	}
-	return args, nil
+	return appendListFlag(args, "--services", services), nil
 }
 
 // runScoutsuiteAzure runs ScoutSuite against Azure using service principal
@@ -1174,6 +1201,10 @@ func prepScoutsuite(cfg *config.CloudConfig, filePath string) ([]string, error) 
 // never appears in the process list or the run logs. The file is removed as soon
 // as the scan finishes.
 func runScoutsuiteAzure(cfg *config.CloudConfig, filePath string, OptVVerbose *bool) error {
+	services, skip := scoutServices(cfg)
+	if skip {
+		return nil
+	}
 	if err := ensureScout(); err != nil {
 		return err
 	}
@@ -1189,7 +1220,7 @@ func runScoutsuiteAzure(cfg *config.CloudConfig, filePath string, OptVVerbose *b
 		if _, mkErr := utils.CustomMkdir(filePath); mkErr != nil {
 			utils.ErrorMsg(fmt.Sprintf("Error creating custom dir %s: %v", filePath, mkErr))
 		}
-		runCloudTool(scoutAzureCLIArgs(filePath, cfg.AzureSubscription), toolOutput, OptVVerbose)
+		runCloudTool(scoutAzureCLIArgs(filePath, cfg.AzureSubscription, services), toolOutput, OptVVerbose)
 		return nil
 	}
 
@@ -1225,24 +1256,24 @@ func runScoutsuiteAzure(cfg *config.CloudConfig, filePath string, OptVVerbose *b
 	if _, mkErr := utils.CustomMkdir(filePath); mkErr != nil {
 		utils.ErrorMsg(fmt.Sprintf("Error creating custom dir %s: %v", filePath, mkErr))
 	}
-	runCloudTool(scoutAzureFileAuthArgs(tmpFile.Name(), filePath, cfg.AzureSubscription), toolOutput, OptVVerbose)
+	runCloudTool(scoutAzureFileAuthArgs(tmpFile.Name(), filePath, cfg.AzureSubscription, services), toolOutput, OptVVerbose)
 	return nil
 }
 
-func scoutAzureCLIArgs(filePath, subscription string) []string {
+func scoutAzureCLIArgs(filePath, subscription string, services []string) []string {
 	args := []string{"scout", "azure", "--cli", "--force", "--no-browser", "--report-dir", filePath}
 	if subscription != "" {
 		args = append(args, "--subscriptions", subscription)
 	}
-	return args
+	return appendListFlag(args, "--services", services)
 }
 
-func scoutAzureFileAuthArgs(authFile, filePath, subscription string) []string {
+func scoutAzureFileAuthArgs(authFile, filePath, subscription string, services []string) []string {
 	args := []string{"scout", "azure", "--file-auth", authFile, "--force", "--no-browser", "--report-dir", filePath}
 	if subscription != "" {
 		args = append(args, "--subscriptions", subscription)
 	}
-	return args
+	return appendListFlag(args, "--services", services)
 }
 
 func prepProwler(cfg *config.CloudConfig, filePath string) ([]string, error) {
@@ -1268,7 +1299,7 @@ func prepProwler(cfg *config.CloudConfig, filePath string) ([]string, error) {
 				// subscription it can list — out of scope. Scope it to the one requested.
 				args = append(args, "--subscription-ids", cfg.AzureSubscription)
 			}
-			return args, nil
+			return appendListFlag(args, "--service", cfg.Services), nil
 		}
 		// Prowler reads service principal credentials from these environment variables
 		// when --sp-env-auth is set; the child process inherits them from os.Environ().
@@ -1319,18 +1350,54 @@ func prepProwler(cfg *config.CloudConfig, filePath string) ([]string, error) {
 			}
 		}
 	}
-	return args, nil
+	return appendListFlag(args, "--service", cfg.Services), nil
+}
+
+// cloudfoxBinary returns the cloudfox executable, downloading it when it is not
+// on PATH.
+func cloudfoxBinary() (string, error) {
+	if utils.CheckToolExists("cloudfox") {
+		return "cloudfox", nil
+	}
+	utils.PrintCustomBiColourMsg("red", "yellow", "[-] CloudFox ", "not found. Attempting to download it now from GitHub...")
+	binaryPath, err := utils.DownloadFromGithubAndInstall("cloudfox")
+	if err != nil {
+		return "", fmt.Errorf("error downloading cloudfox: %v", err)
+	}
+	return binaryPath, nil
+}
+
+// cloudfoxAzureScopeReason is recorded when a CloudFox Azure module is skipped
+// for want of a scope.
+const cloudfoxAzureScopeReason = "CloudFox Azure modules need a scope: pass a subscription " +
+	"(AZURE_SUBSCRIPTION_ID, or the MCP server's 'subscription' argument) or a tenant"
+
+// cloudfoxAzureScope returns the flags scoping a CloudFox Azure module, or nil
+// when neither a subscription nor a tenant is known.
+//
+// cloudfox's Azure modules require a scope: "azure inventory" with neither
+// --subscription nor --tenant prints "Please enter a valid input with a valid
+// flag" and then exits 0, so a missing scope reads as a clean run unless it is
+// caught before the command is built.
+//
+// The subscription is preferred over the tenant because it is the narrower
+// scope, and an engagement is scoped to a subscription rather than to
+// everything the signed-in identity can enumerate.
+func cloudfoxAzureScope(cfg *config.CloudConfig) []string {
+	switch {
+	case cfg.AzureSubscription != "":
+		return []string{"--subscription", cfg.AzureSubscription}
+	case cfg.AzureTenantID != "":
+		return []string{"--tenant", cfg.AzureTenantID}
+	default:
+		return nil
+	}
 }
 
 func prepCloudfox(cfg *config.CloudConfig, filePath string) ([]string, error) {
-	binary := "cloudfox"
-	if !utils.CheckToolExists("cloudfox") {
-		utils.PrintCustomBiColourMsg("red", "yellow", "[-] CloudFox ", "not found. Attempting to download it now from GitHub...")
-		binaryPath, err := utils.DownloadFromGithubAndInstall("cloudfox")
-		if err != nil {
-			return nil, fmt.Errorf("error downloading cloudfox: %v", err)
-		}
-		binary = binaryPath
+	binary, err := cloudfoxBinary()
+	if err != nil {
+		return nil, err
 	}
 
 	switch cfg.Provider {
@@ -1351,27 +1418,12 @@ func prepCloudfox(cfg *config.CloudConfig, filePath string) ([]string, error) {
 		}
 		return args, nil
 	case "azure":
-		// cloudfox's Azure modules require a scope: "azure inventory" with neither
-		// --subscription nor --tenant prints "Please enter a valid input with a
-		// valid flag" and then exits 0, so a missing scope reads as a clean run
-		// unless it is caught before the command is built.
-		//
-		// The subscription is preferred over the tenant because it is the narrower
-		// scope, and an engagement is scoped to a subscription rather than to
-		// everything the signed-in identity can enumerate.
-		args := []string{binary, "azure", "inventory", "--outdir", filePath}
-		switch {
-		case cfg.AzureSubscription != "":
-			return append(args, "--subscription", cfg.AzureSubscription), nil
-		case cfg.AzureTenantID != "":
-			return append(args, "--tenant", cfg.AzureTenantID), nil
-		default:
-			reason := "CloudFox Azure inventory needs a scope: pass a subscription " +
-				"(AZURE_SUBSCRIPTION_ID, or the MCP server's 'subscription' argument) or a tenant"
-			utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Skipping ", "cloudfox", ": ", reason)
-			RecordCloudSkip("cloudfox", reason)
+		scope := cloudfoxAzureScope(cfg)
+		if scope == nil {
+			skipCloudTool("cloudfox", cloudfoxAzureScopeReason)
 			return nil, nil
 		}
+		return append([]string{binary, "azure", "inventory", "--outdir", filePath}, scope...), nil
 	default:
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] CloudFox ", "does not support provider '", cfg.Provider, "'. Skipping...")
 		return nil, nil
@@ -1474,21 +1526,37 @@ func prepNuclei(cfg *config.CloudConfig) ([]string, error) {
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] Nuclei ", "skipped: no target URL provided (set NucleiTargetURL in config to enable cloud template scans)")
 		return nil, nil
 	}
+	templates := []string{fmt.Sprintf("cloud/%s/", cfg.Provider)}
+	if len(cfg.Services) > 0 {
+		// Nuclei has no service flag, but its cloud templates are filed one
+		// folder per service, so the folders are the filter.
+		templates = cloudservices.NucleiTemplates(cfg.Provider, cfg.Services)
+		if len(templates) == 0 {
+			skipCloudTool("nuclei", noEquivalentReason("nuclei", cfg.Services))
+			return nil, nil
+		}
+	}
 	if !utils.CheckToolExists("nuclei") {
 		utils.PrintCustomBiColourMsg("red", "yellow", "[-] nuclei ", "not found. Install it via: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest")
 		return nil, nil
 	}
-	return []string{"nuclei", "-u", cfg.NucleiTargetURL, "-t", fmt.Sprintf("cloud/%s/", cfg.Provider), "-silent", "-no-interactivity", "-no-color"}, nil
+	args := []string{"nuclei", "-u", cfg.NucleiTargetURL}
+	for _, t := range templates {
+		args = append(args, "-t", t)
+	}
+	return append(args, "-silent", "-no-interactivity", "-no-color"), nil
 }
 
-func prepAWSEnumerator(cfg *config.CloudConfig) ([]string, error) {
+// awsEnumeratorReady reports whether aws-enumerator should run, installing it
+// when it is missing.
+func awsEnumeratorReady(cfg *config.CloudConfig) (bool, error) {
 	if cfg.Provider != "aws" {
 		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " aws-enumerator ", "only supports", " AWS ", ". Skipping it...")
-		return nil, nil
+		return false, nil
 	}
 	if !cfg.AWSEnumeratorEnabled {
 		utils.PrintCustomBiColourMsg("yellow", "cyan", "[!] aws-enumerator ", "disabled. Skipping...")
-		return nil, nil
+		return false, nil
 	}
 	if !utils.CheckToolExists("aws-enumerator") {
 		utils.PrintCustomBiColourMsg("red", "yellow", "[-] aws-enumerator ", "not found. Installing via go install...")
@@ -1496,8 +1564,15 @@ func prepAWSEnumerator(cfg *config.CloudConfig) ([]string, error) {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return nil, fmt.Errorf("error installing aws-enumerator: %v", err)
+			return false, fmt.Errorf("error installing aws-enumerator: %v", err)
 		}
+	}
+	return true, nil
+}
+
+func prepAWSEnumerator(cfg *config.CloudConfig) ([]string, error) {
+	if ready, err := awsEnumeratorReady(cfg); !ready {
+		return nil, err
 	}
 	// aws-enumerator uses an `enum` subcommand with Go-style single-dash flags
 	// (e.g. enum -services all -profile <name>). It writes results to an

@@ -261,6 +261,8 @@ Give `enumeraga cloud` a CSP, and depending on which, a couple more parameters f
           --iam-brute-email EMAIL  Override service account email for gcp-iam-brute (GCP only)
           --no-iam-brute           Disable gcp-iam-brute permission enumeration (GCP only)
           --nuclei-url URL     Target URL for nuclei cloud/exposure template scan
+      -s, --services LIST      Restrict the scan to these services, using Prowler's names (AWS and Azure only),
+                               e.g. -s ec2,s3 or -s vm,storage. Tools that cannot be limited to them are skipped.
       -h, --help               Display this help and exit
       -o, --output DIR         Select a different base folder for output (default: /tmp/enumeraga_output)
       -q, --quiet              Don't print the banner and decrease overall verbosity
@@ -268,6 +270,7 @@ Give `enumeraga cloud` a CSP, and depending on which, a couple more parameters f
 
     Examples:
      enumeraga cloud aws
+     enumeraga cloud aws -s ec2,s3
      enumeraga cloud gcp --creds sa-key.json --project <project-id>
      enumeraga cloud azure --tenant <tenant-id> --client-id <app-id> --client-secret <secret>
 
@@ -280,8 +283,14 @@ enumeraga cloud aws
 # AWS — a named profile from ~/.aws/credentials
 enumeraga cloud aws --profile assessment
 
+# AWS — only EC2 and S3 (Prowler's service names; see below)
+enumeraga cloud aws -s ec2,s3
+
 # Azure — unattended, as the user signed in with 'az login' (ScoutSuite + Prowler)
 enumeraga cloud azure
+
+# Azure — only virtual machines and storage accounts
+enumeraga cloud azure -s vm,storage
 
 # Azure — service principal (required for monkey365 full M365 + Entra ID coverage)
 enumeraga cloud azure --tenant <tenant-id> --client-id <app-id> --client-secret <secret>
@@ -307,6 +316,65 @@ enumeraga cloud aws --nuclei-url https://app.example.com
 # Kubernetes — kubenumerate against the current kubeconfig context
 enumeraga cloud k8s
 ```
+
+#### Restricting a scan to specific services
+
+`-s, --services` limits an AWS or Azure scan to the services you name, such as EC2 or Azure virtual machines. Give a comma-separated list, or repeat the flag:
+
+```bash
+enumeraga cloud aws -s ec2,s3
+enumeraga cloud aws -s ec2 -s s3
+enumeraga cloud azure -s vm,storage --tenant <tenant-id> --client-id <app-id> --client-secret <secret>
+```
+
+Names are Prowler's, because Prowler covers the most services: `prowler aws --list-services` and `prowler azure --list-services` print them. Matching ignores case. On Azure, ScoutSuite's names are accepted too (`virtualmachines` for `vm`, `storageaccounts` for `storage`, and so on). An unknown name stops the run before anything is scanned, and the error lists the valid names. `-s` is accepted for AWS and Azure only; any other provider is refused.
+
+Each tool is either limited to the requested services or skipped. Nothing runs unrestricted. A skipped tool appears in the coverage summary as `not_applicable`, with the reason:
+
+| Tool | How it is limited | Skipped when |
+|---|---|---|
+| Prowler | `--services <names>` | never: every valid name is one of Prowler's |
+| ScoutSuite | `--services <names>`, using ScoutSuite's names (table below) | no requested service exists in ScoutSuite, e.g. `guardduty` or `aks` |
+| CloudFox | one run per CloudFox command that stays within the requested services, each saved as `<command>.out`. On AWS, `--skip-admin-check` is added unless `iam` is requested, because the admin check simulates IAM policies | no command qualifies |
+| Nuclei (Azure, with `--nuclei-url`) | `-t cloud/azure/<folder>/` per service | no template folder matches |
+| aws-enumerator | `-services <names>`, in runs of at most 10, its limit | no requested service exists in aws-enumerator |
+| PMapper | — | always: it reads IAM and the resource policies of S3, SNS, SQS, KMS and Secrets Manager, whatever is requested |
+| monkey365 | — | always: its collection is not mapped to services |
+
+ScoutSuite's Azure names that differ from Prowler's (on AWS, ScoutSuite's 27 services use the same names as Prowler):
+
+| `-s` (Prowler) | ScoutSuite |
+|---|---|
+| `vm` | `virtualmachines` |
+| `storage` | `storageaccounts` |
+| `sqlserver` | `sqldatabase` |
+| `mysql` | `mysqldatabase` |
+| `postgresql` | `postgresqldatabase` |
+| `app` | `appservice` |
+| `monitor` | `loggingmonitoring` |
+| `defender` | `securitycenter` |
+| `entra` | `aad` |
+| `iam` | `rbac` |
+
+CloudFox has no service flag, so its per-service commands are the filter. A command runs only when every service whose inventory it lists was requested. Look-ups that only add detail to a resource it has already found don't count, such as an EC2 instance's IAM instance profile or a VM's NIC and public IP:
+
+| Provider | CloudFox command | Needs |
+|---|---|---|
+| AWS | `instances`, `elastic-network-interfaces` | `ec2` |
+| AWS | `ecs-tasks` | `ecs` and `ec2` |
+| AWS | `eks`, `ecr`, `lambda`, `buckets`, `cloudformation`, `codebuild`, `sns`, `sqs`, `route53`, `orgs`, `ds` | `eks`, `ecr`, `awslambda`, `s3`, `cloudformation`, `codebuild`, `sns`, `sqs`, `route53`, `organizations`, `directoryservice` respectively |
+| AWS | `filesystems` | `efs` and `fsx` |
+| AWS | `databases` | `rds`, `redshift`, `dynamodb`, `documentdb` and `neptune`, because it also reports the DocumentDB and Neptune clusters the RDS API returns |
+| AWS | `api-gw` | `apigateway` and `apigatewayv2` |
+| AWS | `secrets` | `secretsmanager` and `ssm` |
+| AWS | `principals`, `permissions`, `role-trusts`, `access-keys` | `iam` |
+| Azure | `vms` | `vm` |
+| Azure | `storage` | `storage` |
+| Azure | `rbac` | `iam` and `entra`, because it lists every Entra user |
+
+CloudFox's Azure commands need a subscription or tenant, just as `inventory` does. Nuclei's Azure template folders are `virtualmachines` (`vm`), `storageaccounts` (`storage`), `appservice` and `functions` (`app`), `monitor` and `activitylog` (`monitor`), `activedirectory` (`entra`), `accesscontrol` (`iam`), `securitycenter` (`defender`), `sql` (`sqlserver`), `apimanagement` (`apim`) and `search` (`aisearch`). The folders for `aiservices`, `aks`, `cosmosdb`, `keyvault`, `network` and `postgresql` have the same names as the services.
+
+These translations were read from Prowler 5.50.0, ScoutSuite 5.14.0, CloudFox v2.0.5, aws-enumerator 9ff6976 and the nuclei-templates repository. They live in `internal/cloudservices`, and must be re-checked when any of those tools is upgraded.
 
 ## Installation
 
@@ -393,6 +461,9 @@ docker pull gagarter/enumeraga_cloud
 
 # Run against AWS (mount AWS credentials)
 docker run -v ~/.aws:/root/.aws -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud aws
+
+# Run against AWS, restricted to EC2 and S3
+docker run -v ~/.aws:/root/.aws -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud aws -s ec2,s3
 
 # Run against Azure with ADC (mount Azure CLI session)
 docker run -v ~/.azure:/root/.azure -v ./output:/tmp/enumeraga_output gagarter/enumeraga_cloud azure
