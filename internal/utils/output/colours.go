@@ -132,6 +132,7 @@ func PrintCloudUsageExamples() {
 	PrintCustomBiColourMsg(
 		"cyan", "yellow",
 		e, "aws\n ",
+		e, "aws", " -s ", "ec2,s3", "\n ",
 		e, "gcp", " --creds ", "sa-key.json", " --project ", "<project-id>", "\n ",
 		e, "azure", " --tenant ", "<tenant-id>", " --client-id ", "<app-id>", " --client-secret ", "<secret>",
 	)

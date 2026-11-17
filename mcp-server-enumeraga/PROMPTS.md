@@ -59,6 +59,12 @@ Task: run an AWS cloud security assessment using my mounted credentials.
 If the tool reports a credentials error, stop and tell me. A timeout is not a failure — never re-invoke the tool.
 ```
 
+### AWS or Azure restricted to specific services
+
+```text
+As above (AWS or Azure), but add services=["<SERVICE>", …] to the enumeraga_cloud_scan call, using Prowler's service names, e.g. services=["ec2", "s3"] for AWS or services=["vm", "storage"] for Azure. Tools that cannot be limited to those services are skipped and named in the coverage summary. Report them as skipped, not as failures. Same detached poll-then-move flow, scope, and stop-on-error rules apply.
+```
+
 ---
 
 ## GCP cloud scan

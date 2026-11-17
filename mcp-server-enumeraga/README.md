@@ -282,6 +282,7 @@ Run cloud security assessment using Docker container.
 - `output_dir` (optional, string): sub-folder name for this scan's results
 - `subscription` (optional, string): **Azure** — scope the scan to one subscription ID
 - `tenant`, `client_id`, `client_secret` (optional, strings): **Azure** — service principal auth
+- `services` (optional, list of strings): **AWS / Azure** — restrict the scan to these services, using Prowler's names (e.g. `["ec2", "s3"]`, `["vm", "storage"]`; ScoutSuite's Azure names such as `virtualmachines` are accepted too). Passed to enumeraga as `-s`. Tools that cannot be limited to the requested services are skipped and named in the coverage summary. A name that is not letters and digits is refused before anything starts; an unknown name makes enumeraga stop before scanning. See [Restricting a scan to specific services](../README.md#restricting-a-scan-to-specific-services)
 - `quiet` (optional, boolean): Suppress verbose output
 - `verbose` (optional, boolean): Very verbose debugging output
 - `detach` (optional, boolean): Run in the background to avoid client timeouts; returns a `scan_id` straight away. Check progress with `enumeraga_scan_status`
@@ -439,6 +440,17 @@ If images not found:
 {
     "provider": "aws",
     "output_dir": "./aws_security_review"
+}
+```
+
+**User:** "Check only the EC2 instances and S3 buckets in my AWS account"
+
+**LLM uses:** `enumeraga_cloud_scan`
+```python
+{
+    "provider": "aws",
+    "services": ["ec2", "s3"],
+    "output_dir": "./aws_ec2_s3_review"
 }
 ```
 

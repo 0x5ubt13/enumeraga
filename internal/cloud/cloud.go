@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/0x5ubt13/enumeraga/internal/cloudScanner"
+	"github.com/0x5ubt13/enumeraga/internal/cloudservices"
 	"github.com/0x5ubt13/enumeraga/internal/config"
 	"github.com/0x5ubt13/enumeraga/internal/progress"
 	"github.com/0x5ubt13/enumeraga/internal/runrecord"
@@ -60,6 +61,10 @@ var optGCPProject = getopt.StringLong("project", 0, "", "GCP project ID (overrid
 
 // optNucleiURL enables nuclei cloud template scans against the given target URL.
 var optNucleiURL = getopt.StringLong("nuclei-url", 0, "", "Target URL for nuclei cloud template scans (omit to skip nuclei)")
+
+// optServices restricts the scan to the named services (AWS and Azure only).
+// A comma-separated list; the flag may also be given more than once.
+var optServices = getopt.ListLong("services", 's', "Restrict the scan to these services, using Prowler's names, e.g. ec2,s3 or vm,storage (AWS and Azure only)")
 
 // validateCredsFile validates the credentials file path and sets GOOGLE_APPLICATION_CREDENTIALS for GCP.
 // Returns nil if credsFile is empty (no-op) or if provider is not GCP (warning only).
@@ -214,6 +219,17 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 		return fmt.Errorf("invalid cloud provider: %w", err)
 	}
 
+	// Check 3a: Validate --services before anything touches credentials or the
+	// network, so a typo stops the run rather than widening or emptying it.
+	services, err := cloudservices.Resolve(provider, *optServices)
+	if err != nil {
+		utils.ErrorMsg(err)
+		return fmt.Errorf("invalid --services: %w", err)
+	}
+	if len(services) > 0 && !*OptQuiet {
+		utils.PrintCustomBiColourMsg("green", "yellow", "[+] Restricting the scan to services: ", strings.Join(services, ", "))
+	}
+
 	// Check 3b: Validate credentials file if provided
 	credsFile := *optCreds
 	if err := validateCredsFile(provider, credsFile); err != nil {
@@ -325,6 +341,7 @@ func Run(OptOutput *string, OptHelp, OptQuiet, OptVVerbose *bool) error {
 	cfg.GCPIAMBruteEmail = *optGCPIAMBruteEmail
 	cfg.GCPProject = *optGCPProject
 	cfg.NucleiTargetURL = *optNucleiURL
+	cfg.Services = services
 	// The run record covers cloud scans as well as infra ones: it is where a
 	// caller reads the argument vector and exit status of every tool that ran.
 	// main opens it only on the infra path, which returns before reaching here.
@@ -500,6 +517,8 @@ func printCloudUsage() {
 	fmt.Println("      --iam-brute-email EMAIL  Override service account email for gcp-iam-brute (GCP only)")
 	fmt.Println("      --no-iam-brute           Disable gcp-iam-brute permission enumeration (GCP only)")
 	fmt.Println("      --nuclei-url URL     Target URL for nuclei cloud/exposure template scan")
+	fmt.Println("  -s, --services LIST      Restrict the scan to these services, using Prowler's names (AWS and Azure only),")
+	fmt.Println("                           e.g. -s ec2,s3 or -s vm,storage. Tools that cannot be limited to them are skipped.")
 	fmt.Println("  -h, --help               Display this help and exit")
 	fmt.Println("  -o, --output DIR         Select a different base folder for output (default: /tmp/enumeraga_output)")
 	fmt.Println("  -q, --quiet              Don't print the banner and decrease overall verbosity")
