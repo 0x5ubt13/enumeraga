@@ -1123,3 +1123,50 @@ def test_cloud_scan_rejects_provider_outside_schema(detached_env, monkeypatch, p
 def test_cloud_provider_enum_matches_accepted_set():
     tool = next(t for t in TOOLS if t.name == "enumeraga_cloud_scan")
     assert tuple(tool.inputSchema["properties"]["provider"]["enum"]) == server.CLOUD_PROVIDERS
+
+
+# Cloud scans restricted to services ----------------------------------------------
+
+def test_build_docker_cloud_command_services():
+    """The service list reaches the binary as one comma-separated -s value."""
+    cmd, _ = build_docker_cloud_command({"provider": "aws", "services": ["ec2", "s3"]})
+    i = cmd.index("-s")
+    assert cmd[i + 1] == "ec2,s3"
+    # Flags follow the image and provider, where the binary parses them.
+    assert i > cmd.index(server.CLOUD_IMAGE)
+
+
+def test_build_docker_cloud_command_without_services_has_no_s_flag():
+    cmd, _ = build_docker_cloud_command({"provider": "aws"})
+    assert "-s" not in cmd
+
+
+def test_scan_key_distinguishes_cloud_services():
+    """An EC2-only scan and a full scan are different work; list order is not."""
+    base = {"provider": "aws"}
+    assert scan_key("cloud", base) != scan_key("cloud", {**base, "services": ["ec2"]})
+    assert scan_key("cloud", {**base, "services": ["s3", "EC2"]}) == scan_key(
+        "cloud", {**base, "services": ["ec2", "s3"]})
+    assert scan_key("cloud", {**base, "services": []}) == scan_key("cloud", base)
+
+
+@pytest.mark.parametrize("services", ["ec2", ["ec2;id"], ["--creds=/etc/passwd"], [""], [3], []])
+def test_cloud_scan_rejects_malformed_services(detached_env, monkeypatch, services):
+    def no_job(*a, **kw):
+        raise AssertionError("no job should be recorded")
+
+    monkeypatch.setattr(server.JOBS, "add", no_job)
+    args = {"provider": "aws", "services": services, "detach": True}
+    text = _text(asyncio.run(server.handle_tool_call("enumeraga_cloud_scan", args)))
+    assert "services" in text
+    assert "Not starting a scan" in text
+    assert detached_env.calls == []
+
+
+def test_cloud_services_schema_matches_validation():
+    tool = next(t for t in TOOLS if t.name == "enumeraga_cloud_scan")
+    prop = tool.inputSchema["properties"]["services"]
+    assert prop["type"] == "array"
+    assert prop["items"]["pattern"] == server.SERVICE_NAME_PATTERN
+    # An empty list names nothing; it must not read as "every service".
+    assert prop["minItems"] == 1

@@ -359,10 +359,10 @@ func TestAzureCloudCommandsNeverCarryTheClientSecret(t *testing.T) {
 		"prepCloudfox": func() ([]string, error) { return prepCloudfox(cfg, outDir) },
 		"prepProwler":  func() ([]string, error) { return prepProwler(cfg, outDir) },
 		"scoutAzureCLIArgs": func() ([]string, error) {
-			return scoutAzureCLIArgs(outDir, cfg.AzureSubscription), nil
+			return scoutAzureCLIArgs(outDir, cfg.AzureSubscription, nil), nil
 		},
 		"scoutAzureFileAuthArgs": func() ([]string, error) {
-			return scoutAzureFileAuthArgs(filepath.Join(outDir, "auth.json"), outDir, cfg.AzureSubscription), nil
+			return scoutAzureFileAuthArgs(filepath.Join(outDir, "auth.json"), outDir, cfg.AzureSubscription, nil), nil
 		},
 	}
 

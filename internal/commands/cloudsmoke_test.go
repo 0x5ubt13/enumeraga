@@ -245,3 +245,42 @@ func TestSmokeAFailingToolDoesNotStopLaterTools(t *testing.T) {
 		t.Errorf("prowler completed with findings and must not be listed as incomplete:\n%s", summary)
 	}
 }
+
+// With services restricted, CloudFox runs one module per mapped command, each to
+// its own artefact, and each is accounted for in the coverage summary.
+func TestSmokeRestrictedCloudfoxRunsEachModule(t *testing.T) {
+	ResetCloudResults()
+	binDir := t.TempDir()
+	outDir := t.TempDir() + string(os.PathSeparator)
+	argvLog := filepath.Join(t.TempDir(), "argv.log")
+
+	fakeTool(t, binDir, "cloudfox", argvLog, "exit 0")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	verbose := false
+	if err := PrepCloudTool("cloudfox", outDir, &config.CloudConfig{
+		Provider: "aws",
+		Services: []string{"ec2"},
+	}, &verbose); err != nil {
+		t.Fatalf("PrepCloudTool() error = %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(readArgv(t, argvLog)), "\n")
+	if len(lines) != 2 || !strings.HasPrefix(lines[0], "aws instances ") ||
+		!strings.HasPrefix(lines[1], "aws elastic-network-interfaces ") {
+		t.Fatalf("cloudfox argv = %q, want one run of instances then elastic-network-interfaces", lines)
+	}
+
+	results := CloudResults()
+	if len(results) != 2 {
+		t.Fatalf("recorded %d results, want 2: %+v", len(results), results)
+	}
+	for i, module := range []string{"instances", "elastic-network-interfaces"} {
+		if results[i].Outcome != OutcomeCompleted {
+			t.Errorf("%s outcome = %q, want %q", module, results[i].Outcome, OutcomeCompleted)
+		}
+		if want := filepath.Join(outDir, module+".out"); results[i].Artefact != want {
+			t.Errorf("%s artefact = %q, want %q", module, results[i].Artefact, want)
+		}
+	}
+}

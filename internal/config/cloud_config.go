@@ -4,6 +4,9 @@ type CloudConfig struct {
 	// Active run settings
 	Provider  string // active provider for this single run
 	CredsFile string // path to credentials file, empty if not supplied
+	// Services restricts the scan to these services, as canonical (Prowler)
+	// names from cloudservices.Resolve. Empty means every service.
+	Services []string
 
 	// Tool settings
 	PMapperEnabled         bool

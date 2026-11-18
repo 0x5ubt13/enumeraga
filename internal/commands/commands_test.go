@@ -640,7 +640,7 @@ func TestPrepPmapperReturnsArgvNotShellString(t *testing.T) {
 
 func TestScoutAzureCLIArgsKeepsSpacedPathsAsSingleArgs(t *testing.T) {
 	reportDir := filepath.Join(t.TempDir(), "azure report")
-	got := scoutAzureCLIArgs(reportDir, "sub with spaces")
+	got := scoutAzureCLIArgs(reportDir, "sub with spaces", nil)
 	want := []string{"scout", "azure", "--cli", "--force", "--no-browser", "--report-dir", reportDir, "--subscriptions", "sub with spaces"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("scoutAzureCLIArgs() = %#v, want %#v", got, want)
@@ -650,7 +650,7 @@ func TestScoutAzureCLIArgsKeepsSpacedPathsAsSingleArgs(t *testing.T) {
 func TestScoutAzureFileAuthArgsKeepsSpacedPathsAsSingleArgs(t *testing.T) {
 	auth := filepath.Join(t.TempDir(), "auth file.json")
 	reportDir := filepath.Join(t.TempDir(), "azure report")
-	got := scoutAzureFileAuthArgs(auth, reportDir, "sub with spaces")
+	got := scoutAzureFileAuthArgs(auth, reportDir, "sub with spaces", nil)
 	want := []string{"scout", "azure", "--file-auth", auth, "--force", "--no-browser", "--report-dir", reportDir, "--subscriptions", "sub with spaces"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("scoutAzureFileAuthArgs() = %#v, want %#v", got, want)
