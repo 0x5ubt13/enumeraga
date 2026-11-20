@@ -502,13 +502,14 @@ func TestPrepScoutsuiteKeepsSpacedPathsAsSingleArgs(t *testing.T) {
 	reportDir := filepath.Join(t.TempDir(), "scout report")
 	creds := filepath.Join(t.TempDir(), "my creds.json")
 	got, err := prepScoutsuite(&config.CloudConfig{
-		Provider:  "gcp",
-		CredsFile: creds,
+		Provider:   "gcp",
+		GCPProject: "my project",
+		CredsFile:  creds,
 	}, reportDir)
 	if err != nil {
 		t.Fatalf("prepScoutsuite() error = %v", err)
 	}
-	want := []string{"scout", "gcp", "--force", "--no-browser", "--report-dir", reportDir, "--service-account", creds}
+	want := []string{"scout", "gcp", "--force", "--no-browser", "--report-dir", reportDir, "--project-id", "my project", "--service-account", creds}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("prepScoutsuite() = %#v, want %#v", got, want)
 	}
@@ -519,13 +520,14 @@ func TestPrepProwlerKeepsSpacedPathsAsSingleArgs(t *testing.T) {
 	outDir := filepath.Join(t.TempDir(), "prowler out")
 	creds := filepath.Join(t.TempDir(), "adc file.json")
 	got, err := prepProwler(&config.CloudConfig{
-		Provider:  "gcp",
-		CredsFile: creds,
+		Provider:   "gcp",
+		GCPProject: "my project",
+		CredsFile:  creds,
 	}, outDir)
 	if err != nil {
 		t.Fatalf("prepProwler() error = %v", err)
 	}
-	want := []string{"prowler", "gcp", "-o", outDir, "--credentials-file", creds}
+	want := []string{"prowler", "gcp", "-o", outDir, "--project-id", "my project", "--credentials-file", creds}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("prepProwler() = %#v, want %#v", got, want)
 	}
@@ -581,13 +583,16 @@ func TestPrepGcpScannerKeepsSpacedPathsAsSingleArgs(t *testing.T) {
 	putStubOnPath(t, "gcp-scanner")
 	outDir := filepath.Join(t.TempDir(), "scanner out")
 	creds := filepath.Join(t.TempDir(), "sa key.json")
-	got, err := prepGcpScanner(&config.CloudConfig{
+	got, cleanup, err := prepGcpScanner(&config.CloudConfig{
 		Provider:   "gcp",
 		GCPProject: "my project",
 		CredsFile:  creds,
 	}, outDir)
 	if err != nil {
 		t.Fatalf("prepGcpScanner() error = %v", err)
+	}
+	if cleanup != nil {
+		t.Errorf("prepGcpScanner() returned a cleanup with a key file and no token file to remove")
 	}
 	want := []string{"gcp-scanner", "-o", outDir, "-p", "my project", "-k", creds}
 	if !reflect.DeepEqual(got, want) {
@@ -662,5 +667,71 @@ func TestGcpIAMBruteCommandKeepsSpacedValuesAsSingleArgs(t *testing.T) {
 	want := []string{"gcp-iam-brute", "--access-token", "ya29.token with space", "--project-id", "my project", "--service-account-email", "sa name@x.com"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("gcpIAMBruteCommand() = %#v, want %#v", got, want)
+	}
+}
+
+// TestGCPToolsSkippedWithoutProject verifies Prowler and ScoutSuite are not run
+// against GCP with no project: both would then scan every project the
+// credentials can list, which is likely out of the engagement's scope.
+func TestGCPToolsSkippedWithoutProject(t *testing.T) {
+	putStubOnPath(t, "prowler")
+	putStubOnPath(t, "scout")
+	ResetCloudResults()
+	t.Cleanup(ResetCloudResults)
+	cfg := &config.CloudConfig{Provider: "gcp"}
+	for name, prep := range map[string]func(*config.CloudConfig, string) ([]string, error){
+		"prowler":    prepProwler,
+		"scoutsuite": prepScoutsuite,
+	} {
+		got, err := prep(cfg, t.TempDir())
+		if err != nil {
+			t.Fatalf("%s: error = %v", name, err)
+		}
+		if got != nil {
+			t.Errorf("%s ran unscoped against GCP: %#v", name, got)
+		}
+		if !cloudSkipAlreadyRecorded(name) {
+			t.Errorf("%s: skip was not recorded, so the coverage gap would go unreported", name)
+		}
+	}
+}
+
+// TestPrepGcpScannerTokenFileIsPrivateAndRemoved verifies the access token is
+// written to a fresh owner-only file, never a fixed shared path, and that the
+// returned cleanup removes it.
+func TestPrepGcpScannerTokenFileIsPrivateAndRemoved(t *testing.T) {
+	putStubOnPath(t, "gcp-scanner")
+	t.Setenv("CLOUDSDK_AUTH_ACCESS_TOKEN", "ya29.test-token")
+	got, cleanup, err := prepGcpScanner(&config.CloudConfig{Provider: "gcp", GCPProject: "p"}, t.TempDir())
+	if err != nil {
+		t.Fatalf("prepGcpScanner() error = %v", err)
+	}
+	if cleanup == nil {
+		t.Fatal("prepGcpScanner() wrote a token file but returned no cleanup")
+	}
+	if len(got) < 2 || got[len(got)-2] != "-at" {
+		t.Fatalf("prepGcpScanner() = %#v, want it to end with -at <file>", got)
+	}
+	tokenFile := got[len(got)-1]
+	if filepath.Base(tokenFile) == "enumeraga-gcp-at.json" {
+		t.Errorf("token file uses the fixed shared name %q", tokenFile)
+	}
+	info, err := os.Stat(tokenFile)
+	if err != nil {
+		t.Fatalf("token file missing: %v", err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Errorf("token file mode = %v, want 0600", info.Mode().Perm())
+	}
+	body, err := os.ReadFile(tokenFile)
+	if err != nil {
+		t.Fatalf("reading token file: %v", err)
+	}
+	if string(body) != `{"access_token":"ya29.test-token"}` {
+		t.Errorf("token file = %q", body)
+	}
+	cleanup()
+	if _, err := os.Stat(tokenFile); !os.IsNotExist(err) {
+		t.Errorf("token file still present after cleanup (stat err = %v)", err)
 	}
 }
