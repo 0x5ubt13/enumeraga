@@ -282,6 +282,7 @@ Run cloud security assessment using Docker container.
 - `output_dir` (optional, string): sub-folder name for this scan's results
 - `subscription` (optional, string): **Azure** — scope the scan to one subscription ID
 - `tenant`, `client_id`, `client_secret` (optional, strings): **Azure** — service principal auth
+- `project` (optional, string): **GCP** — scope the scan to one project ID. Passed to enumeraga as `--project`. A value that is not a GCP project ID (6-30 lowercase letters, digits and hyphens, starting with a letter) is refused before anything starts
 - `services` (optional, list of strings): **AWS / Azure** — restrict the scan to these services, using Prowler's names (e.g. `["ec2", "s3"]`, `["vm", "storage"]`; ScoutSuite's Azure names such as `virtualmachines` are accepted too). Passed to enumeraga as `-s`. Tools that cannot be limited to the requested services are skipped and named in the coverage summary. A name that is not letters and digits is refused before anything starts; an unknown name makes enumeraga stop before scanning. See [Restricting a scan to specific services](../README.md#restricting-a-scan-to-specific-services)
 - `quiet` (optional, boolean): Suppress verbose output
 - `verbose` (optional, boolean): Very verbose debugging output
@@ -291,6 +292,10 @@ Run cloud security assessment using Docker container.
 - **Default — your own user:** run `az login` on the host first, then call with just `provider: "azure"`. ScoutSuite and Prowler reuse that session (`--cli` / `--az-cli-auth`) and run unattended. monkey365 is skipped (it has no Azure-CLI mode).
 - **Service principal (optional):** pass `tenant` + `client_id` + `client_secret` to use an SP instead — this additionally enables monkey365's M365 / Entra ID inventory.
 - **Scope:** always set `subscription` to the in-scope subscription. Without it, Prowler scans **every** subscription the identity can list.
+
+**GCP scope:**
+- Always set `project` to the in-scope project. Without it enumeraga uses the active `gcloud` project, and when there is none it skips Prowler and ScoutSuite (both would otherwise scan **every** project the credentials can list) and names them in the coverage summary.
+- `~/.config/gcloud` is mounted whole, so the scan runs as whichever account is active there. Check `gcloud auth list` and `gcloud config list` first when the host has more than one account configured.
 
 **Example:**
 ```python

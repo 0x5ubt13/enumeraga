@@ -1,6 +1,11 @@
 package sweeps
 
-import "testing"
+import (
+	"os"
+	"os/exec"
+	"runtime"
+	"testing"
+)
 
 // TestBoundedPortSweepRequiresPorts verifies the sweep refuses to run with no
 // ports at all, rather than silently falling back to a default list.
@@ -18,6 +23,15 @@ func TestBoundedPortSweepRequiresPorts(t *testing.T) {
 func TestBoundedPortSweepSkipsUDPWhenNotRequested(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test that runs nmap")
+	}
+	if _, err := exec.LookPath("nmap"); err != nil {
+		t.Skip("nmap is not installed")
+	}
+	// The sweep runs nmap with --privileged, as it does in the scan container (root
+	// with NET_RAW). Elsewhere, as a normal user, nmap refuses the raw-socket scan
+	// and exits 1, which says nothing about the code under test.
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
+		t.Skip("needs root: the sweep runs nmap with --privileged")
 	}
 
 	optVVerbose := false

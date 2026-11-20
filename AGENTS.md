@@ -28,4 +28,6 @@ The tools:
 
 **Azure scope safety:** always pass `subscription` to `enumeraga_cloud_scan` for Azure, set to the single in-scope subscription. If omitted, Prowler scans *every* subscription the signed-in user can list — which is almost certainly out of scope and a breach of the engagement boundary. If the user has not named one, take the active subscription from `az account show`, confirm it is in scope, then pass it.
 
+**GCP scope safety:** always pass `project` to `enumeraga_cloud_scan` for GCP, set to the single in-scope project. If omitted, enumeraga falls back to the active `gcloud` project and skips Prowler and ScoutSuite when there is none, since both would otherwise scan *every* project the credentials can list. The host's whole `~/.config/gcloud` is mounted, so the scan runs as whichever account is active there: if the user has not named a project, take it from `gcloud config get-value project` and the account from `gcloud auth list`, confirm both are in scope, then pass the project.
+
 If a tool call cannot connect, the `enumeraga-mcp` container is probably not running. Start it from `mcp-server-enumeraga/` with `docker compose up -d` (it binds port 9000), then retry.

@@ -1103,7 +1103,13 @@ func PrepCloudTool(tool, filePath string, cfg *config.CloudConfig, OptVVerbose *
 	case "kubenumerate":
 		args, err = prepKubenumerate(cfg, filePath)
 	case "gcp_scanner":
-		args, err = prepGcpScanner(cfg, filePath)
+		var cleanup func()
+		args, cleanup, err = prepGcpScanner(cfg, filePath)
+		if cleanup != nil {
+			// The tool runs before PrepCloudTool returns, so this removes the
+			// access token file once gcp-scanner is done with it.
+			defer cleanup()
+		}
 	case "monkey365":
 		return runMonkey365(cfg, filePath)
 	case "nuclei":
@@ -1177,6 +1183,10 @@ func prepScoutsuite(cfg *config.CloudConfig, filePath string) ([]string, error) 
 	if skip {
 		return nil, nil
 	}
+	if cfg.Provider == "gcp" && cfg.GCPProject == "" {
+		skipCloudTool("scoutsuite", gcpProjectScopeReason)
+		return nil, nil
+	}
 	if err := ensureScout(); err != nil {
 		return nil, err
 	}
@@ -1184,6 +1194,9 @@ func prepScoutsuite(cfg *config.CloudConfig, filePath string) ([]string, error) 
 	// "overwrite? (y/n)" and, with no stdin in an unattended scan, dies on EOF (exit 109).
 	args := []string{"scout", cfg.Provider, "--force", "--no-browser", "--report-dir", filePath}
 	if cfg.Provider == "gcp" {
+		// Name the project explicitly rather than leave ScoutSuite to pick one from
+		// the credentials: the engagement scope is a single project.
+		args = append(args, "--project-id", cfg.GCPProject)
 		if cfg.CredsFile != "" {
 			args = append(args, "--service-account", cfg.CredsFile)
 		} else {
@@ -1276,7 +1289,17 @@ func scoutAzureFileAuthArgs(authFile, filePath, subscription string, services []
 	return appendListFlag(args, "--services", services)
 }
 
+// gcpProjectScopeReason is recorded when a GCP tool that would otherwise scan
+// every project the credentials can list is skipped for want of a project.
+const gcpProjectScopeReason = "no GCP project is known, and without one it would scan every " +
+	"project the credentials can list, which is likely out of scope: pass --project " +
+	"(or the MCP server's 'project' argument), or set it with 'gcloud config set project'"
+
 func prepProwler(cfg *config.CloudConfig, filePath string) ([]string, error) {
+	if cfg.Provider == "gcp" && cfg.GCPProject == "" {
+		skipCloudTool("prowler", gcpProjectScopeReason)
+		return nil, nil
+	}
 	if !utils.CheckToolExists("prowler") {
 		if err := InstallWithPipxOSAgnostic("prowler"); err != nil {
 			utils.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Error installing prowler via pipx")
@@ -1322,6 +1345,9 @@ func prepProwler(cfg *config.CloudConfig, filePath string) ([]string, error) {
 			args = append(args, "--subscription-ids", cfg.AzureSubscription)
 		}
 	} else if cfg.Provider == "gcp" {
+		// Without --project-id Prowler scans every project the credentials can
+		// list. Its flag is --project-id/--project-ids; there is no --project.
+		args = append(args, "--project-id", cfg.GCPProject)
 		if cfg.CredsFile != "" {
 			args = append(args, "--credentials-file", cfg.CredsFile)
 		} else {
@@ -1455,10 +1481,37 @@ func prepKubenumerate(cfg *config.CloudConfig, filePath string) ([]string, error
 	return []string{"python3", "kubenumerate.py", "-o", filePath}, nil
 }
 
-func prepGcpScanner(cfg *config.CloudConfig, filePath string) ([]string, error) {
+// writeGCPAccessTokenFile writes token as the {"access_token": "..."} JSON
+// gcp-scanner's -at flag reads, to a new owner-only temp file, and returns its
+// path with a func that removes it. os.CreateTemp creates the file exclusively,
+// so nothing already sitting at the path (or a symlink planted there) receives
+// the token, which a fixed name under a shared temp directory would allow.
+func writeGCPAccessTokenFile(token string) (string, func(), error) {
+	f, err := os.CreateTemp("", "enumeraga-gcp-at-*.json")
+	if err != nil {
+		return "", nil, err
+	}
+	remove := func() { _ = os.Remove(f.Name()) } //nolint:gosec // G703: path from os.CreateTemp, not user input
+	tokenJSON := fmt.Sprintf(`{"access_token":%q}`, strings.TrimSpace(token))
+	if _, err := f.WriteString(tokenJSON); err != nil {
+		_ = f.Close()
+		remove()
+		return "", nil, err
+	}
+	if err := f.Close(); err != nil {
+		remove()
+		return "", nil, err
+	}
+	return f.Name(), remove, nil
+}
+
+// prepGcpScanner returns the gcp-scanner command, and a cleanup func (possibly
+// nil) to call once it has run: it removes the access token file, when one was
+// written.
+func prepGcpScanner(cfg *config.CloudConfig, filePath string) (args []string, cleanup func(), err error) {
 	if cfg.Provider != "gcp" {
 		utils.PrintCustomBiColourMsg("red", "yellow", "[-]", " gcp_scanner ", "must be run with the", " gcp ", "flag. Skipping it...")
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// Newer PyPI releases install the entry-point as "gcp-scanner" (hyphen);
@@ -1472,7 +1525,7 @@ func prepGcpScanner(cfg *config.CloudConfig, filePath string) ([]string, error) 
 	default:
 		if err := InstallWithPipxOSAgnostic("gcp-scanner"); err != nil {
 			utils.PrintCustomBiColourMsg("red", "cyan", "[-] ", "Error installing gcp-scanner via pipx")
-			return nil, err
+			return nil, nil, err
 		}
 		if utils.CheckToolExists("gcp-scanner") {
 			binary = "gcp-scanner"
@@ -1483,7 +1536,7 @@ func prepGcpScanner(cfg *config.CloudConfig, filePath string) ([]string, error) 
 
 	// gcp-scanner requires exactly one auth flag: -k (SA key), -at (access token),
 	// -g (gcloud profile path), -m (metadata server), or -rt (refresh token).
-	args := []string{binary, "-o", filePath}
+	args = []string{binary, "-o", filePath}
 	if cfg.GCPProject != "" {
 		args = append(args, "-p", cfg.GCPProject)
 	}
@@ -1497,13 +1550,12 @@ func prepGcpScanner(cfg *config.CloudConfig, filePath string) ([]string, error) 
 		if token == "" {
 			token = os.Getenv("GOOGLE_OAUTH_ACCESS_TOKEN")
 		}
-		// gcp-scanner expects {"access_token": "..."} JSON, not a plain token string.
-		tokenFile := os.TempDir() + "/enumeraga-gcp-at.json"
-		tokenJSON := fmt.Sprintf(`{"access_token":%q}`, strings.TrimSpace(token))
-		if err := os.WriteFile(tokenFile, []byte(tokenJSON), 0600); err != nil { //nolint:gosec // G703: tokenFile is a hardcoded path under os.TempDir(), not user input
+		tokenFile, removeToken, err := writeGCPAccessTokenFile(token)
+		if err != nil {
 			utils.ErrorMsg(fmt.Errorf("gcp-scanner: failed to write token file: %w", err))
 		} else {
 			args = append(args, "-at", tokenFile)
+			cleanup = removeToken
 		}
 	default:
 		// Fall back to gcloud profile if available
@@ -1514,7 +1566,7 @@ func prepGcpScanner(cfg *config.CloudConfig, filePath string) ([]string, error) 
 			}
 		}
 	}
-	return args, nil
+	return args, cleanup, nil
 }
 
 func prepNuclei(cfg *config.CloudConfig) ([]string, error) {
@@ -2113,11 +2165,11 @@ func runScoutSuite(provider string, cfg *config.CloudConfig) types.ScanResult {
 		}
 	case "azure":
 		if cfg.AzureSubscription != "" {
-			args = append(args, "--subscription", cfg.AzureSubscription)
+			args = append(args, "--subscriptions", cfg.AzureSubscription)
 		}
 	case "gcp":
 		if cfg.GCPProject != "" {
-			args = append(args, "--project", cfg.GCPProject)
+			args = append(args, "--project-id", cfg.GCPProject)
 		}
 		if cfg.CredsFile != "" {
 			args = append(args, "--service-account", cfg.CredsFile)
@@ -2187,12 +2239,13 @@ func runProwler(provider string, cfg *config.CloudConfig) types.ScanResult {
 			args = append(args, "-p", cfg.AWSProfile)
 		}
 	case "azure":
+		// -s is Prowler's --services, not a subscription.
 		if cfg.AzureSubscription != "" {
-			args = append(args, "-s", cfg.AzureSubscription)
+			args = append(args, "--subscription-ids", cfg.AzureSubscription)
 		}
 	case "gcp":
 		if cfg.GCPProject != "" {
-			args = append(args, "-P", cfg.GCPProject)
+			args = append(args, "--project-id", cfg.GCPProject)
 		}
 	}
 

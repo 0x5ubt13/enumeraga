@@ -1170,3 +1170,32 @@ def test_cloud_services_schema_matches_validation():
     assert prop["items"]["pattern"] == server.SERVICE_NAME_PATTERN
     # An empty list names nothing; it must not read as "every service".
     assert prop["minItems"] == 1
+
+
+def test_build_docker_cloud_command_gcp_project_scopes_scan():
+    """A GCP project is passed to enumeraga as --project, right after the provider."""
+    cmd, _ = build_docker_cloud_command({"provider": "gcp", "project": "client-proj-01"})
+    i = cmd.index("gcp")
+    assert cmd[i + 1:i + 3] == ["--project", "client-proj-01"]
+
+
+def test_build_docker_cloud_command_gcp_without_project_adds_no_flag():
+    cmd, _ = build_docker_cloud_command({"provider": "gcp"})
+    assert "--project" not in cmd
+
+
+def test_project_argument_error():
+    assert server.project_argument_error("gcp", None) is None
+    assert server.project_argument_error("gcp", "my-project-123") is None
+    # Only GCP has projects.
+    assert server.project_argument_error("aws", "my-project-123") is not None
+    # Anything that could be read as a flag, or is not a project ID, is refused.
+    for bad in ["--all-projects", "-x", "UPPER-case", "ab", "ends-with-", 123]:
+        assert server.project_argument_error("gcp", bad) is not None, bad
+
+
+def test_scan_key_distinguishes_gcp_projects():
+    a = scan_key("cloud", {"provider": "gcp", "project": "proj-aaaaa"})
+    b = scan_key("cloud", {"provider": "gcp", "project": "proj-bbbbb"})
+    assert a != b
+    assert scan_key("cloud", {"provider": "gcp"}) == "cloud:gcp:all"

@@ -49,6 +49,10 @@ CLOUD_PROVIDERS = ("aws", "azure", "gcp", "oci", "aliyun", "do")
 # ScoutSuite's Azure aliases (virtualmachines) are all letters and digits. Anything else
 # is refused here, so a value can never be read by the binary as a flag of its own.
 SERVICE_NAME_PATTERN = r"^[A-Za-z0-9]+$"
+# A GCP project ID: 6-30 characters, lowercase letters, digits and hyphens, starting
+# with a letter and not ending with a hyphen. It also keeps a value from being read
+# as a flag, since it is passed to enumeraga as its own argument.
+GCP_PROJECT_PATTERN = r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
 
 # When this server runs inside a container (SSE/compose mode), bind-mount sources
 # passed to sibling `docker run` calls are resolved by the host daemon, not by this
@@ -291,6 +295,20 @@ TOOLS: list[Tool] = [
                         "signed-in user can list, which is likely out of scope. If the user has "
                         "not named a subscription, take the active one from 'az account show' "
                         "and confirm it is in scope before scanning, rather than leaving this blank."
+                    ),
+                },
+                "project": {
+                    "type": "string",
+                    "pattern": GCP_PROJECT_PATTERN,
+                    "description": (
+                        "GCP project ID to scope the scan to (GCP only). STRONGLY RECOMMENDED: "
+                        "set this to the single project that is in scope for the engagement. "
+                        "Without it enumeraga falls back to the active gcloud project, and "
+                        "skips Prowler and ScoutSuite when there is none, since both would "
+                        "otherwise scan EVERY project the credentials can list. If the user "
+                        "has not named a project, take the active one from 'gcloud config get-value "
+                        "project' (and the account from 'gcloud auth list') and confirm both are "
+                        "in scope before scanning."
                     ),
                 },
                 "services": {
@@ -558,11 +576,26 @@ def scan_key(kind: str, args: dict[str, Any]) -> str:
         )
         target = args.get("target", "")
         return f"infra:{target}" if not bounding else f"infra:{target};{bounding}"
-    key = f"cloud:{args.get('provider', '')}:{args.get('subscription') or 'all'}"
+    scope = args.get("subscription") or args.get("project") or "all"
+    key = f"cloud:{args.get('provider', '')}:{scope}"
     services = args.get("services")
     if services:
         key += ":services=" + ",".join(sorted({str(s).lower() for s in services}))
     return key
+
+
+def project_argument_error(provider: Any, project: Any) -> str | None:
+    """Why a cloud scan's `project` argument is unusable, or None if absent or valid."""
+    if project is None:
+        return None
+    if provider != "gcp":
+        return "'project' is a GCP project ID and applies to provider 'gcp' only."
+    if not isinstance(project, str) or not re.fullmatch(GCP_PROJECT_PATTERN, project):
+        return (
+            "'project' must be a GCP project ID: 6-30 lowercase letters, digits and "
+            "hyphens, starting with a letter, e.g. \"my-project-123\"."
+        )
+    return None
 
 
 def services_argument_error(services: Any) -> str | None:
@@ -724,6 +757,9 @@ def build_docker_cloud_command(args: dict[str, Any]) -> tuple[list[str], dict[st
 
     label = ["--label", f"enumeraga.key={scan_key('cloud', args)}"]
     cmd = ["docker", "run", "--rm"] + volume_mounts + host_owner_env() + forwarded_env() + label + [CLOUD_IMAGE, provider]
+
+    if provider == "gcp" and args.get("project"):
+        cmd.extend(["--project", args["project"]])
 
     services = args.get("services")
     if services:
@@ -1235,7 +1271,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any]) -> list[TextCon
                     f"Error: unsupported cloud provider {provider_arg!r}. Use one of: "
                     f"{', '.join(CLOUD_PROVIDERS)}. Not starting a scan."
                 ))]
-            services_error = services_argument_error(arguments.get("services"))
+            services_error = services_argument_error(arguments.get("services")) or \
+                project_argument_error(provider_arg, arguments.get("project"))
             if services_error:
                 return [TextContent(type="text", text=f"Error: {services_error} Not starting a scan.")]
             key = scan_key("cloud", arguments)
